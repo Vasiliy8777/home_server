@@ -1,0 +1,41 @@
+# application.yml
+#
+# Здесь лежит конфигурация приложения.
+# Spring Boot автоматически читает этот файл при запуске.
+
+server:
+  # Порт встроенного сервера.
+  # То есть приложение будет открываться по адресу:
+  # http://localhost:8080
+  port: 8080
+
+app:
+  # Корневая папка на диске, которую мы открываем в веб-интерфейсе.
+  # Все операции будут разрешены только внутри этой папки.
+  storage-root: G:/архив с Я диска
+
+  # Путь к ffmpeg.
+  # Если ffmpeg добавлен в PATH системы,
+  # можно просто оставить "ffmpeg".
+  ffmpeg-path: ffmpeg
+
+  security:
+    # Логин для входа в приложение
+    username: admin
+
+    # Пароль для входа в приложение
+    password: 12345
+logging:
+  level:
+    org.apache.catalina: ERROR
+    org.apache.coyote: ERROR
+    org.springframework.web.context.request.async: ERROR
+spring:
+  servlet:
+    multipart:
+      # Максимальный размер одного файла при загрузке
+      max-file-size: 500MB
+
+      # Максимальный суммарный размер HTTP-запроса,
+      # если загружается несколько файлов сразу
+      max-request-size: 500MB

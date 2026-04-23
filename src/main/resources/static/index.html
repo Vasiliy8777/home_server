@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<!--
+  Говорим браузеру, что это HTML5 документ
+-->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8"/>
+    <!--
+      Кодировка UTF-8 нужна, чтобы русский текст корректно отображался
+    -->
+
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <!--
+      Нужно для адаптивного отображения на телефоне
+    -->
+    <title>Домашняя галерея</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css"/>
+    <link rel="stylesheet" href="/style.css"/>
+
+    <!--
+      Подключаем CSS-файл
+    -->
+</head>
+<body>
+<div class="container">
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="path-row">
+                <span id="currentPath">/</span>
+                <button id="toggleTopbarBtn" class="topbar-toggle-btn">▴</button>
+            </div>
+
+            <div class="actions-row">
+                <div class="actions-left">
+                    <button id="upBtn">⬅ Назад</button>
+                    <button id="homeBtn">🏠 На главную</button>
+                    <button id="folderListBtn">📂 Список папок</button>
+                    <!--<button id="toggleTransfersBtn">⬇ Загрузки</button>-->
+                    <button id="toggleTransfersBtn" class="transfer-progress-btn">
+                        <span class="tp-label">Загрузки</span>
+                        <span class="tp-bar-wrap">
+        <span class="tp-bar" id="topProgressBar"></span>
+    </span>
+                    </button>
+                </div>
+
+                <div class="actions-right">
+                    <label class="upload-label">
+                        <input type="file" id="fileInput" multiple hidden accept="image/*,video/*" />
+                        <span>Загрузить файлы</span>
+                    </label>
+
+                    <button id="newFolderBtn">Создать папку</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="gallery" class="gallery"></section>
+</div>
+
+<!--
+  Модальное окно для большого просмотра фото или видео
+-->
+<div id="viewer" class="viewer hidden">
+    <div class="viewer-backdrop"></div>
+
+    <div class="viewer-content">
+        <div class="viewer-toolbar">
+            <button id="downloadViewerBtn" class="viewer-btn">Скачать</button>
+            <button id="fullscreenViewerBtn" class="viewer-btn">⛶</button>
+            <button id="closeViewer" class="viewer-btn close-btn">✕</button>
+        </div>
+
+        <button id="prevViewerBtn" class="viewer-nav viewer-nav-left">◀</button>
+        <button id="nextViewerBtn" class="viewer-nav viewer-nav-right">▶</button>
+
+        <div id="viewerBody"></div>
+    </div>
+</div>
+<div id="moveModal" class="move-modal hidden">
+    <div class="move-modal-backdrop"></div>
+
+    <div class="move-modal-content">
+        <div class="move-modal-header">
+            <h3>Куда переместить</h3>
+            <button id="closeMoveModalBtn" class="move-modal-close">✕</button>
+        </div>
+
+        <div id="moveModalTargetName" class="move-modal-target-name"></div>
+
+        <div id="selectedMovePath" class="selected-move-path">Выбрано: /</div>
+        <div class="move-modal-actions" style="justify-content: flex-start;">
+            <button id="expandMoveTreeBtn" class="secondary-btn">Развернуть все</button>
+            <button id="collapseMoveTreeBtn" class="secondary-btn">Свернуть все</button>
+        </div>
+        <div id="folderTreeContainer" class="folder-tree-container"></div>
+
+        <div class="move-modal-actions">
+            <button id="confirmMoveBtn">Выбрать</button>
+            <button id="cancelMoveBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
+<div id="deleteModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content">
+        <div class="delete-modal-header">
+            <h3>Подтвердите удаление</h3>
+        </div>
+
+        <div id="deleteTargetName" class="delete-target-name"></div>
+
+        <div class="delete-warning">
+            Это действие нельзя отменить
+        </div>
+
+        <div class="delete-modal-actions">
+            <button id="confirmDeleteBtn" class="danger">Удалить</button>
+            <button id="cancelDeleteBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
+<div id="createFolderModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content">
+        <div class="delete-modal-header">
+            <h3>Создать папку</h3>
+        </div>
+
+        <div class="delete-target-name">Введите имя новой папки</div>
+
+        <input
+                id="createFolderInput"
+                type="text"
+                placeholder="Имя папки"
+                class="modal-text-input"
+        >
+
+        <div class="delete-modal-actions">
+            <button id="confirmCreateFolderBtn">Создать</button>
+            <button id="cancelCreateFolderBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
+<div id="folderListModal" class="move-modal hidden">
+    <div class="move-modal-backdrop"></div>
+
+    <div class="move-modal-content">
+        <div class="move-modal-header">
+            <h3>Список папок</h3>
+            <button id="closeFolderListModalBtn" class="move-modal-close">✕</button>
+        </div>
+
+        <div id="selectedFolderListPath" class="selected-move-path">Выбрано: /</div>
+
+        <div class="move-modal-actions" style="justify-content: flex-start;">
+            <button id="expandAllFoldersBtn" class="secondary-btn">Развернуть все</button>
+            <button id="collapseAllFoldersBtn" class="secondary-btn">Свернуть все</button>
+        </div>
+
+        <div id="folderListTreeContainer" class="folder-tree-container"></div>
+
+        <div class="move-modal-actions">
+            <button id="goToSelectedFolderBtn">Перейти</button>
+            <button id="cancelFolderListBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
+<div id="transferPanel" class="transfer-panel hidden">
+    <div class="transfer-header">
+        <span>Загрузки</span>
+        <button id="clearTransfersBtn">Очистить</button>
+    </div>
+    <div id="transferList"></div>
+</div>
+<script src="/app.js"></script>
+<script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+</body>
+</html>
