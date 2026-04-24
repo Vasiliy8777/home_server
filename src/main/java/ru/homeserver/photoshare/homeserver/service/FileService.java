@@ -181,34 +181,6 @@ public class FileService {
                                     previewUrl = "/api/files/raw?path=" + encodePath(relStr);
                                 }
                             }
-
-                            /*
-                             * downloadUrl —
-                             * по какому URL браузер скачает файл.
-                             */
-                           // String downloadUrl = isDir ? null : "/api/files/download?path=" + encodePath(relStr);
-
-                            /*
-                             * thumbnailUrl —
-                             * URL миниатюры.
-                             */
-                          //  String thumbnailUrl = null;
-
-                            /*if (!isDir) {
-                                if ("image".equals(type)) {
-                                    *//*
-                                     * У картинок миниатюрой может быть сама картинка.
-                                     *//*
-                                    thumbnailUrl = previewUrl;
-                                } else if ("video".equals(type)) {
-                                    *//*
-                                     * У видео отдельный endpoint,
-                                     * который отдаст jpg-миниатюру.
-                                     *//*
-                                    thumbnailUrl = "/api/files/video-thumbnail?path=" + encodePath(relStr);
-                                }
-                            }*/
-
                             /*
                              * Создаем DTO и добавляем в результат
                              */

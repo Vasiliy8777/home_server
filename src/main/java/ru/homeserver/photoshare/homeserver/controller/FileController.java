@@ -472,19 +472,29 @@ public ResponseEntity<StreamingResponseBody> stream(
 
         UploadSessionDto meta = readMeta(uploadId);
         if (meta == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Upload session not found"));
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Upload session not found",
+                    "uploadId", uploadId
+            ));
         }
 
         if (chunkIndex >= meta.getTotalChunks()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid chunk index"));
         }
 
+        if (meta.getUploadedChunks() == null) {
+            meta.setUploadedChunks(new java.util.ArrayList<>());
+        }
+
         Path tempFile = getTempFile(uploadId);
+
+        if (!Files.exists(tempFile)) {
+            Files.createFile(tempFile);
+        }
 
         Object lock = uploadLocks.computeIfAbsent(uploadId, k -> new Object());
 
         synchronized (lock) {
-            // если этот чанк уже есть — просто ничего не делаем
             if (meta.getUploadedChunks().contains(chunkIndex)) {
                 return ResponseEntity.ok().build();
             }
@@ -535,190 +545,7 @@ public ResponseEntity<StreamingResponseBody> stream(
 
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
-    /*@PostMapping("/upload-chunk")
-    public ResponseEntity<?> uploadChunk(
-            @RequestParam String uploadId,
-            @RequestParam int chunkIndex,
-            @RequestParam int totalChunks,
-            @RequestParam String fileName,
-            @RequestParam long chunkSize,
-            @RequestParam(defaultValue = "") String path,
-            @RequestParam("file") MultipartFile file
-    ) throws IOException {
 
-        if (chunkIndex < 0 || totalChunks <= 0 || chunkIndex >= totalChunks) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid chunk index"));
-        }
-
-        if (chunkSize <= 0) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid chunk size"));
-        }
-
-        if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Empty chunk"));
-        }
-
-        Path uploadDir = fileService.getRootPath().resolve(".upload_tmp");
-        Files.createDirectories(uploadDir);
-
-        Path tempFile = uploadDir.resolve(uploadId + ".tmp");
-
-        Path finalDir = fileService.resolveSafe(path);
-        Files.createDirectories(finalDir);
-
-        Path finalPath = finalDir.resolve(fileName).normalize();
-
-        if (!finalPath.startsWith(fileService.getRootPath())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid target path"));
-        }
-
-        Object lock = uploadLocks.computeIfAbsent(uploadId, k -> new Object());
-        boolean[] received = uploadProgress.computeIfAbsent(uploadId, k -> new boolean[totalChunks]);
-
-        if (received.length != totalChunks) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Chunk metadata mismatch"));
-        }
-
-        synchronized (lock) {
-            try (RandomAccessFile raf = new RandomAccessFile(tempFile.toFile(), "rw")) {
-                long position = (long) chunkIndex * chunkSize;
-                raf.seek(position);
-                raf.write(file.getBytes());
-            }
-
-            received[chunkIndex] = true;
-
-            boolean allReceived = true;
-            for (boolean part : received) {
-                if (!part) {
-                    allReceived = false;
-                    break;
-                }
-            }
-
-            if (allReceived) {
-                if (Files.exists(tempFile) && Files.size(tempFile) > 0) {
-                    try {
-                        Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
-                    } catch (NoSuchFileException e) {
-                        System.out.println("Temp file not found during move: " + tempFile);
-                    } finally {
-                        uploadLocks.remove(uploadId);
-                        uploadProgress.remove(uploadId);
-                    }
-                }
-            }
-        }
-
-        return ResponseEntity.ok().build();
-    }*/
-
-    /*@PostMapping("/upload-chunk")
-    public ResponseEntity<?> uploadChunk(
-            @RequestParam String uploadId,
-            @RequestParam int chunkIndex,
-            @RequestParam int totalChunks,
-            @RequestParam String fileName,
-            @RequestParam long chunkSize,
-            @RequestParam(defaultValue = "") String path,
-            @RequestParam("file") MultipartFile file
-    ) throws IOException {
-
-        Path uploadDir = fileService.getRootPath().resolve(".upload_tmp");
-        Files.createDirectories(uploadDir);
-
-        Path tempFile = uploadDir.resolve(uploadId + ".tmp");
-
-        Path finalDir = fileService.resolveSafe(path);
-        Files.createDirectories(finalDir);
-
-        Path finalPath = finalDir.resolve(fileName).normalize();
-
-        if (!finalPath.startsWith(fileService.getRootPath())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid target path"));
-        }
-
-        Object lock = uploadLocks.computeIfAbsent(uploadId, k -> new Object());
-        boolean[] received = uploadProgress.computeIfAbsent(uploadId, k -> new boolean[totalChunks]);
-
-        synchronized (lock) {
-            try (RandomAccessFile raf = new RandomAccessFile(tempFile.toFile(), "rw")) {
-                long position = (long) chunkIndex * chunkSize;
-                raf.seek(position);
-                raf.write(file.getBytes());
-            }
-
-            received[chunkIndex] = true;
-
-            boolean allReceived = true;
-            for (boolean part : received) {
-                if (!part) {
-                    allReceived = false;
-                    break;
-                }
-            }
-
-            if (allReceived) {
-                if (Files.exists(tempFile) && Files.size(tempFile) > 0) {
-                    try {
-                        Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
-                    } catch (NoSuchFileException e) {
-                        System.out.println("Temp file not found during move: " + tempFile);
-                    } finally {
-                        uploadLocks.remove(uploadId);
-                        uploadProgress.remove(uploadId);
-                    }
-                }
-            }
-        }
-
-        return ResponseEntity.ok().build();
-    }*/
-    /*@PostMapping("/upload-chunk")
-    public ResponseEntity<?> uploadChunk(
-            @RequestParam String uploadId,
-            @RequestParam int chunkIndex,
-            @RequestParam int totalChunks,
-            @RequestParam String fileName,
-            @RequestParam long chunkSize,
-            @RequestParam(defaultValue = "") String path,
-            @RequestParam("file") MultipartFile file
-    ) throws IOException {
-        Path finalPath = Paths.get("storage").resolve(fileName);
-        Path uploadDir = Paths.get("uploads_tmp");
-        Files.createDirectories(uploadDir);
-        Object lock = uploadLocks.computeIfAbsent(uploadId, k -> new Object());
-        Path tempFile = uploadDir.resolve(uploadId + ".tmp");
-        synchronized (lock) {
-        try (RandomAccessFile raf = new RandomAccessFile(tempFile.toFile(), "rw")) {
-            *//*long position = (long) chunkIndex * file.getSize();*//*
-            long position = (long) chunkIndex * chunkSize;
-            raf.seek(position);
-            raf.write(file.getBytes());
-        }
-
-        // если последний кусок
-            if (Files.exists(tempFile) && Files.size(tempFile) > 0) {
-                try {
-                    Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
-                } catch (NoSuchFileException e) {
-                    System.out.println("Temp file not found during move: " + tempFile);
-                } finally {
-                    uploadLocks.remove(uploadId);
-                }
-            }
-        *//*if (chunkIndex == totalChunks - 1) {
-            Path finalPath = Paths.get("storage").resolve(fileName);
-            Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
-        }*//*
-
-        return ResponseEntity.ok().build();
-    }*/
-    /*
-     * GET /api/files/video-thumbnail?path=...
-     *
-     * Возвращает jpg-миниатюру для видео.
-     */
     @GetMapping("/video-thumbnail")
     public ResponseEntity<Resource> videoThumbnail(@RequestParam String path) throws IOException {
         Path file = fileService.resolveSafe(path);
@@ -728,10 +555,6 @@ public ResponseEntity<StreamingResponseBody> stream(
         }
 
         Path thumbnail = thumbnailService.getOrCreateVideoThumbnail(file);
-
-        /*if (thumbnail == null || !Files.exists(thumbnail)) {
-            return ResponseEntity.notFound().build();
-        }*/
         if (thumbnail != null && Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
             return ResponseEntity.ok()
                     // 👇 ВОТ ЗДЕСЬ КЭШ

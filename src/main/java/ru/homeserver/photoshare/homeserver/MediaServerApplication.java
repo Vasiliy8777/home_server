@@ -33,17 +33,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class MediaServerApplication {
 
     public static void main(String[] args) {
-        /*
-         * Запуск Spring Boot приложения.
-         *
-         * Что делает SpringApplication.run():
-         * - создает ApplicationContext
-         * - сканирует компоненты
-         * - создает бины
-         * - поднимает встроенный сервер (Tomcat)
-         * - читает application.yml
-         * - запускает приложение
-         */
+
         SpringApplication.run(MediaServerApplication.class, args);
     }
 }

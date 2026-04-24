@@ -5,18 +5,118 @@ let currentPlayer = null;
 let deleteTargetPath = null;
 let deleteTargetName = null;
 
+let pendingResumeTaskId = null;
+
 const transferPanel = document.getElementById("transferPanel");
 const transferList = document.getElementById("transferList");
+const resumeAllTransfersBtn = document.getElementById("resumeAllTransfersBtn");
+transferList.addEventListener("click", (e) => {
+    const removeBtn = e.target.closest(".transfer-remove");
+    if (removeBtn) {
+        e.preventDefault();
+        e.stopPropagation();
 
+        const id = removeBtn.dataset.id;
+        const task = transferTasks.get(id);
+        if (!task) return;
+
+        // помечаем как отменённую
+        task.status = "cancelled";
+
+        // убираем из очередей
+        const u = uploadQueue.findIndex(t => t.id === id);
+        if (u >= 0) uploadQueue.splice(u, 1);
+
+        const d = downloadQueue.findIndex(t => t.id === id);
+        if (d >= 0) downloadQueue.splice(d, 1);
+
+        transferTasks.delete(id);
+        saveTransferTasks();
+        renderTransferList();
+        updateTopProgress();
+        return;
+    }
+    /*const controlBtn = e.target.closest(".control");*/
+    const controlBtn = e.target.closest(".control");
+    if (controlBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const id = controlBtn.dataset.id;
+        const task = transferTasks.get(id);
+        if (!task) return;
+
+        // если задача в очереди — ставим на паузу
+        if (task.status === "queued") {
+            task.status = "paused";
+
+            const index = uploadQueue.findIndex(t => t.id === id);
+            if (index >= 0) uploadQueue.splice(index, 1);
+
+            saveTransferTasks();
+            renderTransferList();
+            return;
+        }
+
+        // если задача уже грузится — ставим на паузу
+        if (task.status === "uploading") {
+            task.status = "paused";
+
+            saveTransferTasks();
+            renderTransferList();
+
+            // освобождаем слот для следующего файла из очереди
+            processUploadQueue();
+            return;
+        }
+
+        // если задача на паузе — возвращаем в очередь и пытаемся стартовать
+        if (task.status === "paused") {
+            task.status = "queued";
+
+            if (task.kind === "upload" && task.file && !uploadQueue.find(t => t.id === id)) {
+                uploadQueue.push(task);
+            }
+
+            saveTransferTasks();
+            renderTransferList();
+            processUploadQueue();
+            return;
+        }
+    }
+});
+
+resumeAllTransfersBtn.onclick = () => {
+    for (const task of transferTasks.values()) {
+        if (task.status === "paused" || task.status === "queued") {
+            task.status = "queued";
+
+            if (task.kind === "upload" && task.file && !uploadQueue.find(t => t.id === task.id)) {
+                uploadQueue.push(task);
+            }
+
+            if (task.kind === "download" && !downloadQueue.find(t => t.id === task.id)) {
+                downloadQueue.push(task);
+            }
+        }
+    }
+
+    saveTransferTasks();
+    renderTransferList();
+    processUploadQueue();
+    processDownloadQueue();
+};
 const uploadQueue = [];
 const downloadQueue = [];
+const transferTasks = new Map();
+const TRANSFERS_STORAGE_KEY = "gallery_transfer_tasks_v1";
 
 let activeUploads = 0;
 let activeDownloads = 0;
 
 let cancelAllTransfers = false;
 
-const MAX_PARALLEL = 2;
+const MAX_PARALLEL = 3;
 
 // текущий список файлов, которые можно просматривать
 let viewerItems = [];
@@ -78,25 +178,39 @@ const moveModalTargetName = document.getElementById("moveModalTargetName");
 const topbar = document.querySelector(".topbar");
 const toggleTopbarBtn = document.getElementById("toggleTopbarBtn");
 const topProgressBar = document.getElementById("topProgressBar");
+const toggleTransfersBtn = document.getElementById("toggleTransfersBtn");
+const collapseTransfersBtn = document.getElementById("collapseTransfersBtn");
 
-/*function updateTopProgress() {
-    const items = transferList.querySelectorAll(".progress-bar");
+function saveTransferTasks() {
+    const plain = Array.from(transferTasks.values()).map(task => ({
+        id: task.id,
+        kind: task.kind,
+        name: task.name,
+        status: task.status,
+        progress: task.progress || 0,
+        targetPath: task.targetPath || "",
+        size: task.size || 0,
+        uploadId: task.uploadId || null,
+        totalChunks: task.totalChunks || 0,
+        uploadedChunks: task.uploadedChunks || [],
+        fileMeta: task.fileMeta || null,
+        item: task.item || null
+    }));
 
-    if (!items.length) {
-        topProgressBar.style.width = "0%";
-        return;
+    localStorage.setItem(TRANSFERS_STORAGE_KEY, JSON.stringify(plain));
+}
+
+function loadTransferTasksFromStorage() {
+    const raw = localStorage.getItem(TRANSFERS_STORAGE_KEY);
+    if (!raw) return [];
+
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return [];
     }
+}
 
-    let total = 0;
-
-    items.forEach(bar => {
-        const w = parseFloat(bar.style.width) || 0;
-        total += w;
-    });
-
-    const avg = total / items.length;
-    topProgressBar.style.width = avg + "%";
-}*/
 async function completeUploadSession(uploadId) {
     const form = new URLSearchParams();
     form.append("uploadId", uploadId);
@@ -114,6 +228,7 @@ async function completeUploadSession(uploadId) {
         throw new Error("Failed to complete upload: " + text);
     }
 }
+
 async function initUploadSession(file, targetPath, chunkSize) {
     const form = new URLSearchParams();
     form.append("fileName", file.name);
@@ -136,7 +251,10 @@ async function initUploadSession(file, targetPath, chunkSize) {
 
     return await response.json();
 }
+
 function updateTopProgress() {
+    if (!topProgressBar || !toggleTransfersBtn) return;
+
     const items = transferList.querySelectorAll(".progress-bar");
 
     if (!items.length) {
@@ -148,178 +266,149 @@ function updateTopProgress() {
     toggleTransfersBtn.classList.add("loading");
 
     let total = 0;
-
     items.forEach(bar => {
-        const w = parseFloat(bar.style.width) || 0;
-        total += w;
+        total += parseFloat(bar.style.width) || 0;
     });
 
     const avg = total / items.length;
     topProgressBar.style.width = avg + "%";
 }
+
 function createTransferItem(name) {
     transferPanel.classList.remove("hidden");
 
     const el = document.createElement("div");
     el.className = "transfer-item";
 
-    /*el.innerHTML = `
-        <div class="transfer-name">${name}</div>
-        <div class="progress"><div class="progress-bar"></div></div>
-        <div class="transfer-actions">
-            <button class="pause">⏸</button>
-            <button class="resume">▶</button>
-        </div>
-    `;*/
     el.innerHTML = `
-    <div class="transfer-name">${name}</div>
-    <div class="progress"><div class="progress-bar"></div></div>
-    <div class="transfer-actions">
-        <button class="control playing">▶</button>
-    </div>
-`;
+        <div class="transfer-name">${escapeHtml(name)}</div>
+        <div class="progress"><div class="progress-bar"></div></div>
+    `;
 
     transferList.appendChild(el);
 
-    /*return {
-        el,
-        bar: el.querySelector(".progress-bar"),
-        pauseBtn: el.querySelector(".pause"),
-        resumeBtn: el.querySelector(".resume")
-    };*/
     return {
         el,
-        bar: el.querySelector(".progress-bar"),
-        controlBtn: el.querySelector(".control")
+        bar: el.querySelector(".progress-bar")
     };
 }
-/*function addUpload(file) {
-    uploadQueue.push(file);
-    processUploadQueue();
-}*/
+
 function addUpload(file) {
-    uploadQueue.push({
+    const task = {
+        id: `upload_${file.name}_${file.size}_${file.lastModified}`,
+        kind: "upload",
         file,
-        targetPath: currentPath
-    });
+        name: file.name,
+        size: file.size,
+        targetPath: currentPath,
+        status: "queued",
+        progress: 0,
+        uploadedChunks: [],
+        fileMeta: {
+            name: file.name,
+            size: file.size,
+            lastModified: file.lastModified
+        }
+    };
+
+    transferTasks.set(task.id, task);
+    uploadQueue.push(task);
+    saveTransferTasks();
+    renderTransferList();
     processUploadQueue();
 }
-async function processUploadQueue() {
-    if (activeUploads >= MAX_PARALLEL) return;
-    if (!uploadQueue.length) return;
 
-    /*const file = uploadQueue.shift();*/
-    const task = uploadQueue.shift();
-    const file = task.file;
+async function processUploadQueue() {
+    while (activeUploads < MAX_PARALLEL && uploadQueue.length > 0) {
+        const task = uploadQueue.shift();
+
+        if (!task.file) {
+            task.status = "waiting_file";
+            saveTransferTasks();
+            renderTransferList();
+            continue;
+        }
+
+        if (task.status === "paused" || task.status === "cancelled") {
+            continue;
+        }
+
+        runUploadTask(task);
+    }
+}
+
+async function runUploadTask(task) {
     const targetPath = task.targetPath;
 
     activeUploads++;
+    task.running = true;
+    task.status = "uploading";
 
-    const ui = createTransferItem(file.name);
+    saveTransferTasks();
+    renderTransferList();
 
-    let paused = false;
+    const isPaused = () => task.status === "paused";
 
-    /*ui.pauseBtn.onclick = () => paused = true;*/
-    /*ui.resumeBtn.onclick = () => {
-        paused = false;
-        process();
-    };*/
-    /*ui.pauseBtn.onclick = () => {
-        paused = true;
-    };
+    try {
+        await uploadFileResumableManaged(task, isPaused);
 
-    ui.resumeBtn.onclick = () => {
-        paused = false;
-    };*/
-    ui.controlBtn.onclick = () => {
-        paused = !paused;
-
-        if (paused) {
-            ui.controlBtn.textContent = "⏸";
-            ui.controlBtn.classList.remove("playing");
-            ui.controlBtn.classList.add("paused");
-        } else {
-            ui.controlBtn.textContent = "▶";
-            ui.controlBtn.classList.remove("paused");
-            ui.controlBtn.classList.add("playing");
+        if (currentPath === targetPath) {
+            await loadFiles(currentPath);
         }
-    };
-
-    /*async function process() {
-        await uploadFileResumableManaged(file, ui, () => paused);
-        activeUploads--;
-        processUploadQueue();
-    }*/
-    /*async function process() {
-        /!*try {
-            await uploadFileResumableManaged(file, ui, () => paused);
-        } catch (e) {
+    } catch (e) {
+        if (e.message !== "Upload cancelled") {
             console.error("Upload error", e);
-        }*!/
-        try {
-            /!*await uploadFileResumableManaged(file, ui, () => paused);*!/
-            await uploadFileResumableManaged(file, targetPath, ui, () => paused);
-        } catch (e) {
-            if (e.message !== "Upload cancelled") {
-                console.error("Upload error", e);
-                ui.el.style.opacity = "0.6";
-                ui.el.querySelector(".transfer-name").textContent += " — ошибка";
-            }
+            task.status = "error";
+            saveTransferTasks();
+            renderTransferList();
         }
-
+    } finally {
+        task.running = false;
         activeUploads--;
-        processUploadQueue();
-    }*/
-    async function process() {
-        try {
-            await uploadFileResumableManaged(file, targetPath, ui, () => paused);
 
-            // Если пользователь всё ещё в той же папке — сразу обновляем список
-            if (currentPath === targetPath) {
-                await loadFiles(currentPath);
-            }
-        } catch (e) {
-            if (e.message !== "Upload cancelled") {
-                console.error("Upload error", e);
-                ui.el.style.opacity = "0.6";
-                ui.el.querySelector(".transfer-name").textContent += " — ошибка";
-            }
-        }
+        saveTransferTasks();
+        renderTransferList();
 
-        activeUploads--;
         processUploadQueue();
     }
-
-    process();
 }
-async function uploadFileResumableManaged(file, targetPath, ui, isPaused) {
+
+async function uploadFileResumableManaged(task, isPaused) {
+    const file = task.file;
+    const targetPath = task.targetPath;
     const CHUNK_SIZE = 1024 * 1024;
 
     const initData = await initUploadSession(file, targetPath, CHUNK_SIZE);
 
     const uploadId = initData.uploadId;
+    task.uploadId = uploadId;
+    task.totalChunks = initData.totalChunks;
+
     const totalChunks = initData.totalChunks;
     const uploadedChunks = new Set(initData.uploadedChunks || []);
 
     for (let i = 0; i < totalChunks; i++) {
         if (uploadedChunks.has(i)) {
             const percent = Math.round(((i + 1) / totalChunks) * 100);
-            ui.bar.style.width = percent + "%";
+            task.progress = percent;
+            task.status = "uploading";
+            saveTransferTasks();
             updateTopProgress();
             continue;
         }
-
-        if (cancelAllTransfers) {
+        if (cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id)) {
             throw new Error("Upload cancelled");
         }
-
-        while (isPaused()) {
-            if (cancelAllTransfers) {
-                throw new Error("Upload cancelled");
-            }
-            await new Promise(r => setTimeout(r, 300));
+        if (isPaused()) {
+            return;
         }
 
+// 🔥 ВАЖНО — пауза ДО отправки чанка
+        if (isPaused()) {
+            while (isPaused()) {
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
         const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
 
         const formData = new FormData();
@@ -328,265 +417,275 @@ async function uploadFileResumableManaged(file, targetPath, ui, isPaused) {
         formData.append("chunkIndex", i);
 
         await sendChunk(formData);
-
         const percent = Math.round(((i + 1) / totalChunks) * 100);
-        ui.bar.style.width = percent + "%";
-        updateTopProgress();
+        task.progress = percent;
+
+        if (task.status !== "paused") {
+            task.status = "uploading";
+        }
+
+        saveTransferTasks();
+        updateTransferTaskUI(task);
+
     }
 
     await completeUploadSession(uploadId);
 
-    ui.bar.style.width = "100%";
+    task.progress = 100;
+    task.status = "done";
+    saveTransferTasks();
+    renderTransferList();
     updateTopProgress();
-
-    setTimeout(() => {
-        ui.el.remove();
-        updateTopProgress();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
-        }
-    }, 1500);
 }
-/*async function uploadFileResumableManaged(file, targetPath, ui, isPaused) {
-    const CHUNK_SIZE = 1024 * 1024;
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const uploadId = `${file.name}_${file.size}_${file.lastModified}`;
-    //const targetPath = currentPath;
 
-    let startChunk = Number(localStorage.getItem(uploadId)) || 0;
+function removeTransferTask(id) {
+    const task = transferTasks.get(id);
+    if (!task) return;
 
-    for (let i = startChunk; i < totalChunks; i++) {
-        if (cancelAllTransfers) {
-            throw new Error("Upload cancelled");
-        }
-        while (isPaused()) {
-            /!*await new Promise(r => setTimeout(r, 300));*!/
-            if (cancelAllTransfers) {
-                throw new Error("Upload cancelled");
-            }
-            await new Promise(r => setTimeout(r, 300));
-        }
+    task.status = "cancelled";
 
-        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    const uploadIndex = uploadQueue.findIndex(t => t.id === id);
+    if (uploadIndex >= 0) {
+        uploadQueue.splice(uploadIndex, 1);
+    }
 
-        const formData = new FormData();
-        formData.append("file", chunk);
-        formData.append("path", targetPath);
-        formData.append("chunkSize", CHUNK_SIZE);
-        formData.append("uploadId", uploadId);
-        formData.append("chunkIndex", i);
-        formData.append("totalChunks", totalChunks);
-        formData.append("fileName", file.name);
+    const downloadIndex = downloadQueue.findIndex(t => t.id === id);
+    if (downloadIndex >= 0) {
+        downloadQueue.splice(downloadIndex, 1);
+    }
 
-        await sendChunk(formData);
+    transferTasks.delete(id);
+    saveTransferTasks();
+    renderTransferList();
+    updateTopProgress();
+}
 
-        localStorage.setItem(uploadId, i + 1);
+function getStatusText(status) {
+    switch (status) {
+        case "queued":
+            return "в очереди";
+        case "uploading":
+            return "загружается";
+        case "paused":
+            return "пауза";
+        case "done":
+            return "завершено";
+        case "error":
+            return "ошибка";
+        case "cancelled":
+            return "отменено";
+        case "waiting_file":
+            return "нужно выбрать файл снова";
+        default:
+            return status || "";
+    }
+}
 
-        const percent = Math.round(((i + 1) / totalChunks) * 100);
-        ui.bar.style.width = percent + "%";
+function renderTransferList() {
+    transferList.innerHTML = "";
+
+    const tasks = Array.from(transferTasks.values());
+
+    if (!tasks.length) {
         updateTopProgress();
+        return;
     }
 
-    ui.bar.style.width = "100%";
+    transferPanel.classList.remove("hidden");
 
-    /!*setTimeout(() => {
-        ui.el.remove();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
+    for (const task of tasks) {
+        const el = document.createElement("div");
+        el.className = "transfer-item";
+        el.dataset.id = task.id;
+        const statusText = getStatusText(task.status);
+
+        el.innerHTML = `
+            <div class="transfer-row">
+               <div class="transfer-name"><span>${escapeHtml(task.name)}</span></div>
+                <div class="transfer-status">${statusText}</div>
+                <button class="transfer-remove" data-id="${task.id}">✕</button>
+            </div>
+
+            <div class="progress">
+                <div class="progress-bar" style="width:${task.progress || 0}%"></div>
+            </div>
+
+            <div class="transfer-actions">
+    <div class="transfer-size">
+        ${formatFileSize(task.fileMeta?.size || task.size)}
+    </div>
+
+    ${
+            task.status === "done" || task.status === "error"
+                ? ""
+                : `<button class="control ${task.status === "paused" ? "paused" : "playing"}" data-id="${task.id}">
+                    ${task.status === "paused" ? "⏸" : "▶"}
+               </button>`
         }
-    }, 1500);*!/
-    setTimeout(() => {
-        ui.el.remove();
-        updateTopProgress();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
-        }
-    }, 1500);
+</div>
+        `;
 
-    localStorage.removeItem(uploadId);
-}*/
-/*async function uploadFileResumableManaged(file, ui, isPaused) {
-    const CHUNK_SIZE = 1024 * 1024;
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const uploadId = file.name + "_" + file.size;
-    const targetPath = currentPath;
-    let startChunk = Number(localStorage.getItem(uploadId)) || 0;
-
-    for (let i = startChunk; i < totalChunks; i++) {
-        while (isPaused()) {
-            await new Promise(r => setTimeout(r, 300));
-        }
-
-        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-
-        const formData = new FormData();
-        formData.append("file", chunk);
-        /!*formData.append("path", currentPath);*!/
-        formData.append("path", targetPath);
-        formData.append("chunkSize", CHUNK_SIZE);
-        formData.append("uploadId", uploadId);
-        formData.append("chunkIndex", i);
-        formData.append("totalChunks", totalChunks);
-        formData.append("fileName", file.name);
-
-        await sendChunk(formData);
-
-        localStorage.setItem(uploadId, i + 1);
-
-        const percent = Math.round(((i + 1) / totalChunks) * 100);
-        ui.bar.style.width = percent + "%";
+        transferList.appendChild(el);
     }
 
-    ui.bar.style.width = "100%";
+    updateTopProgress();
+    applyMarqueeIfNeeded();
+}
 
-    setTimeout(() => {
-        ui.el.remove();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
-        }
-    }, 1500);
+function updateTransferTaskUI(task) {
+    const item = transferList.querySelector(`.transfer-item[data-id="${CSS.escape(task.id)}"]`);
+    if (!item) return;
 
-    localStorage.removeItem(uploadId);
-}*/
-/*async function uploadFileResumableManaged(file, ui, isPaused) {
-    const CHUNK_SIZE = 1024 * 1024;
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const uploadId = file.name + "_" + file.size;
-    formData.append("path", currentPath);
-    formData.append("chunkSize", CHUNK_SIZE);
-    let startChunk = Number(localStorage.getItem(uploadId)) || 0;
+    const bar = item.querySelector(".progress-bar");
+    const status = item.querySelector(".transfer-status");
+    const btn = item.querySelector(".control");
 
-    for (let i = startChunk; i < totalChunks; i++) {
-        while (isPaused()) {
-            await new Promise(r => setTimeout(r, 300));
-        }
+    if (bar) bar.style.width = (task.progress || 0) + "%";
+    if (status) status.textContent = getStatusText(task.status);
 
-        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-
-        const formData = new FormData();
-        formData.append("file", chunk);
-        formData.append("chunkSize", CHUNK_SIZE);
-        formData.append("uploadId", uploadId);
-        formData.append("chunkIndex", i);
-        formData.append("totalChunks", totalChunks);
-        formData.append("fileName", file.name);
-
-       /!* await fetch("/api/files/upload-chunk", {
-            method: "POST",
-            body: formData
-        });*!/
-        await sendChunk(formData);
-
-        localStorage.setItem(uploadId, i + 1);
-
-        const percent = Math.round(((i + 1) / totalChunks) * 100);
-        ui.bar.style.width = percent + "%";
+    if (btn) {
+        btn.textContent = task.status === "paused" ? "⏸" : "▶";
+        btn.classList.toggle("paused", task.status === "paused");
+        btn.classList.toggle("playing", task.status !== "paused");
     }
-    /!*ui.bar.style.width = "100%";*!/
 
-    setTimeout(() => {
-        ui.el.remove();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
-        }
-    }, 1500);
+    updateTopProgress();
+}
 
-    localStorage.removeItem(uploadId);
-}*/
 function addDownload(item) {
-    downloadQueue.push(item);
+    const task = {
+        id: `download_${item.relativePath || item.name}_${Date.now()}`,
+        kind: "download",
+        name: item.name,
+        status: "queued",
+        progress: 0,
+        item
+    };
+
+    transferTasks.set(task.id, task);
+    downloadQueue.push(task);
+    saveTransferTasks();
+    renderTransferList();
     processDownloadQueue();
 }
+
 async function processDownloadQueue() {
     if (activeDownloads >= MAX_PARALLEL) return;
     if (!downloadQueue.length) return;
 
-    const item = downloadQueue.shift();
+    const task = downloadQueue.shift();
     activeDownloads++;
 
-    const ui = createTransferItem(item.name);
+    task.status = "uploading";
+    saveTransferTasks();
+    renderTransferList();
 
-    /*await downloadResumableManaged(item, ui);*/
     try {
-        await downloadResumableManaged(item, ui);
+        await downloadResumableManaged(task);
     } catch (e) {
         if (e.message !== "Download cancelled") {
             console.error("Download error", e);
-            ui.el.style.opacity = "0.6";
-            ui.el.querySelector(".transfer-name").textContent += " — ошибка";
+            task.status = "error";
+            saveTransferTasks();
+            renderTransferList();
         }
     }
 
     activeDownloads--;
     processDownloadQueue();
 }
-/*document.getElementById("clearTransfersBtn").onclick = () => {
-    transferList.innerHTML = "";
-    transferPanel.classList.add("hidden");
-};*/
-/*document.getElementById("clearTransfersBtn").onclick = () => {
-    cancelAllTransfers = true;
-
-    uploadQueue.length = 0;
-    downloadQueue.length = 0;
-
-    transferList.innerHTML = "";
-    transferPanel.classList.add("hidden");
-
-    setTimeout(() => {
-        cancelAllTransfers = false;
-    }, 300);
-};*/
-let clearing = false;
 
 document.getElementById("clearTransfersBtn").onclick = async () => {
-    if (clearing) return;
-    clearing = true;
-
     cancelAllTransfers = true;
 
     uploadQueue.length = 0;
     downloadQueue.length = 0;
+    transferTasks.clear();
 
-    transferList.innerHTML = "";
+    renderTransferList();
     transferPanel.classList.add("hidden");
+    localStorage.removeItem(TRANSFERS_STORAGE_KEY);
 
     try {
-        await fetch("/api/files/clear-temp", { method: "DELETE" });
+        await fetch("/api/files/clear-temp", {
+            method: "DELETE"
+        });
     } catch (e) {
-        console.error(e);
+        console.error("Ошибка очистки temp:", e);
     }
 
     setTimeout(() => {
         cancelAllTransfers = false;
-        clearing = false;
     }, 300);
 };
-async function downloadResumableManaged(item, ui) {
+
+function applyMarqueeIfNeeded() {
+    document.querySelectorAll(".transfer-name").forEach(el => {
+        const span = el.querySelector("span");
+        if (!span) return;
+
+        // если текст шире контейнера — включаем бегущую строку
+        if (span.scrollWidth > el.clientWidth) {
+            el.classList.add("marquee");
+        } else {
+            el.classList.remove("marquee");
+        }
+    });
+}
+
+function restoreTransferTasks() {
+    const saved = loadTransferTasksFromStorage();
+
+    for (const task of saved) {
+        if (task.kind === "upload") {
+            task.file = null;
+
+            if (task.status !== "done") {
+                task.status = "waiting_file";
+            }
+        }
+
+        if (task.kind === "download") {
+            if (task.status !== "done") {
+                task.status = "queued";
+            }
+        }
+
+        transferTasks.set(task.id, task);
+    }
+
+    renderTransferList();
+}
+
+async function downloadResumableManaged(task) {
+    const item = task.item;
     const key = "download_" + item.name;
 
     let start = Number(localStorage.getItem(key)) || 0;
 
     const response = await fetch(item.downloadUrl, {
-        headers: { "Range": `bytes=${start}-` }
+        headers: {"Range": `bytes=${start}-`}
     });
+
     if (!response.ok && response.status !== 206) {
         throw new Error("Download failed");
     }
+
     if (!response.body) {
         throw new Error("ReadableStream is not available");
     }
+
     const reader = response.body.getReader();
     const chunks = [];
-
     let received = start;
 
     while (true) {
-        if (cancelAllTransfers) {
+
+        if (cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id)) {
             throw new Error("Download cancelled");
         }
 
-        const { done, value } = await reader.read();
+        const {done, value} = await reader.read();
         if (done) break;
 
         chunks.push(value);
@@ -594,40 +693,17 @@ async function downloadResumableManaged(item, ui) {
 
         localStorage.setItem(key, received);
 
-        /*const percent = Math.round(received / (start + 1) * 100);*/ // грубо
-        /*const total = Number(response.headers.get("Content-Length")) + start;
-
-        const percent = Math.round((received / total) * 100);
-        ui.bar.style.width = percent + "%";*/
         const contentLength = Number(response.headers.get("Content-Length") || 0);
         const total = contentLength + start;
         const percent = total > 0 ? Math.round((received / total) * 100) : 0;
-        ui.bar.style.width = percent + "%";
+
+        task.progress = percent;
+        task.status = "uploading";
+        saveTransferTasks();
+        renderTransferList();
         updateTopProgress();
     }
 
-    /*const blob = new Blob(chunks);
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = item.name;
-    link.click();*/
- /*   const blob = new Blob(chunks);
-    const objectUrl = URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = item.name;
-    link.click();
-
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-    ui.bar.style.width = "100%";
-    setTimeout(() => {
-        ui.el.remove();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
-        }
-    }, 1500);
-    localStorage.removeItem(key);*/
     if (item.type === "video" || (item.size && item.size > 50 * 1024 * 1024)) {
         const link = document.createElement("a");
         link.href = item.downloadUrl;
@@ -649,61 +725,14 @@ async function downloadResumableManaged(item, ui) {
         setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
     }
 
-    ui.bar.style.width = "100%";
-    /*setTimeout(() => {
-        ui.el.remove();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
-        }
-    }, 1500);*/
-    setTimeout(() => {
-        ui.el.remove();
-        updateTopProgress();
-        if (!transferList.children.length) {
-            transferPanel.classList.add("hidden");
-        }
-    }, 1500);
+    task.progress = 100;
+    task.status = "done";
+    saveTransferTasks();
+    renderTransferList();
+    updateTopProgress();
 
     localStorage.removeItem(key);
 }
-/*async function uploadFileResumable(file) {
-    const CHUNK_SIZE = 1024 * 1024; // 1MB
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-    const uploadId = file.name + "_" + file.size;
-
-    let startChunk = Number(localStorage.getItem(uploadId)) || 0;
-
-    for (let i = startChunk; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(file.size, start + CHUNK_SIZE);
-
-        const chunk = file.slice(start, end);
-
-        const formData = new FormData();
-        formData.append("file", chunk);
-        formData.append("uploadId", uploadId);
-        formData.append("chunkIndex", i);
-        formData.append("totalChunks", totalChunks);
-        formData.append("fileName", file.name);
-
-        /!*await fetch("/api/files/upload-chunk", {
-            method: "POST",
-            body: formData
-        });*!/
-        await sendChunk(formData);
-
-        localStorage.setItem(uploadId, i + 1);
-
-       /!* const percent = Math.round(((i + 1) / totalChunks) * 100);
-        updateProgressUI(file.name, percent);
-    }*!/
-        const total = Number(response.headers.get("Content-Length")) + start;
-
-        const percent = Math.round((received / total) * 100);
-
-    localStorage.removeItem(uploadId);
-}}*/
 
 function setTopbarCollapsed(collapsed) {
     if (!topbar || !toggleTopbarBtn) return;
@@ -827,6 +856,7 @@ function closeFolderListModal() {
     folderListTreeContainer.innerHTML = "";
     selectedFolderListPath = "";
 }
+
 async function goToSelectedFolder() {
     const targetPath = selectedFolderListPath || "";
     console.log("Переходим в:", targetPath);
@@ -839,6 +869,7 @@ async function goToSelectedFolder() {
     closeFolderListModal();
     await loadFiles(targetPath);
 }
+
 function enablePreviewPan(img) {
     let isDragging = false;
     let moved = false;
@@ -895,20 +926,6 @@ function enablePreviewPan(img) {
         }, 40);
     }
 
-    /*img.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        startDrag(e.clientX, e.clientY);
-    });*/
-
-    /*window.addEventListener("mousemove", (e) => {
-        if (!isDragging) return;
-        e.preventDefault();
-        update(e.clientX, e.clientY);
-    });
-
-    window.addEventListener("mouseup", () => {
-        endDrag();
-    });*/
     img.addEventListener("mousedown", (e) => {
         e.preventDefault();
 
@@ -930,7 +947,7 @@ function enablePreviewPan(img) {
         if (!t) return;
 
         startDrag(t.clientX, t.clientY);
-    }, { passive: true });
+    }, {passive: true});
 
     img.addEventListener("touchmove", (e) => {
         if (!isDragging) return;
@@ -939,7 +956,7 @@ function enablePreviewPan(img) {
 
         e.preventDefault();
         update(t.clientX, t.clientY);
-    }, { passive: false });
+    }, {passive: false});
 
     img.addEventListener("touchend", () => {
         endDrag();
@@ -974,6 +991,7 @@ async function loadFiles(path = "") {
     renderItems(data.items);
     updateNavButtons();
 }
+
 async function confirmDelete() {
     if (!deleteTargetPath) return;
 
@@ -1153,39 +1171,35 @@ async function removeItem(path, name) {
     await loadFiles(currentPath);
 }
 
-/*fileInput.addEventListener("change", async () => {
-    const files = fileInput.files;
-    if (!files.length) return;
-
-    const formData = new FormData();
-    for (const file of files) {
-        formData.append("files", file);
-    }
-
-    const response = await fetch(`/api/files/upload?path=${encodeURIComponent(currentPath)}`, {
-        method: "POST",
-        body: formData
-    });
-
-    if (!response.ok) {
-        alert("Ошибка загрузки");
-        return;
-    }
-
-    fileInput.value = "";
-    await loadFiles(currentPath);
-});*/
-/*fileInput.addEventListener("change", () => {
+fileInput.addEventListener("change", () => {
     for (const file of fileInput.files) {
-        addUpload(file);
-    }
-});*/
-    fileInput.addEventListener("change", () => {
-        for (const file of fileInput.files) {
+        const existing = Array.from(transferTasks.values()).find(task =>
+            task.kind === "upload" &&
+            task.fileMeta &&
+            task.fileMeta.name === file.name &&
+            task.fileMeta.size === file.size &&
+            task.fileMeta.lastModified === file.lastModified &&
+            task.status === "waiting_file"
+        );
+
+        if (existing) {
+            existing.file = file;
+            existing.status = "queued";
+
+            if (!uploadQueue.find(t => t.id === existing.id)) {
+                uploadQueue.push(existing);
+            }
+        } else {
             addUpload(file);
         }
-        fileInput.value = "";
-    });
+    }
+
+    saveTransferTasks();
+    renderTransferList();
+    processUploadQueue();
+
+    fileInput.value = "";
+});
 newFolderBtn.addEventListener("click", openCreateFolderModal);
 
 upBtn.addEventListener("click", () => loadFiles(parentPath || ""));
@@ -1233,7 +1247,6 @@ async function confirmCreateFolder() {
 }
 
 
-
 function openViewerByPath(relativePath) {
     viewerIndex = viewerItems.findIndex(item => item.relativePath === relativePath);
     if (viewerIndex === -1) return;
@@ -1267,15 +1280,6 @@ function renderViewerItem() {
         const video = document.getElementById("player");
         currentPlayer = new Plyr(video);
     }
-
-   /* downloadViewerBtn.onclick = () => {
-        const link = document.createElement("a");
-        link.href = item.downloadUrl;
-        link.download = item.name;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    };*/
     downloadViewerBtn.onclick = () => {
         const item = viewerItems[viewerIndex];
         addDownload(item);
@@ -1293,6 +1297,7 @@ function showNextItem() {
     viewerIndex = (viewerIndex + 1) % viewerItems.length;
     renderViewerItem();
 }
+
 function toggleFullscreen() {
     if (!document.fullscreenElement) {
         viewer.requestFullscreen?.();
@@ -1395,6 +1400,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowLeft") showPrevItem();
     if (e.key === "ArrowRight") showNextItem();
 });
+
 function updateNavButtons() {
     if (!currentPath) {
         upBtn.style.display = "none";
@@ -1404,6 +1410,7 @@ function updateNavButtons() {
         homeBtn.style.display = "inline-flex";
     }
 }
+
 async function openMoveModal(sourcePath, sourceName) {
     moveSourcePath = sourcePath;
     moveSourceName = sourceName;
@@ -1426,6 +1433,7 @@ async function openMoveModal(sourcePath, sourceName) {
     folderTreeContainer.innerHTML = "";
     folderTreeContainer.appendChild(renderFolderTree(tree));
 }
+
 async function sendChunk(formData) {
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -1442,43 +1450,7 @@ async function sendChunk(formData) {
         }
     }
 }
-/*Frontend download с resume*/
-/*async function downloadResumable(url, filename) {
-    const saved = localStorage.getItem("download_" + filename);
 
-    let start = saved ? Number(saved) : 0;
-
-    const response = await fetch(url, {
-        headers: {
-            "Range": `bytes=${start}-`
-        }
-    });
-
-    const reader = response.body.getReader();
-
-    let received = start;
-    const chunks = [];
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        chunks.push(value);
-        received += value.length;
-
-        localStorage.setItem("download_" + filename, received);
-
-        updateDownloadProgress(filename, received);
-    }
-
-    const blob = new Blob(chunks);
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-
-    localStorage.removeItem("download_" + filename);
-}*/
 
 function renderFolderTree(node) {
     const wrapper = document.createElement("div");
@@ -1531,6 +1503,7 @@ function renderFolderTree(node) {
 
     return wrapper;
 }
+
 async function confirmMove() {
     if (moveSourcePath == null) return;
 
@@ -1555,6 +1528,7 @@ async function confirmMove() {
     closeMoveModal();
     await loadFiles(currentPath);
 }
+
 function closeMoveModal() {
     moveModal.classList.add("hidden");
     moveSourcePath = null;
@@ -1569,31 +1543,44 @@ function formatBytes(bytes) {
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
-/*const toggleTransfersBtn = document.getElementById("toggleTransfersBtn");*/
-const topProgressLabel = toggleTransfersBtn.querySelector(".tp-label");
-topProgressLabel.textContent = "⬆ Загрузки";
+
+function formatFileSize(bytes) {
+    if (!bytes && bytes !== 0) return "";
+
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+
+    while (bytes >= 1024 && i < sizes.length - 1) {
+        bytes /= 1024;
+        i++;
+    }
+
+    return bytes.toFixed(i === 0 ? 0 : 1) + " " + sizes[i];
+}
+
+const topProgressLabelSafe = toggleTransfersBtn?.querySelector(".tp-label");
+if (topProgressLabelSafe) {
+    topProgressLabelSafe.textContent = "⬆ Загрузки";
+}
 let transfersCollapsed = false;
 
-/*toggleTransfersBtn.onclick = () => {
-    transfersCollapsed = !transfersCollapsed;
+collapseTransfersBtn.onclick = () => {
+    toggleTransfersBtn.click();
+};
 
-    if (transfersCollapsed) {
-        transferPanel.classList.add("collapsed");
-        toggleTransfersBtn.textContent = "⬆ Загрузки";
-    } else {
-        transferPanel.classList.remove("collapsed");
-        toggleTransfersBtn.textContent = "⬇ Загрузки";
-    }
-};*/
 toggleTransfersBtn.onclick = () => {
     transfersCollapsed = !transfersCollapsed;
 
     if (transfersCollapsed) {
         transferPanel.classList.add("collapsed");
-        topProgressLabel.textContent = "⬆ Загрузки";
+        if (topProgressLabelSafe) {
+            topProgressLabelSafe.textContent = "⬆ Загрузки";
+        }
     } else {
         transferPanel.classList.remove("collapsed");
-        topProgressLabel.textContent = "⬇ Загрузки";
+        if (topProgressLabelSafe) {
+            topProgressLabelSafe.textContent = "⬇ Загрузки";
+        }
     }
 };
 
@@ -1605,9 +1592,11 @@ function escapeHtml(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
+
 const savedTopbarState = localStorage.getItem("topbarCollapsed");
 if (savedTopbarState === "1") {
     setTopbarCollapsed(true);
 }
-loadFiles();
+restoreTransferTasks();
 
+loadFiles();

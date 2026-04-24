@@ -35,7 +35,6 @@
                     <button id="upBtn">⬅ Назад</button>
                     <button id="homeBtn">🏠 На главную</button>
                     <button id="folderListBtn">📂 Список папок</button>
-                    <!--<button id="toggleTransfersBtn">⬇ Загрузки</button>-->
                     <button id="toggleTransfersBtn" class="transfer-progress-btn">
                         <span class="tp-label">Загрузки</span>
                         <span class="tp-bar-wrap">
@@ -46,7 +45,7 @@
 
                 <div class="actions-right">
                     <label class="upload-label">
-                        <input type="file" id="fileInput" multiple hidden accept="image/*,video/*" />
+                        <input type="file" id="fileInput" multiple hidden accept="image/*,video/*"/>
                         <span>Загрузить файлы</span>
                     </label>
 
@@ -172,7 +171,11 @@
 <div id="transferPanel" class="transfer-panel hidden">
     <div class="transfer-header">
         <span>Загрузки</span>
-        <button id="clearTransfersBtn">Очистить</button>
+        <div class="transfer-header-actions">
+            <button id="collapseTransfersBtn" class="small-btn">⬇</button>
+            <button id="resumeAllTransfersBtn" class="small-btn">Запустить все</button>
+            <button id="clearTransfersBtn" class="small-btn">Очистить</button>
+        </div>
     </div>
     <div id="transferList"></div>
 </div>

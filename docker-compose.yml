@@ -11,6 +11,8 @@ services:
       APP_FFMPEG_PATH: ffmpeg
       APP_USERNAME: admin
       APP_PASSWORD: 12345
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: 8080
     volumes:
-      - G:/архив с Я диска
+      - "G:/arc_Y_disc:/data"
     restart: unless-stopped

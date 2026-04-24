@@ -14,6 +14,12 @@ body {
     color: #222;
 }
 
+.small-btn {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+
 /*
   Центральный контейнер страницы
 */
@@ -23,55 +29,148 @@ body {
     margin: 0 auto;
     padding: 140px 20px 20px;
 }
+
+/* кнопка прогресса */
+#toggleTransfersBtn {
+    background: #2f80ed;
+    height: 28px;
+    font-size: 12px;
+}
+
+/* верхняя панель */
+.topbar button {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+
 .transfer-control,
 .transfer-actions .control {
     border: none;
-    border-radius: 10px;
-    padding: 6px 10px;
+    border-radius: 6px;
+    padding: 3px 6px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
+    position: relative;
+    z-index: 10;
 }
+
+/* крестик */
+.transfer-remove {
+    line-height: 1;
+}
+
+/* play */
 .control.playing {
     background: #43d17c;
     color: white;
+}
+
+/* pause */
+.control.paused {
+    background: #f0c000;
+    color: black;
+}
+
+/* кнопки в шапке модалки */
+.transfer-header-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* фикс кликов */
+.transfer-actions,
+.transfer-row {
+    position: relative;
+    z-index: 3;
+    pointer-events: auto;
+}
+
+/* сами кнопки */
+.transfer-remove,
+.control {
+    position: relative;
+    z-index: 10;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.progress-bar {
+    pointer-events: none;
+}
+
+.transfer-remove,
+.control,
+.small-btn,
+#clearTransfersBtn,
+#resumeAllTransfersBtn {
+    position: relative;
+    z-index: 4;
+    pointer-events: auto;
+    font-size: 12px;
+    padding: 3px 6px;
+    min-height: 24px;
+    min-width: 24px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+}
+
+.transfer-remove {
+    line-height: 1;
+}
+
+.transfer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: space-between;
+    position: relative;
+    z-index: 5;
+    pointer-events: auto;
+}
+
+.small-btn,
+#clearTransfersBtn,
+#resumeAllTransfersBtn {
+    font-size: 11px;
+    padding: 3px 6px;
+    min-height: 24px;
+}
+
+.control.playing {
+    background: #43d17c;
+    color: white;
+}
+
+.transfer-header-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
 }
 
 .control.paused {
     background: #f0c000;
     color: black;
 }
+
 .transfer-progress-btn {
     position: relative;
     overflow: hidden;
     padding: 10px 14px;
 }
 
-/*.tp-bar-wrap {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    height: 4px;
-    background: rgba(255,255,255,0.2);
-}
-
-.tp-bar {
-    display: block;
-    height: 100%;
-    width: 0%;
-    background: #43d17c;
-    transition: width 0.2s linear;
-}*/
 .transfer-progress-btn {
     position: relative;
     overflow: hidden;
     border-radius: 12px;
     padding: 10px 16px;
-    background: rgba(255,255,255,0.08);
+    background: rgba(255, 255, 255, 0.08);
     color: white;
     border: none;
     cursor: pointer;
 }
+
 .transfer-progress-btn .tp-bar {
     background: linear-gradient(
             90deg,
@@ -80,14 +179,23 @@ body {
             #43d17c
     );
 }
+
 .transfer-progress-btn.loading .tp-bar {
     animation: progressPulse 1.5s infinite linear;
 }
+
 @keyframes progressPulse {
-    0% { filter: brightness(1); }
-    50% { filter: brightness(1.3); }
-    100% { filter: brightness(1); }
+    0% {
+        filter: brightness(1);
+    }
+    50% {
+        filter: brightness(1.3);
+    }
+    100% {
+        filter: brightness(1);
+    }
 }
+
 .transfer-progress-btn .tp-bar {
     position: absolute;
     left: 0;
@@ -103,33 +211,11 @@ body {
     position: relative;
     z-index: 1;
 }
+
 .transfer-panel.collapsed {
-   /* height: 40px;
-    overflow: hidden;*/
     display: none;
 }
-/*.transfer-header {
-    position: sticky;
-    top: 0;
-    background: rgba(17, 17, 17, 0.6);
-    z-index: 2;
-    padding-bottom: 6px;
-}*/
-/*.transfer-panel {
-    position: fixed;
-    bottom: 12px;
-    right: 12px;
-    width: 320px;
-    max-height: 50vh;
-    display: flex;
-    flex-direction: column;
-    background: rgba(17, 17, 17, 0.65); !* прозрачность 65% *!
-    color: white;
-    border-radius: 14px;
-    padding: 10px;
-    z-index: 9999;
-    backdrop-filter: blur(6px); !* красиво на iPhone *!
-}*/
+
 .transfer-header {
     display: flex;
     justify-content: space-between;
@@ -140,6 +226,7 @@ body {
     color: white;
     box-sizing: border-box;
 }
+
 .transfer-panel {
     position: fixed;
     right: 12px;
@@ -157,24 +244,17 @@ body {
     z-index: 9999;
     box-sizing: border-box;
 }
-/*#transferList {
-    overflow-y: auto;
-    max-height: calc(50vh - 40px);
-}*/
+
 #transferList {
     overflow-y: auto;
     max-height: calc(50vh - 58px);
     padding: 10px 12px 12px;
     box-sizing: border-box;
 }
+
 body.topbar-collapsed .container {
     padding-top: 90px;
 }
-/*.container {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 20px;
-}*/
 
 /*
   Верхняя панель
@@ -189,6 +269,7 @@ body.topbar-collapsed .container {
     padding: 12px 0;
     border-bottom: 1px solid #ddd;
 }
+
 /* Внутренняя ширина панели как у галереи */
 .topbar-inner {
     width: 100%;
@@ -196,6 +277,7 @@ body.topbar-collapsed .container {
     margin: 0 auto;
     padding: 0 16px;
 }
+
 /* Путь */
 .path-row {
     display: flex;
@@ -203,6 +285,7 @@ body.topbar-collapsed .container {
     gap: 10px;
     margin-bottom: 12px;
 }
+
 #currentPath {
     flex: 1;
     display: inline-block;
@@ -217,6 +300,7 @@ body.topbar-collapsed .container {
     word-break: break-word;
     overflow-wrap: anywhere;
 }
+
 .topbar-toggle-btn {
     flex: 0 0 auto;
     min-width: 42px;
@@ -239,6 +323,7 @@ body.topbar-collapsed .container {
 body.topbar-collapsed .container {
     padding-top: 90px;
 }
+
 .topbar h1 {
     margin: 0;
     font-size: 28px;
@@ -263,6 +348,7 @@ body.topbar-collapsed .container {
     margin-bottom: 20px;
     flex-wrap: wrap;
 }
+
 /* Ряд кнопок */
 .actions-row {
     display: flex;
@@ -271,6 +357,7 @@ body.topbar-collapsed .container {
     gap: 16px;
     flex-wrap: wrap;
 }
+
 /* Левая и правая зоны */
 .actions-left,
 .actions-right {
@@ -279,6 +366,7 @@ body.topbar-collapsed .container {
     gap: 12px;
     flex-wrap: wrap;
 }
+
 /* Правая зона прибивается вправо на широких экранах */
 .actions-right {
     margin-left: auto;
@@ -295,13 +383,13 @@ button,
     border: none;
     background: #1f6feb;
     color: white;
-    padding: 10px 16px;
+    padding: 4px 8px;
     border-radius: 12px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
     line-height: 1;
     white-space: nowrap;
-    min-height: 42px;
+    min-height: 28px;
     flex: 0 0 auto;
 }
 
@@ -311,6 +399,19 @@ button,
 button:hover,
 .upload-label span:hover {
     opacity: 0.92;
+}
+
+.transfer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.transfer-size {
+    font-size: 11px;
+    opacity: 0.7;
+    white-space: nowrap;
 }
 
 /*
@@ -324,6 +425,7 @@ button:hover,
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
 }
+
 #homeBtn {
     background: #2ea043; /* зеленая, чтобы отличалась */
 }
@@ -331,12 +433,6 @@ button:hover,
 #homeBtn:hover {
     opacity: 0.9;
 }
-
-/*.gallery {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
-}*/
 
 /*
   Карточка одного элемента
@@ -346,7 +442,7 @@ button:hover,
     border-radius: 16px;
     overflow: hidden;
     border: 1px solid #ddd;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 /*
@@ -362,6 +458,7 @@ button:hover,
     overflow: hidden;
     cursor: pointer;
 }
+
 .image-thumb {
     width: 100%;
     height: 100%;
@@ -373,6 +470,7 @@ button:hover,
     touch-action: none;
     cursor: grab;
 }
+
 .video-thumb-img {
     width: 100%;
     height: 100%;
@@ -383,9 +481,11 @@ button:hover,
     -webkit-user-drag: none;
     touch-action: none;
 }
+
 .image-thumb.dragging-thumb {
     cursor: grabbing;
 }
+
 /*
   Фото и видео в режиме "заполнить превью"
 */
@@ -399,6 +499,7 @@ button:hover,
 .folder-thumb {
     font-size: 56px;
 }
+
 .folder-children.hidden {
     display: none;
 }
@@ -509,6 +610,7 @@ button:hover,
     display: block;
     object-fit: contain;
 }
+
 /* Верхние кнопки */
 .viewer-toolbar {
     position: absolute;
@@ -519,22 +621,10 @@ button:hover,
     gap: 10px;
     flex-wrap: wrap;
 }
-/*.viewer-toolbar {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    right: 12px;
-    !*z-index: 20;*!
-    z-index: 40;
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-}*/
 
 .viewer-btn {
     border: none;
-    background: rgba(255,255,255,0.92);
+    background: rgba(255, 255, 255, 0.92);
     color: #111;
     padding: 10px 14px;
     border-radius: 10px;
@@ -560,9 +650,11 @@ button:hover,
     max-height: 75vh;
     display: block;
 }
+
 .close-btn {
     font-weight: bold;
 }
+
 .viewer-nav {
     position: absolute;
     top: 50%;
@@ -573,7 +665,7 @@ button:hover,
     height: 52px;
     border: none;
     border-radius: 50%;
-    background: rgba(0,0,0,0.55);
+    background: rgba(0, 0, 0, 0.55);
     color: white;
     font-size: 22px;
     cursor: pointer;
@@ -606,6 +698,7 @@ button:hover,
     object-fit: cover;
     display: block;
 }
+
 #prevViewerBtn,
 #nextViewerBtn {
     position: absolute;
@@ -618,7 +711,7 @@ button:hover,
     border-radius: 50%;
     font-size: 20px;
 
-    background: rgba(0,0,0,0.6);
+    background: rgba(0, 0, 0, 0.6);
     color: white;
 }
 
@@ -629,6 +722,7 @@ button:hover,
 #nextViewerBtn {
     right: 10px;
 }
+
 /* Полноэкранный режим */
 .viewer:fullscreen {
     background: #000;
@@ -668,7 +762,7 @@ button:hover,
     position: absolute;
     right: 10px;
     bottom: 10px;
-    background: rgba(0,0,0,0.65);
+    background: rgba(0, 0, 0, 0.65);
     color: white;
     border-radius: 999px;
     width: 36px;
@@ -678,11 +772,13 @@ button:hover,
     justify-content: center;
     font-size: 18px;
 }
+
 /* Адаптация под планшеты */
 @media (max-width: 900px) {
     body.topbar-collapsed .container {
         padding-top: 82px;
     }
+
     .container {
         padding-top: 150px;
     }
@@ -691,6 +787,7 @@ button:hover,
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     }
 }
+
 /*стили модалки дерева*/
 .move-modal {
     position: fixed;
@@ -705,7 +802,7 @@ button:hover,
 .move-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0,0,0,0.65);
+    background: rgba(0, 0, 0, 0.65);
 }
 
 .move-modal-content {
@@ -718,7 +815,7 @@ button:hover,
     background: white;
     border-radius: 16px;
     padding: 20px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .move-modal-header {
@@ -829,7 +926,7 @@ button:hover,
 .delete-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0,0,0,0.65);
+    background: rgba(0, 0, 0, 0.65);
 }
 
 .delete-modal-content {
@@ -881,19 +978,6 @@ button:hover,
     font-size: 16px;
     box-sizing: border-box;
 }
-/*.transfer-panel {
-    position: fixed;
-    bottom: 12px;
-    right: 12px;
-    width: 320px;
-    max-height: 50vh;
-    overflow-y: auto;
-    background: #111;
-    color: white;
-    border-radius: 14px;
-    padding: 10px;
-    z-index: 9999;
-}*/
 
 .transfer-panel.hidden {
     display: none;
@@ -905,10 +989,8 @@ button:hover,
     margin-bottom: 8px;
 }
 
-/*.transfer-item {
-    font-size: 13px;
-    margin-bottom: 8px;
-}*/
+/* карточка */
+
 .transfer-item {
     background: rgba(255, 255, 255, 0.08);
     border-radius: 12px;
@@ -916,37 +998,53 @@ button:hover,
     margin-bottom: 10px;
     color: white;
     box-sizing: border-box;
+    position: relative;
 }
 
 .transfer-name {
-    margin-bottom: 4px;
+    position: relative;
+    max-width: 100%;
+    /* margin-bottom: 4px;*/
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
+    /*text-overflow: ellipsis;*/
 }
 
-/*.progress {
-    height: 6px;
-    background: #333;
-    border-radius: 6px;
-    overflow: hidden;
-}*/
+.transfer-name span {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.transfer-name.marquee span {
+    animation: marquee 8s linear infinite;
+    animation-delay: 1s;
+}
+
+@keyframes marquee {
+    0% {
+        transform: translateX(0%);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+/* прогресс НЕ должен перехватывать клики */
+
 .progress {
+    position: relative;
+    z-index: 1;
     width: 100%;
-    height: 10px;
+    height: 8px;
     background: rgba(255, 255, 255, 0.14);
     border-radius: 999px;
     overflow: hidden;
-    margin: 8px 0 10px;
+    margin: 8px 0 8px;
+    pointer-events: none;
 }
 
-/*.progress-bar {
-    height: 100%;
-    width: 0%;
-    background: #4ade80;
-    transition: width 0.2s;
-}*/
 .progress-bar {
+    pointer-events: none;
     height: 100%;
     width: 0%;
     background: #43d17c;
@@ -958,11 +1056,28 @@ button:hover,
     display: flex;
     gap: 6px;
     margin-top: 4px;
+    position: relative;
+    z-index: 5;
+    pointer-events: auto;
 }
 
 .transfer-actions button {
     font-size: 12px;
     padding: 4px 6px;
+}
+
+#collapseTransfersBtn {
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    background: #2f80ed; /* синий */
+    color: white;
+}
+
+#collapseTransfersBtn:hover {
+    background: #1c6fe0;
 }
 
 /* Адаптация под телефон */
@@ -996,6 +1111,7 @@ button:hover,
     #viewerBody video {
         max-height: calc(100vh - 120px);
     }
+
     .container {
         padding-top: 170px;
         padding-left: 12px;
