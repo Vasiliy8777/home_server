@@ -28,13 +28,17 @@ public class ThumbnailService {
     private final Semaphore thumbnailSemaphore = new Semaphore(2);
 
     private final String ffmpegPath;
+
+    private final String magickPath;
     private final Path thumbnailsRoot;
 
     public ThumbnailService(
             @Value("${app.ffmpeg-path:ffmpeg}") String ffmpegPath,
+            @Value("${app.magick-path:magick}") String magickPath,
             FileService fileService
     ) throws IOException {
         this.ffmpegPath = ffmpegPath;
+        this.magickPath = magickPath;
         this.thumbnailsRoot = fileService.getRootPath().resolve(".thumbnails");
         Files.createDirectories(this.thumbnailsRoot);
     }
@@ -78,10 +82,66 @@ public class ThumbnailService {
             }
         }
     }
+    public Path getOrCreateHeicThumbnail(Path file) throws IOException {
+        String hash = sha256(file.toAbsolutePath().normalize().toString());
+        Path thumbnail = thumbnailsRoot.resolve(hash + ".heic.jpg");
 
+        if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+            return thumbnail;
+        }
+
+        ProcessBuilder pb = new ProcessBuilder(
+                magickPath,
+                file.toAbsolutePath().toString(),
+                "-auto-orient",
+                "-thumbnail",
+                "1200x1200",
+                "-quality",
+                "85",
+                thumbnail.toAbsolutePath().toString()
+        );
+
+        pb.redirectErrorStream(true);
+
+        Process process = pb.start();
+
+        StringBuilder log = new StringBuilder();
+
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                log.append(line).append(System.lineSeparator());
+            }
+        }
+
+        try {
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0 || !Files.exists(thumbnail) || Files.size(thumbnail) == 0) {
+                Files.deleteIfExists(thumbnail);
+                throw new IOException(
+                        "ImageMagick failed to convert HEIC: " + file +
+                                "\nExit code: " + exitCode +
+                                "\nLog:\n" + log
+                );
+            }
+
+            return thumbnail;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Files.deleteIfExists(thumbnail);
+            throw new IOException("HEIC conversion interrupted", e);
+        }
+    }
     public Path getOrCreateImageThumbnail(Path imagePath) throws IOException {
         String ext = getExtension(imagePath.getFileName().toString()).toLowerCase(Locale.ROOT);
+        String name = imagePath.getFileName().toString().toLowerCase();
 
+        if (name.endsWith(".heic") || name.endsWith(".heif")) {
+            return getOrCreateHeicThumbnail(imagePath);
+        }
         if (!isImageExtension(ext)) {
             return null;
         }

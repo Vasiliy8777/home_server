@@ -291,6 +291,22 @@ public class FileController {
         if (!Files.exists(file) || Files.isDirectory(file)) {
             return ResponseEntity.notFound().build();
         }
+        String fileName = file.getFileName().toString().toLowerCase();
+
+        if (fileName.endsWith(".heic") || fileName.endsWith(".heif")) {
+            Path jpgPreview = thumbnailService.getOrCreateHeicThumbnail(file);
+
+            if (jpgPreview == null || !Files.exists(jpgPreview) || Files.size(jpgPreview) == 0) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(null);
+            }
+
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic())
+                    .contentType(MediaType.IMAGE_JPEG)
+                    .contentLength(Files.size(jpgPreview))
+                    .body(new FileSystemResource(jpgPreview));
+        }
 
         FileSystemResource resource = new FileSystemResource(file);
 

@@ -458,6 +458,16 @@ public class FileService {
             return "directory";
         }
 
+        String ext = getExtension(path.getFileName().toString()).toLowerCase();
+
+        if (isImageExtension(ext)) {
+            return "image";
+        }
+
+        if (isVideoExtension(ext)) {
+            return "video";
+        }
+
         String contentType = null;
 
         try {
@@ -481,19 +491,8 @@ public class FileService {
             return "video";
         }
 
-        String ext = getExtension(path.getFileName().toString()).toLowerCase();
-
-        if (isImageExtension(ext)) {
-            return "image";
-        }
-
-        if (isVideoExtension(ext)) {
-            return "video";
-        }
-
         return "file";
     }
-
     /*
      * Очень простое экранирование пробелов.
      *

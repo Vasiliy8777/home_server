@@ -9,6 +9,7 @@ services:
     environment:
       APP_STORAGE_ROOT: /data
       APP_FFMPEG_PATH: ffmpeg
+      APP_MAGICK_PATH: convert
       APP_USERNAME: admin
       APP_PASSWORD: 12345
       SERVER_ADDRESS: 0.0.0.0

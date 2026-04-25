@@ -115,6 +115,15 @@ body {
     border: none;
     cursor: pointer;
 }
+#resumeAllTransfersBtn.resume-all-active {
+    background: #43d17c;
+    color: white;
+}
+
+#resumeAllTransfersBtn.resume-all-paused {
+    background: #f0c000;
+    color: black;
+}
 
 .transfer-remove {
     line-height: 1;

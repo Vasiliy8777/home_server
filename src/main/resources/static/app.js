@@ -10,6 +10,8 @@ let pendingResumeTaskId = null;
 const transferPanel = document.getElementById("transferPanel");
 const transferList = document.getElementById("transferList");
 const resumeAllTransfersBtn = document.getElementById("resumeAllTransfersBtn");
+resumeAllTransfersBtn.classList.add("resume-all-active");
+resumeAllTransfersBtn.textContent = "⏸ Пауза все";
 transferList.addEventListener("click", (e) => {
     const removeBtn = e.target.closest(".transfer-remove");
     if (removeBtn) {
@@ -85,8 +87,51 @@ transferList.addEventListener("click", (e) => {
         }
     }
 });
-
 resumeAllTransfersBtn.onclick = () => {
+    allTransfersPaused = !allTransfersPaused;
+
+    if (allTransfersPaused) {
+        // поставить все на паузу
+        for (const task of transferTasks.values()) {
+            if (task.status === "uploading" || task.status === "queued") {
+                task.status = "paused";
+            }
+        }
+
+        uploadQueue.length = 0;
+        downloadQueue.length = 0;
+
+        resumeAllTransfersBtn.classList.remove("resume-all-active");
+        resumeAllTransfersBtn.classList.add("resume-all-paused");
+        resumeAllTransfersBtn.textContent = "▶ Запустить все";
+    } else {
+        // запустить все
+        for (const task of transferTasks.values()) {
+            if (task.status === "paused") {
+                task.status = "queued";
+
+                if (task.kind === "upload" && task.file && !uploadQueue.find(t => t.id === task.id)) {
+                    uploadQueue.push(task);
+                }
+
+                if (task.kind === "download" && !downloadQueue.find(t => t.id === task.id)) {
+                    downloadQueue.push(task);
+                }
+            }
+        }
+
+        resumeAllTransfersBtn.classList.remove("resume-all-paused");
+        resumeAllTransfersBtn.classList.add("resume-all-active");
+        resumeAllTransfersBtn.textContent = "⏸ Пауза все";
+
+        processUploadQueue();
+        processDownloadQueue();
+    }
+
+    saveTransferTasks();
+    renderTransferList();
+};
+/*resumeAllTransfersBtn.onclick = () => {
     for (const task of transferTasks.values()) {
         if (task.status === "paused" || task.status === "queued") {
             task.status = "queued";
@@ -105,7 +150,7 @@ resumeAllTransfersBtn.onclick = () => {
     renderTransferList();
     processUploadQueue();
     processDownloadQueue();
-};
+};*/
 const uploadQueue = [];
 const downloadQueue = [];
 const transferTasks = new Map();
@@ -115,7 +160,7 @@ let activeUploads = 0;
 let activeDownloads = 0;
 
 let cancelAllTransfers = false;
-
+let allTransfersPaused = false;
 const MAX_PARALLEL = 3;
 
 // текущий список файлов, которые можно просматривать
