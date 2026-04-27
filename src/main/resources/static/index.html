@@ -29,29 +29,38 @@
                 <span id="currentPath">/</span>
                 <button id="toggleTopbarBtn" class="topbar-toggle-btn">▴</button>
             </div>
-
             <div class="actions-row">
-                <div class="actions-left">
-                    <button id="upBtn">⬅ Назад</button>
-                    <button id="homeBtn">🏠 На главную</button>
-                    <button id="folderListBtn">📂 Список папок</button>
-                    <button id="toggleTransfersBtn" class="transfer-progress-btn">
-                        <span class="tp-label">Загрузки</span>
-                        <span class="tp-bar-wrap">
-        <span class="tp-bar" id="topProgressBar"></span>
-    </span>
-                    </button>
+
+                <div class="toolbar-group">
+                    <button id="homeBtn">На главную</button>
+                    <button id="upBtn">Назад</button>
+                    <button id="folderListBtn">Список папок</button>
                 </div>
 
-                <div class="actions-right">
+                <div class="toolbar-group">
+                    <button id="selectAllBtn" class="bulk-btn">Выбрать все</button>
+                    <button id="clearSelectionBtn" class="bulk-btn" disabled>Снять выбор</button>
+                    <button id="bulkMoveBtn" class="bulk-btn" disabled>Переместить выбранные</button>
+                    <button id="bulkDownloadBtn" class="bulk-btn" disabled>Скачать выделенные</button>
+                    <button id="bulkDeleteBtn" class="bulk-btn danger" disabled>Удалить выбранные</button>
+                </div>
+
+                <div class="toolbar-group">
+                    <button id="newFolderBtn">Создать папку</button>
+
                     <label class="upload-label">
-                        <input type="file" id="fileInput" multiple hidden accept="image/*,video/*"/>
+                        <input id="fileInput" type="file" multiple hidden>
                         <span>Загрузить файлы</span>
                     </label>
 
-                    <button id="newFolderBtn">Создать папку</button>
+                    <button id="toggleTransfersBtn" class="transfer-progress-btn">
+                        <span id="topProgressBar" class="tp-bar"></span>
+                        <span class="tp-label">Загрузки</span>
+                    </button>
                 </div>
+
             </div>
+
         </div>
     </header>
 
@@ -101,6 +110,24 @@
         </div>
     </div>
 </div>
+<div id="bulkDownloadModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content">
+        <h3>Подтвердить скачивание</h3>
+
+        <div id="bulkDownloadText" class="delete-target-name"></div>
+
+        <div class="delete-warning">
+            Выбранные объекты будут скачаны одним ZIP-архивом.
+        </div>
+
+        <div class="delete-modal-actions">
+            <button id="confirmBulkDownloadBtn">Скачать</button>
+            <button id="cancelBulkDownloadBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
 <div id="deleteModal" class="delete-modal hidden">
     <div class="delete-modal-backdrop"></div>
 
@@ -118,6 +145,24 @@
         <div class="delete-modal-actions">
             <button id="confirmDeleteBtn" class="danger">Удалить</button>
             <button id="cancelDeleteBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
+<div id="bulkMoveConfirmModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content">
+        <h3>Подтвердить перемещение</h3>
+
+        <div id="bulkMoveConfirmText" class="delete-target-name"></div>
+
+        <div class="delete-warning">
+            Проверьте папку назначения перед перемещением.
+        </div>
+
+        <div class="delete-modal-actions">
+            <button id="confirmBulkMoveBtn">Переместить</button>
+            <button id="cancelBulkMoveBtn" class="secondary-btn">Отмена</button>
         </div>
     </div>
 </div>

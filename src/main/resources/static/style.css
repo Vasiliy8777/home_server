@@ -99,6 +99,57 @@ body {
     pointer-events: none;
 }
 
+.card {
+    position: relative;
+}
+.item-checkbox {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%; /* 🔥 круг */
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid #ccc;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.item-checkbox:checked {
+    background: #2f80ed;
+    border-color: #2f80ed;
+}
+
+.item-checkbox:checked::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 7px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.meta-row {
+    margin-bottom: 10px;
+}
+.select-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* 🔥 ключевое */
+    gap: 10px;
+    cursor: pointer;
+}
+
+.meta {
+    color: #777;
+}
+.card.selected {
+    outline: 3px solid #2f80ed;
+    outline-offset: -3px;
+}
+
 .transfer-remove,
 .control,
 .small-btn,
@@ -359,14 +410,33 @@ body.topbar-collapsed .container {
 }
 
 /* Ряд кнопок */
-.actions-row {
+/*.actions-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 16px;
     flex-wrap: wrap;
+}*/
+.actions-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
 }
 
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.toolbar-group + .toolbar-group {
+    margin-left: 4px;
+}
 /* Левая и правая зоны */
 .actions-left,
 .actions-right {
@@ -1136,7 +1206,10 @@ button:hover,
         flex-direction: column;
         align-items: stretch;
     }
-
+    .toolbar-group {
+        width: 100%;
+        justify-content: flex-start;
+    }
     .actions-left,
     .actions-right {
         width: 100%;

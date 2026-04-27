@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 /*
  * @RestController = @Controller + @ResponseBody
@@ -561,7 +562,42 @@ public ResponseEntity<StreamingResponseBody> stream(
 
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
+    @GetMapping("/download-selected")
+    public ResponseEntity<StreamingResponseBody> downloadSelected(
+            @RequestParam List<String> paths
+    ) {
+        StreamingResponseBody body = outputStream -> {
+            try (java.util.zip.ZipOutputStream zipOut = new java.util.zip.ZipOutputStream(outputStream)) {
+                for (String path : paths) {
+                    Path source = fileService.resolveSafe(path);
 
+                    if (!Files.exists(source)) {
+                        continue;
+                    }
+
+                    if (Files.isDirectory(source)) {
+                        try (Stream<Path> walk = Files.walk(source)) {
+                            for (Path file : walk.filter(Files::isRegularFile).toList()) {
+                                Path relative = source.getParent().relativize(file);
+                                zipOut.putNextEntry(new java.util.zip.ZipEntry(relative.toString().replace("\\", "/")));
+                                Files.copy(file, zipOut);
+                                zipOut.closeEntry();
+                            }
+                        }
+                    } else {
+                        zipOut.putNextEntry(new java.util.zip.ZipEntry(source.getFileName().toString()));
+                        Files.copy(source, zipOut);
+                        zipOut.closeEntry();
+                    }
+                }
+            }
+        };
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"selected-files.zip\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(body);
+    }
     @GetMapping("/video-thumbnail")
     public ResponseEntity<Resource> videoThumbnail(@RequestParam String path) throws IOException {
         Path file = fileService.resolveSafe(path);

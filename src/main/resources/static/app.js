@@ -5,12 +5,152 @@ let currentPlayer = null;
 let deleteTargetPath = null;
 let deleteTargetName = null;
 
-let pendingResumeTaskId = null;
+let currentItems = [];
 
+let pendingResumeTaskId = null;
+let bulkMoveMode = false;
+const selectedItems = new Map();
+
+const bulkMoveConfirmModal = document.getElementById("bulkMoveConfirmModal");
+const bulkMoveConfirmText = document.getElementById("bulkMoveConfirmText");
+const confirmBulkMoveBtn = document.getElementById("confirmBulkMoveBtn");
+const cancelBulkMoveBtn = document.getElementById("cancelBulkMoveBtn");
+
+const bulkDownloadBtn = document.getElementById("bulkDownloadBtn");
+
+const bulkDownloadModal = document.getElementById("bulkDownloadModal");
+const bulkDownloadText = document.getElementById("bulkDownloadText");
+const confirmBulkDownloadBtn = document.getElementById("confirmBulkDownloadBtn");
+const cancelBulkDownloadBtn = document.getElementById("cancelBulkDownloadBtn");
+
+const bulkMoveBtn = document.getElementById("bulkMoveBtn");
+const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
+const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+const selectAllBtn = document.getElementById("selectAllBtn");
+function updateBulkButtons() {
+    const count = selectedItems.size;
+
+    bulkMoveBtn.disabled = count === 0;
+    bulkDeleteBtn.disabled = count === 0;
+    clearSelectionBtn.disabled = count === 0;
+    bulkDownloadBtn.disabled = count === 0;
+
+    bulkDownloadBtn.textContent = count ? `Скачать (${count})` : "Скачать выделенные";
+    bulkMoveBtn.textContent = count ? `Переместить (${count})` : "Переместить выбранные";
+    bulkDeleteBtn.textContent = count ? `Удалить (${count})` : "Удалить выбранные";
+}
+
+function openBulkDownloadModal() {
+    if (!selectedItems.size) return;
+
+    bulkDownloadText.textContent =
+        `Скачать ${selectedItems.size} выбранных объектов одним архивом?`;
+
+    bulkDownloadModal.classList.remove("hidden");
+}
+
+function executeBulkDownload() {
+    if (!selectedItems.size) return;
+
+    const params = new URLSearchParams();
+
+    for (const item of selectedItems.values()) {
+        params.append("paths", item.path);
+    }
+
+    const link = document.createElement("a");
+    link.href = `/api/files/download-selected?${params.toString()}`;
+    link.download = "selected-files.zip";
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    bulkDownloadModal.classList.add("hidden");
+}
+
+function openBulkDeleteModal() {
+    if (!selectedItems.size) return;
+
+    deleteTargetPath = null;
+    deleteTargetName = null;
+
+    deleteTargetNameEl.textContent = `Выбрано объектов: ${selectedItems.size}`;
+    document.querySelector(".delete-warning").textContent =
+        `Подтвердите удаление ${selectedItems.size} выбранных объектов. Это действие нельзя отменить.`;
+
+    deleteModal.classList.remove("hidden");
+}
+async function confirmMove() {
+    if (bulkMoveMode) {
+        const count = selectedItems.size;
+        const targetText = selectedMovePath ? "/" + selectedMovePath : "/";
+
+        bulkMoveConfirmText.textContent =
+            `Переместить ${count} выбранных объектов в папку ${targetText}?`;
+
+        bulkMoveConfirmModal.classList.remove("hidden");
+        return;
+    }
+    if (moveSourcePath == null) return;
+
+    const formData = new URLSearchParams();
+    formData.append("sourcePath", moveSourcePath);
+    formData.append("targetPath", selectedMovePath);
+
+    const response = await fetch("/api/files/move", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: formData
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        alert("Не удалось переместить:\n" + text);
+        return;
+    }
+
+    closeMoveModal();
+    await loadFiles(currentPath);
+}
+async function executeBulkMove() {
+    const count = selectedItems.size;
+
+    for (const item of selectedItems.values()) {
+        const formData = new URLSearchParams();
+        formData.append("sourcePath", item.path);
+        formData.append("targetPath", selectedMovePath);
+
+        const response = await fetch("/api/files/move", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            alert(`Не удалось переместить "${item.name}":\n` + text);
+            return;
+        }
+    }
+
+    selectedItems.clear();
+    bulkMoveMode = false;
+
+    bulkMoveConfirmModal.classList.add("hidden");
+    closeMoveModal();
+
+    await loadFiles(currentPath);
+    updateBulkButtons();
+}
 const transferPanel = document.getElementById("transferPanel");
 const transferList = document.getElementById("transferList");
 const resumeAllTransfersBtn = document.getElementById("resumeAllTransfersBtn");
-resumeAllTransfersBtn.classList.add("resume-all-active");
+/*resumeAllTransfersBtn.classList.add("resume-all-active");*/
 resumeAllTransfersBtn.textContent = "⏸ Пауза все";
 transferList.addEventListener("click", (e) => {
     const removeBtn = e.target.closest(".transfer-remove");
@@ -38,7 +178,7 @@ transferList.addEventListener("click", (e) => {
         updateTopProgress();
         return;
     }
-    /*const controlBtn = e.target.closest(".control");*/
+
     const controlBtn = e.target.closest(".control");
     if (controlBtn) {
         e.preventDefault();
@@ -131,26 +271,7 @@ resumeAllTransfersBtn.onclick = () => {
     saveTransferTasks();
     renderTransferList();
 };
-/*resumeAllTransfersBtn.onclick = () => {
-    for (const task of transferTasks.values()) {
-        if (task.status === "paused" || task.status === "queued") {
-            task.status = "queued";
 
-            if (task.kind === "upload" && task.file && !uploadQueue.find(t => t.id === task.id)) {
-                uploadQueue.push(task);
-            }
-
-            if (task.kind === "download" && !downloadQueue.find(t => t.id === task.id)) {
-                downloadQueue.push(task);
-            }
-        }
-    }
-
-    saveTransferTasks();
-    renderTransferList();
-    processUploadQueue();
-    processDownloadQueue();
-};*/
 const uploadQueue = [];
 const downloadQueue = [];
 const transferTasks = new Map();
@@ -1036,8 +1157,27 @@ async function loadFiles(path = "") {
     renderItems(data.items);
     updateNavButtons();
 }
-
 async function confirmDelete() {
+    if (selectedItems.size > 0 && deleteTargetPath == null) {
+        for (const item of selectedItems.values()) {
+            const response = await fetch(`/api/files?path=${encodeURIComponent(item.path)}`, {
+                method: "DELETE"
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                alert(`Ошибка удаления "${item.name}":\n` + text);
+                return;
+            }
+        }
+
+        selectedItems.clear();
+        closeDeleteModal();
+        await loadFiles(currentPath);
+        updateBulkButtons();
+        return;
+    }
+
     if (!deleteTargetPath) return;
 
     const response = await fetch(`/api/files?path=${encodeURIComponent(deleteTargetPath)}`, {
@@ -1053,7 +1193,6 @@ async function confirmDelete() {
     closeDeleteModal();
     await loadFiles(currentPath);
 }
-
 function closeDeleteModal() {
     deleteModal.classList.add("hidden");
     deleteTargetPath = null;
@@ -1075,13 +1214,20 @@ function renderItems(items) {
         gallery.innerHTML = `<div>Папка пуста</div>`;
         return;
     }
-
+    currentItems = items;
     viewerItems = items.filter(item => !item.directory && (item.type === "image" || item.type === "video"));
 
     for (const item of items) {
         const card = document.createElement("div");
         card.className = "card";
+        card.dataset.path = item.relativePath;
 
+        const selectBox = document.createElement("input");
+        selectBox.type = "checkbox";
+        selectBox.className = "item-checkbox";
+        selectBox.checked = selectedItems.has(item.relativePath);
+
+        card.classList.toggle("selected", selectedItems.has(item.relativePath));
         const thumb = document.createElement("div");
         thumb.className = "thumb";
 
@@ -1121,10 +1267,41 @@ function renderItems(items) {
         const sizeText = item.directory ? "Папка" : formatBytes(item.size);
 
         body.innerHTML = `
-            <div class="file-name">${escapeHtml(item.name)}</div>
-            <div class="meta">${sizeText}</div>
-        `;
+    <div class="file-name">${escapeHtml(item.name)}</div>
+    <div class="meta-row">
+        <label class="select-line">
+            <span class="meta">${sizeText}</span>
+        </label>
+    </div>
+`;
+        body.querySelector(".select-line").appendChild(selectBox);
+        selectBox.addEventListener("click", (e) => {
+            e.stopPropagation();
 
+            if (selectBox.checked) {
+                selectedItems.set(item.relativePath, {
+                    path: item.relativePath,
+                    name: item.name,
+                    directory: item.directory
+                });
+            } else {
+                selectedItems.delete(item.relativePath);
+            }
+
+            card.classList.toggle("selected", selectBox.checked);
+            updateBulkButtons();
+        });
+
+        const line = body.querySelector(".select-line");
+
+        line.addEventListener("click", (e) => {
+            e.stopPropagation();
+
+            if (e.target === selectBox) return;
+
+            selectBox.checked = !selectBox.checked;
+            selectBox.dispatchEvent(new Event("click"));
+        });
         const actions = document.createElement("div");
         actions.className = "card-actions";
 
@@ -1163,6 +1340,7 @@ function renderItems(items) {
     imageThumbs.forEach(img => enablePreviewPan(img));
     const videoThumbs = gallery.querySelectorAll("img.video-thumb-img");
     videoThumbs.forEach(img => enablePreviewPan(img));
+    updateBulkButtons();
 }
 
 function initLazyThumbs() {
@@ -1381,24 +1559,84 @@ createFolderInput.addEventListener("keydown", (e) => {
 
 confirmDeleteBtn.addEventListener("click", confirmDelete);
 cancelDeleteBtn.addEventListener("click", closeDeleteModal);
+bulkDeleteBtn.onclick = openBulkDeleteModal;
+selectAllBtn.onclick = () => {
+    for (const item of currentItems) {
+        selectedItems.set(item.relativePath, {
+            path: item.relativePath,
+            name: item.name,
+            directory: item.directory
+        });
+    }
 
+    renderItems(currentItems);
+    updateBulkButtons();
+};
 deleteModal.addEventListener("click", (e) => {
     if (e.target.classList.contains("delete-modal-backdrop")) {
         closeDeleteModal();
     }
 });
+clearSelectionBtn.onclick = async () => {
+    selectedItems.clear();
+    updateBulkButtons();
+    await loadFiles(currentPath);
+};
 
+bulkDownloadBtn.onclick = openBulkDownloadModal;
+confirmBulkDownloadBtn.onclick = executeBulkDownload;
+
+cancelBulkDownloadBtn.onclick = () => {
+    bulkDownloadModal.classList.add("hidden");
+};
+
+bulkDownloadModal.addEventListener("click", (e) => {
+    if (e.target.classList.contains("delete-modal-backdrop")) {
+        bulkDownloadModal.classList.add("hidden");
+    }
+});
+bulkMoveBtn.onclick = () => {
+    if (!selectedItems.size) return;
+
+    bulkMoveMode = true;
+    selectedMovePath = "";
+
+    moveModalTargetName.textContent = `Перемещаем объектов: ${selectedItems.size}`;
+    selectedMovePathEl.textContent = `Выбрано: /`;
+    folderTreeContainer.innerHTML = `<div>Загрузка папок...</div>`;
+
+    moveModal.classList.remove("hidden");
+
+    fetch("/api/files/folders/tree")
+        .then(r => r.json())
+        .then(tree => {
+            folderTreeContainer.innerHTML = "";
+            folderTreeContainer.appendChild(renderFolderTree(tree));
+        });
+};
 folderListBtn.addEventListener("click", openFolderListModal);
 closeFolderListModalBtn.addEventListener("click", closeFolderListModal);
 cancelFolderListBtn.addEventListener("click", closeFolderListModal);
 goToSelectedFolderBtn.addEventListener("click", goToSelectedFolder);
+
+resumeAllTransfersBtn.classList.add("resume-all-active");
 
 folderListModal.addEventListener("click", (e) => {
     if (e.target.classList.contains("move-modal-backdrop")) {
         closeFolderListModal();
     }
 });
+confirmBulkMoveBtn.onclick = executeBulkMove;
 
+cancelBulkMoveBtn.onclick = () => {
+    bulkMoveConfirmModal.classList.add("hidden");
+};
+
+bulkMoveConfirmModal.addEventListener("click", (e) => {
+    if (e.target.classList.contains("delete-modal-backdrop")) {
+        bulkMoveConfirmModal.classList.add("hidden");
+    }
+});
 expandAllFoldersBtn.addEventListener("click", () => {
     expandAllTreeNodes(folderListTreeContainer);
 });
@@ -1547,31 +1785,6 @@ function renderFolderTree(node) {
     }
 
     return wrapper;
-}
-
-async function confirmMove() {
-    if (moveSourcePath == null) return;
-
-    const formData = new URLSearchParams();
-    formData.append("sourcePath", moveSourcePath);
-    formData.append("targetPath", selectedMovePath);
-
-    const response = await fetch("/api/files/move", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: formData
-    });
-
-    if (!response.ok) {
-        const text = await response.text();
-        alert("Не удалось переместить:\n" + text);
-        return;
-    }
-
-    closeMoveModal();
-    await loadFiles(currentPath);
 }
 
 function closeMoveModal() {
