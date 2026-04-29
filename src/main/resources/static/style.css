@@ -202,7 +202,32 @@ body {
     background: #43d17c;
     color: white;
 }
+#previewBuildModal .delete-modal-content {
+    padding: 32px 36px;
+    min-height: 280px;
+}
 
+#previewBuildText {
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+#previewBuildSize {
+    display: block;
+    margin: 18px 0 22px;
+    line-height: 1.5;
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+    text-align: center;
+    min-height: 30px;
+}
+
+#previewBuildTime {
+    margin-top: 18px;
+    margin-bottom: 22px;
+    line-height: 1.5;
+}
 .transfer-header-actions {
     display: flex;
     gap: 6px;
@@ -230,7 +255,6 @@ body {
     border: none;
     cursor: pointer;
 }
-
 .transfer-progress-btn .tp-bar {
     background: linear-gradient(
             90deg,
@@ -410,13 +434,7 @@ body.topbar-collapsed .container {
 }
 
 /* Ряд кнопок */
-/*.actions-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-}*/
+
 .actions-row {
     display: flex;
     align-items: center;
@@ -1083,10 +1101,8 @@ button:hover,
 .transfer-name {
     position: relative;
     max-width: 100%;
-    /* margin-bottom: 4px;*/
     white-space: nowrap;
     overflow: hidden;
-    /*text-overflow: ellipsis;*/
 }
 
 .transfer-name span {

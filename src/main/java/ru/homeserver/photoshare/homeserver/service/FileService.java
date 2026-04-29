@@ -40,7 +40,8 @@ public class FileService {
     private final Path rootPath;
     private static final List<String> HIDDEN_DIRS = List.of(
             ".thumbnails",
-            ".upload_tmp"
+            ".upload_tmp",
+            ".preview_journal"
     );
     public FileService(@Value("${app.storage-root}") String storageRoot) throws IOException {
         /*
@@ -167,20 +168,27 @@ public class FileService {
                             String previewUrl = null;
                             String downloadUrl = isDir ? null : "/api/files/download?path=" + encodePath(relStr);
                             String thumbnailUrl = null;
-
                             if (!isDir) {
                                 if ("image".equals(type)) {
-                                    /*previewUrl = "/api/files/raw?path=" + encodePath(relStr);
-                                    thumbnailUrl = previewUrl;*/
                                     previewUrl = "/api/files/raw?path=" + encodePath(relStr);
                                     thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
                                 } else if ("video".equals(type)) {
-                                    previewUrl = "/api/files/stream?path=" + encodePath(relStr);
+
+                                    String lower = relStr.toLowerCase();
+
+                                    if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+                                        previewUrl = "/api/files/video-proxy?path=" + encodePath(relStr);
+                                    } else {
+                                        previewUrl = "/api/files/stream?path=" + encodePath(relStr);
+                                    }
+
                                     thumbnailUrl = "/api/files/video-thumbnail?path=" + encodePath(relStr);
-                                } else {
+                                }
+                                 else {
                                     previewUrl = "/api/files/raw?path=" + encodePath(relStr);
                                 }
                             }
+
                             /*
                              * Создаем DTO и добавляем в результат
                              */
@@ -504,7 +512,7 @@ public class FileService {
     }
     private boolean isVideoExtension(String ext) {
         return switch (ext.toLowerCase()) {
-            case "mp4", "mov", "avi", "mkv", "webm", "m4v", "ogv" -> true;
+            case "mp4", "mov", "avi", "mkv", "webm", "m4v", "ogv", "insv", "lrv" -> true;
             default -> false;
         };
     }

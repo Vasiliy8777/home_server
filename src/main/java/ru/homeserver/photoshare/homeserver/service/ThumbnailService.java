@@ -25,7 +25,8 @@ import java.util.concurrent.Semaphore;
 @Service
 public class ThumbnailService {
 
-    private final Semaphore thumbnailSemaphore = new Semaphore(2);
+    private final Semaphore imageSemaphore = new Semaphore(2);
+    private final Semaphore videoSemaphore = new Semaphore(1); // 👈 ограничить ffmpeg
 
     private final String ffmpegPath;
 
@@ -42,9 +43,54 @@ public class ThumbnailService {
         this.thumbnailsRoot = fileService.getRootPath().resolve(".thumbnails");
         Files.createDirectories(this.thumbnailsRoot);
     }
-
-    public Path getOrCreateVideoThumbnail(Path videoPath) throws IOException {
+    public Path getOrCreateVideoThumbnail(Path videoPath) throws IOException, InterruptedException {
         String ext = getExtension(videoPath.getFileName().toString()).toLowerCase(Locale.ROOT);
+        if ("insv".equals(ext) || "lrv".equals(ext)) {
+
+            String hash = sha256(videoPath.toAbsolutePath().normalize().toString());
+            Path thumbnail = thumbnailsRoot.resolve(hash + ".jpg");
+
+            if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+                return thumbnail;
+            }
+            ProcessBuilder pb = new ProcessBuilder(
+                    ffmpegPath,
+                    "-y",
+                    "-ss", "00:00:01",
+                    "-i", videoPath.toAbsolutePath().toString(),
+                    "-vf", "scale=320:-1",
+                    "-frames:v", "1",
+                    "-q:v", "5",
+                    thumbnail.toAbsolutePath().toString()
+            );
+
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+
+            StringBuilder log = new StringBuilder();
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.append(line).append(System.lineSeparator());
+                }
+            }
+
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0 || !Files.exists(thumbnail) || Files.size(thumbnail) == 0) {
+                Files.deleteIfExists(thumbnail);
+                System.out.println("FFmpeg INSV/LRV thumbnail failed:");
+                System.out.println(log);
+                return null;
+            }
+
+            return thumbnail;
+
+        }
 
         if (!isVideoExtension(ext)) {
             return null;
@@ -59,7 +105,8 @@ public class ThumbnailService {
 
         boolean acquired = false;
         try {
-            thumbnailSemaphore.acquire();
+            /*thumbnailSemaphore.acquire();*/
+            videoSemaphore.acquire();
             acquired = true;
 
             if (Files.exists(output) && Files.size(output) > 0) {
@@ -78,7 +125,7 @@ public class ThumbnailService {
             return null;
         } finally {
             if (acquired) {
-                thumbnailSemaphore.release();
+                videoSemaphore.release();
             }
         }
     }
@@ -155,7 +202,8 @@ public class ThumbnailService {
 
         boolean acquired = false;
         try {
-            thumbnailSemaphore.acquire();
+           /* thumbnailSemaphore.acquire();*/
+            imageSemaphore.acquire();
             acquired = true;
 
             if (Files.exists(output) && Files.size(output) > 0) {
@@ -174,7 +222,7 @@ public class ThumbnailService {
             return null;
         } finally {
             if (acquired) {
-                thumbnailSemaphore.release();
+                imageSemaphore.release();
             }
         }
     }
@@ -280,7 +328,7 @@ public class ThumbnailService {
 
     private boolean isVideoExtension(String ext) {
         return switch (ext.toLowerCase()) {
-            case "mp4", "mov", "avi", "mkv", "webm", "m4v", "ogv" -> true;
+            case "mp4", "mov", "avi", "mkv", "webm", "m4v", "ogv", "insv", "lrv" -> true;
             default -> false;
         };
     }

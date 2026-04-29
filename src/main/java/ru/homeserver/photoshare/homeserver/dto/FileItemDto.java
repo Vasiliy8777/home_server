@@ -22,7 +22,6 @@ package ru.homeserver.photoshare.homeserver.dto;
  * - toString
  */
 public record FileItemDto(
-
         // Имя файла или папки, которое увидит пользователь
         String name,
 
@@ -64,5 +63,6 @@ public record FileItemDto(
 
         // URL для скачивания файла
         String downloadUrl
+
 ) {
 }

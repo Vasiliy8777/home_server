@@ -75,6 +75,7 @@
 
     <div class="viewer-content">
         <div class="viewer-toolbar">
+            <button id="selectViewerBtn">Выбрать</button>
             <button id="downloadViewerBtn" class="viewer-btn">Скачать</button>
             <button id="fullscreenViewerBtn" class="viewer-btn">⛶</button>
             <button id="closeViewer" class="viewer-btn close-btn">✕</button>
@@ -107,6 +108,29 @@
         <div class="move-modal-actions">
             <button id="confirmMoveBtn">Выбрать</button>
             <button id="cancelMoveBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
+<div id="previewBuildModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content">
+        <h3>Создание варианта просмотра</h3>
+
+        <div id="previewBuildText">
+            Подготавливаем лёгкую версию видео...
+        </div>
+
+        <div id="previewBuildSize" class="preview-size">
+            Обработано: 0 MB
+        </div>
+
+        <div id="previewBuildTime" class="meta">
+            Время зависит от размера файла
+        </div>
+
+        <div class="delete-modal-actions">
+            <button id="cancelPreviewBuildBtn" class="danger">Отмена</button>
         </div>
     </div>
 </div>

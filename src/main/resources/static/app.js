@@ -11,6 +11,16 @@ let pendingResumeTaskId = null;
 let bulkMoveMode = false;
 const selectedItems = new Map();
 
+let currentPreviewId = null;
+let previewStatusTimer = null;
+
+const previewBuildModal = document.getElementById("previewBuildModal");
+const previewBuildBar = document.getElementById("previewBuildBar");
+const previewBuildSize = document.getElementById("previewBuildSize");
+const previewBuildText = document.getElementById("previewBuildText");
+const previewBuildTime = document.getElementById("previewBuildTime");
+const cancelPreviewBuildBtn = document.getElementById("cancelPreviewBuildBtn");
+
 const bulkMoveConfirmModal = document.getElementById("bulkMoveConfirmModal");
 const bulkMoveConfirmText = document.getElementById("bulkMoveConfirmText");
 const confirmBulkMoveBtn = document.getElementById("confirmBulkMoveBtn");
@@ -27,6 +37,7 @@ const bulkMoveBtn = document.getElementById("bulkMoveBtn");
 const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
 const clearSelectionBtn = document.getElementById("clearSelectionBtn");
 const selectAllBtn = document.getElementById("selectAllBtn");
+
 function updateBulkButtons() {
     const count = selectedItems.size;
 
@@ -47,6 +58,66 @@ function openBulkDownloadModal() {
         `Скачать ${selectedItems.size} выбранных объектов одним архивом?`;
 
     bulkDownloadModal.classList.remove("hidden");
+}
+
+async function preparePreviewVideo(item) {
+    previewBuildModal.classList.remove("hidden");
+
+    previewBuildSize.textContent = "Обработано: 0 MB";
+    /*previewBuildText.textContent = "Создание варианта просмотра...";*/
+    previewBuildTime.textContent = "Это может занять время для длинных видео";
+
+    const form = new URLSearchParams();
+    form.append("path", item.relativePath);
+
+    const startResponse = await fetch("/api/files/preview/start", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form
+    });
+
+    if (!startResponse.ok) {
+        previewBuildModal.classList.add("hidden");
+        alert("Не удалось начать создание preview-видео");
+        return null;
+    }
+
+    const data = await startResponse.json();
+    currentPreviewId = data.previewId;
+
+    return new Promise((resolve, reject) => {
+        previewStatusTimer = setInterval(async () => {
+            const statusResponse = await fetch(`/api/files/preview/status?previewId=${encodeURIComponent(currentPreviewId)}`);
+
+            if (!statusResponse.ok) {
+                clearInterval(previewStatusTimer);
+                previewBuildModal.classList.add("hidden");
+                reject(new Error("Preview status error"));
+                return;
+            }
+
+            const status = await statusResponse.json();
+
+            if (status.progress < 0) {
+                clearInterval(previewStatusTimer);
+                previewBuildModal.classList.add("hidden");
+                reject(new Error("Preview creation failed"));
+                return;
+            }
+
+
+            previewBuildSize.textContent =
+                `Обработано: ${formatFileSize(status.size || 0)}`;
+            if (status.ready) {
+                clearInterval(previewStatusTimer);
+                previewBuildModal.classList.add("hidden");
+
+                resolve(`/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`);
+            }
+        }, 1000);
+    });
 }
 
 function executeBulkDownload() {
@@ -81,6 +152,7 @@ function openBulkDeleteModal() {
 
     deleteModal.classList.remove("hidden");
 }
+
 async function confirmMove() {
     if (bulkMoveMode) {
         const count = selectedItems.size;
@@ -115,6 +187,7 @@ async function confirmMove() {
     closeMoveModal();
     await loadFiles(currentPath);
 }
+
 async function executeBulkMove() {
     const count = selectedItems.size;
 
@@ -147,6 +220,7 @@ async function executeBulkMove() {
     await loadFiles(currentPath);
     updateBulkButtons();
 }
+
 const transferPanel = document.getElementById("transferPanel");
 const transferList = document.getElementById("transferList");
 const resumeAllTransfersBtn = document.getElementById("resumeAllTransfersBtn");
@@ -331,6 +405,7 @@ const closeViewer = document.getElementById("closeViewer");
 const prevViewerBtn = document.getElementById("prevViewerBtn");
 const nextViewerBtn = document.getElementById("nextViewerBtn");
 const downloadViewerBtn = document.getElementById("downloadViewerBtn");
+const selectViewerBtn = document.getElementById("selectViewerBtn");
 const fullscreenViewerBtn = document.getElementById("fullscreenViewerBtn");
 
 const moveModal = document.getElementById("moveModal");
@@ -346,6 +421,16 @@ const toggleTopbarBtn = document.getElementById("toggleTopbarBtn");
 const topProgressBar = document.getElementById("topProgressBar");
 const toggleTransfersBtn = document.getElementById("toggleTransfersBtn");
 const collapseTransfersBtn = document.getElementById("collapseTransfersBtn");
+
+function updateViewerSelectButton() {
+    if (viewerIndex < 0 || viewerIndex >= viewerItems.length) return;
+
+    const item = viewerItems[viewerIndex];
+    const selected = selectedItems.has(item.relativePath);
+
+    selectViewerBtn.textContent = selected ? "✓ Выбрано" : "Выбрать";
+    selectViewerBtn.classList.toggle("selected", selected);
+}
 
 function saveTransferTasks() {
     const plain = Array.from(transferTasks.values()).map(task => ({
@@ -993,6 +1078,48 @@ function renderFolderListTree(node) {
     return wrapper;
 }
 
+async function cleanupCurrentPreview() {
+    if (currentPreviewId) {
+        const id = currentPreviewId;
+        currentPreviewId = null;
+
+        try {
+            await fetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(id)}`, {
+                method: "DELETE"
+            });
+        } catch (e) {
+            console.error("Preview cleanup failed", e);
+        }
+    }
+
+    if (previewStatusTimer) {
+        clearInterval(previewStatusTimer);
+        previewStatusTimer = null;
+    }
+}
+
+async function openRenamePreview(item) {
+    const form = new URLSearchParams();
+    form.append("path", item.relativePath);
+
+    const resp = await fetch("/api/files/preview/rename-original-start", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form
+    });
+
+    if (!resp.ok) {
+        alert("Ошибка подготовки файла для просмотра");
+        return null;
+    }
+
+    const data = await resp.json();
+    currentPreviewId = data.previewId;
+
+    return `/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`;
+}
 function expandAllTreeNodes(container) {
     container.querySelectorAll(".folder-children").forEach(el => {
         el.classList.remove("hidden");
@@ -1157,6 +1284,7 @@ async function loadFiles(path = "") {
     renderItems(data.items);
     updateNavButtons();
 }
+
 async function confirmDelete() {
     if (selectedItems.size > 0 && deleteTargetPath == null) {
         for (const item of selectedItems.values()) {
@@ -1193,6 +1321,7 @@ async function confirmDelete() {
     closeDeleteModal();
     await loadFiles(currentPath);
 }
+
 function closeDeleteModal() {
     deleteModal.classList.add("hidden");
     deleteTargetPath = null;
@@ -1236,26 +1365,28 @@ function renderItems(items) {
             thumb.addEventListener("click", () => loadFiles(item.relativePath));
         } else if (item.type === "image") {
             thumb.innerHTML = `
-                <img
-                    loading="lazy"
-                    data-src="${item.thumbnailUrl || item.previewUrl}"
-                    alt="${escapeHtml(item.name)}"
-                    class="lazy-thumb image-thumb"
-                >
-            `;
+    <img
+        src="/image-placeholder.png"   // 👈 сразу показываем
+        loading="lazy"
+        data-src="${item.thumbnailUrl || item.previewUrl}"
+        alt="${escapeHtml(item.name)}"
+        class="lazy-thumb image-thumb"
+    >
+`;
             thumb.addEventListener("click", () => openViewerByPath(item.relativePath));
         } else if (item.type === "video") {
             thumb.innerHTML = `
-                <div class="video-thumb-wrap">
-                    <img
-                        loading="lazy"
-                        data-src="${item.thumbnailUrl || '/video-placeholder.png'}"
-                        alt="${escapeHtml(item.name)}"
-                        class="lazy-thumb video-thumb-img"
-                    >
-                    <div class="play-badge">▶</div>
-                </div>
-            `;
+    <div class="video-thumb-wrap">
+        <img
+            src="/video-placeholder.png"  // 👈 сразу показываем
+            loading="lazy"
+            data-src="${item.thumbnailUrl || '/video-placeholder.png'}"
+            alt="${escapeHtml(item.name)}"
+            class="lazy-thumb video-thumb-img"
+        >
+        <div class="play-badge">▶</div>
+    </div>
+`;
             thumb.addEventListener("click", () => openViewerByPath(item.relativePath));
         } else {
             thumb.innerHTML = `<div class="file-thumb">📄</div>`;
@@ -1373,7 +1504,7 @@ function initLazyThumbs() {
             obs.unobserve(img);
         }
     }, {
-        rootMargin: "200px"
+        rootMargin: "400px"
     });
 
     images.forEach(img => observer.observe(img));
@@ -1481,7 +1612,7 @@ function renderViewerItem() {
     if (viewerIndex < 0 || viewerIndex >= viewerItems.length) return;
 
     const item = viewerItems[viewerIndex];
-
+    updateViewerSelectButton();
     if (currentPlayer) {
         currentPlayer.destroy();
         currentPlayer = null;
@@ -1490,33 +1621,121 @@ function renderViewerItem() {
     if (item.type === "image") {
         viewerBody.innerHTML = `<img src="${item.previewUrl}" alt="${escapeHtml(item.name)}">`;
     } else if (item.type === "video") {
+        const lower = item.name.toLowerCase();
+        if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
+            viewerBody.innerHTML = `<div>Подготовка видео...</div>`;
+
+            downloadViewerBtn.onclick = () => {
+                if (!currentPreviewId) {
+                    console.log("Preview ещё не готов");
+                    return;
+                }
+
+                window.location.href =
+                    `/api/files/preview/original?previewId=${encodeURIComponent(currentPreviewId)}`;
+            };
+
+            openRenamePreview(item)
+                .then(url => {
+                    if (!url) {
+                        viewerBody.innerHTML = `<div>Не удалось подготовить видео</div>`;
+                        return;
+                    }
+
+                    viewerBody.innerHTML = `
+                <video id="player"
+                       controls
+                       preload="metadata"
+                       ${item.thumbnailUrl ? `poster="${item.thumbnailUrl}"` : `poster="/video-placeholder.png"`}
+                       style="width:100%; max-height:75vh;">
+                    <source src="${url}" type="video/mp4">
+                </video>
+            `;
+
+                    const video = document.getElementById("player");
+                    currentPlayer = new Plyr(video);
+                })
+                .catch(e => {
+                    console.error(e);
+                    viewerBody.innerHTML = `<div>Не удалось подготовить видео</div>`;
+                });
+
+            return;
+        }
         viewerBody.innerHTML = `
-            <video id="player"
-                   controls
-                   preload="metadata"
-                   ${item.thumbnailUrl ? `poster="${item.thumbnailUrl}"` : ""}
-                   style="width:100%; max-height:75vh;">
-                <source src="${item.previewUrl}">
-            </video>
-        `;
+        <video id="player"
+               controls
+               preload="metadata"
+               ${item.thumbnailUrl ? `poster="${item.thumbnailUrl}"` : ""}
+               style="width:100%; max-height:75vh;">
+            <source src="${item.previewUrl}">
+        </video>
+    `;
 
         const video = document.getElementById("player");
         currentPlayer = new Plyr(video);
     }
     downloadViewerBtn.onclick = () => {
         const item = viewerItems[viewerIndex];
-        addDownload(item);
+        const lower = item.name.toLowerCase();
+
+        // если это insv/lrv и открыт preview
+        if ((lower.endsWith(".insv") || lower.endsWith(".lrv")) && currentPreviewId) {
+            window.location.href =
+                `/api/files/preview/original?previewId=${encodeURIComponent(currentPreviewId)}`;
+            return;
+        }
+
+        // обычные файлы
+        window.location.href = item.downloadUrl;
     };
+
 }
 
-function showPrevItem() {
+cancelPreviewBuildBtn.onclick = async () => {
+    if (previewStatusTimer) {
+        clearInterval(previewStatusTimer);
+        previewStatusTimer = null;
+    }
+
+    if (currentPreviewId) {
+        await fetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(currentPreviewId)}`, {
+            method: "DELETE"
+        });
+    }
+
+    currentPreviewId = null;
+    previewBuildModal.classList.add("hidden");
+};
+
+async function showPrevItem() {
     if (!viewerItems.length) return;
+
+    if (currentPlayer) {
+        currentPlayer.destroy();
+        currentPlayer = null;
+    }
+
+    viewerBody.innerHTML = ""; // 👈 важно
+
+    await cleanupCurrentPreview();
+
     viewerIndex = (viewerIndex - 1 + viewerItems.length) % viewerItems.length;
     renderViewerItem();
 }
 
-function showNextItem() {
+async function showNextItem() {
     if (!viewerItems.length) return;
+
+    if (currentPlayer) {
+        currentPlayer.destroy();
+        currentPlayer = null;
+    }
+
+    viewerBody.innerHTML = ""; // 👈 важно
+
+    await cleanupCurrentPreview();
+
     viewerIndex = (viewerIndex + 1) % viewerItems.length;
     renderViewerItem();
 }
@@ -1529,16 +1748,20 @@ function toggleFullscreen() {
     }
 }
 
-function closeViewerModal() {
+async function closeViewerModal() {
     if (currentPlayer) {
         currentPlayer.destroy();
         currentPlayer = null;
     }
 
+    viewerBody.innerHTML = ""; // 👈 ВАЖНО
+
+    await cleanupCurrentPreview(); // 👈 теперь безопасно
+
     viewer.classList.add("hidden");
-    viewerBody.innerHTML = "";
     viewerIndex = -1;
 }
+
 
 toggleTopbarBtn?.addEventListener("click", toggleTopbar);
 
@@ -1665,6 +1888,24 @@ moveModal.addEventListener("click", (e) => {
 closeViewer.addEventListener("click", closeViewerModal);
 prevViewerBtn.addEventListener("click", showPrevItem);
 nextViewerBtn.addEventListener("click", showNextItem);
+selectViewerBtn.addEventListener("click", () => {
+    if (viewerIndex < 0 || viewerIndex >= viewerItems.length) return;
+
+    const item = viewerItems[viewerIndex];
+
+    if (selectedItems.has(item.relativePath)) {
+        selectedItems.delete(item.relativePath);
+    } else {
+        selectedItems.set(item.relativePath, {
+            path: item.relativePath,
+            name: item.name,
+            directory: item.directory
+        });
+    }
+
+    updateViewerSelectButton();
+    updateBulkButtons();
+});
 fullscreenViewerBtn.addEventListener("click", toggleFullscreen);
 homeBtn.addEventListener("click", () => {
     loadFiles(""); // переход в корень
