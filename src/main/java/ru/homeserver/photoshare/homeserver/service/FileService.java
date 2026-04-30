@@ -1,6 +1,7 @@
 package ru.homeserver.photoshare.homeserver.service;
 
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -37,13 +38,18 @@ public class FileService {
      * Это ключевой элемент безопасности:
      * приложение должно работать только внутри одной разрешенной директории.
      */
+    private final MetadataService metadataService;
     private final Path rootPath;
+    private volatile FolderNodeDto cachedFolderTree;
     private static final List<String> HIDDEN_DIRS = List.of(
             ".thumbnails",
             ".upload_tmp",
             ".preview_journal"
     );
-    public FileService(@Value("${app.storage-root}") String storageRoot) throws IOException {
+
+    public FileService(MetadataService metadataService, @Value("${app.storage-root}") String storageRoot) throws IOException {
+        this.metadataService = metadataService;
+
         /*
          * Paths.get(storageRoot) создает Path из строки.
          *
@@ -188,7 +194,11 @@ public class FileService {
                                     previewUrl = "/api/files/raw?path=" + encodePath(relStr);
                                 }
                             }
-
+                            long modified = Files.getLastModifiedTime(path).toMillis();
+                            long createdAt = modified; // временно = modified
+                            /*long createdAt = Files.isDirectory(path)
+                                    ? modified
+                                    : metadataService.readCreatedAtMillis(path);*/
                             /*
                              * Создаем DTO и добавляем в результат
                              */
@@ -200,7 +210,9 @@ public class FileService {
                                     type,
                                     previewUrl,
                                     thumbnailUrl,
-                                    downloadUrl
+                                    downloadUrl,
+                                    modified,
+                                    createdAt
                             ));
                         } catch (IOException e) {
                             /*
@@ -214,7 +226,10 @@ public class FileService {
 
         return result;
     }
-    public FolderNodeDto getFolderTree() throws IOException {
+    /*public FolderNodeDto getFolderTree() throws IOException {
+        return buildFolderNode(rootPath);
+    }*/
+    private FolderNodeDto buildFolderTree() throws IOException {
         return buildFolderNode(rootPath);
     }
     public void move(String sourceRelativePath, String targetDirectoryRelativePath) throws IOException {
@@ -526,5 +541,23 @@ public class FileService {
     private String getExtension(String filename) {
         int index = filename.lastIndexOf('.');
         return index >= 0 ? filename.substring(index + 1) : "";
+    }
+    @PostConstruct
+    public void initFolderTreeCache() {
+        try {
+            rebuildFolderTreeCache();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    public FolderNodeDto getFolderTreeCached() throws IOException {
+        if (cachedFolderTree == null) {
+            rebuildFolderTreeCache();
+        }
+
+        return cachedFolderTree;
+    }
+    public synchronized void rebuildFolderTreeCache() throws IOException {
+        this.cachedFolderTree = buildFolderTree();
     }
 }

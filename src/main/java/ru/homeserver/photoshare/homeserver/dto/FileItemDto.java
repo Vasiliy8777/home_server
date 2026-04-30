@@ -60,9 +60,12 @@ public record FileItemDto(
         // - у изображений часто совпадает с previewUrl
         // - у видео это отдельный jpg
         String thumbnailUrl,
-
         // URL для скачивания файла
-        String downloadUrl
-
+        String downloadUrl,
+        // Дата изменения файла/папки в миллисекундах
+        long lastModified,
+        // Дата создания из метаданных, если есть.
+        // Если нет — fallback на дату изменения.
+        long createdAt
 ) {
 }

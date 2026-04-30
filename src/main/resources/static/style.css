@@ -1174,7 +1174,60 @@ button:hover,
 #collapseTransfersBtn:hover {
     background: #1c6fe0;
 }
+#sortModal .delete-modal-content {
+    width: fit-content;
+    min-width: 220px;
+    max-width: 260px;
+    padding: 14px;
+    border-radius: 16px;
 
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+}
+
+#sortModal .delete-modal-actions {
+    margin-top: 32px;
+    display: flex;
+    justify-content: center;
+}
+
+.sort-options {
+    display: flex;
+    gap: 12px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+#sortModal button {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    background: #1f6feb;
+    color: white;
+}
+
+.sort-field-btn.active {
+    background: #22c55e !important;
+}
+
+#sortDirectionBtn {
+    width: 100%;
+    margin-top: 8px;
+}
+
+#sortDirectionBtn.asc {
+    background: #2563eb !important;
+}
+
+#sortDirectionBtn.desc {
+    background: #22c55e !important;
+}
 /* Адаптация под телефон */
 @media (max-width: 640px) {
     .viewer-toolbar {

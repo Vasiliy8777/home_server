@@ -1,5 +1,14 @@
 package ru.homeserver.photoshare.homeserver.service;
 
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifIFD0Directory;
+import com.drew.metadata.exif.ExifSubIFDDirectory;
+import com.drew.metadata.exif.GpsDirectory;
+import com.drew.metadata.jpeg.JpegDirectory;
+import com.drew.metadata.png.PngDirectory;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -12,15 +21,18 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
-import java.util.Iterator;
-import java.util.Locale;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Stream;
 
 @Service
 public class ThumbnailService {
@@ -42,6 +54,27 @@ public class ThumbnailService {
         this.magickPath = magickPath;
         this.thumbnailsRoot = fileService.getRootPath().resolve(".thumbnails");
         Files.createDirectories(this.thumbnailsRoot);
+    }
+
+
+    private String formatFileTime(long millis) {
+        return java.time.Instant.ofEpochMilli(millis)
+                .atZone(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
+    }
+
+
+    private String formatDuration(double seconds) {
+        long total = Math.round(seconds);
+        long h = total / 3600;
+        long m = (total % 3600) / 60;
+        long s = total % 60;
+
+        if (h > 0) {
+            return String.format("%d:%02d:%02d", h, m, s);
+        }
+
+        return String.format("%d:%02d", m, s);
     }
     public Path getOrCreateVideoThumbnail(Path videoPath) throws IOException, InterruptedException {
         String ext = getExtension(videoPath.getFileName().toString()).toLowerCase(Locale.ROOT);

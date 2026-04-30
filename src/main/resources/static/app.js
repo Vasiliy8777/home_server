@@ -14,6 +14,22 @@ const selectedItems = new Map();
 let currentPreviewId = null;
 let previewStatusTimer = null;
 
+/*localStorage.removeItem("sortField");
+localStorage.removeItem("sortDirection");*/
+let sortField = localStorage.getItem("sortField") || "name";
+let sortDirection = localStorage.getItem("sortDirection") || "asc";
+
+let metadataLoaded = new Set();
+
+const sortBtn = document.getElementById("sortBtn");
+const sortModal = document.getElementById("sortModal");
+const closeSortModalBtn = document.getElementById("closeSortModalBtn");
+const sortDirectionBtn = document.getElementById("sortDirectionBtn");
+
+const propertiesModal = document.getElementById("propertiesModal");
+const propertiesBody = document.getElementById("propertiesBody");
+const closePropertiesModalBtn = document.getElementById("closePropertiesModalBtn");
+
 const previewBuildModal = document.getElementById("previewBuildModal");
 const previewBuildBar = document.getElementById("previewBuildBar");
 const previewBuildSize = document.getElementById("previewBuildSize");
@@ -50,7 +66,45 @@ function updateBulkButtons() {
     bulkMoveBtn.textContent = count ? `Переместить (${count})` : "Переместить выбранные";
     bulkDeleteBtn.textContent = count ? `Удалить (${count})` : "Удалить выбранные";
 }
+//функция сортировки
+function sortItems(items) {
+    return [...items].sort((a, b) => {
+        // папки сверху
+        if (a.directory && !b.directory) return -1;
+        if (!a.directory && b.directory) return 1;
 
+        let result = 0;
+
+        if (sortField === "name") {
+            result = a.name.localeCompare(b.name, "ru", { numeric: true });
+        }
+
+        if (sortField === "lastModified") {
+            /*result = (a.lastModified || 0) - (b.lastModified || 0);*/
+            result = (a.createdAt || a.lastModified || 0) - (b.createdAt || b.lastModified || 0);
+           /* result = (a.createdAt || 0) - (b.createdAt || 0);*/
+        }
+
+        if (sortField === "size") {
+            result = (a.size || 0) - (b.size || 0);
+        }
+
+        return sortDirection === "asc" ? result : -result;
+    });
+}
+function updateSortButtonsState() {
+    document.querySelectorAll(".sort-field-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.field === sortField);
+    });
+
+    sortDirectionBtn.classList.toggle("asc", sortDirection === "asc");
+    sortDirectionBtn.classList.toggle("desc", sortDirection === "desc");
+
+    sortDirectionBtn.textContent =
+        sortDirection === "asc"
+            ? "↑ От меньшего к большему"
+            : "↓ От большего к меньшему";
+}
 function openBulkDownloadModal() {
     if (!selectedItems.size) return;
 
@@ -58,6 +112,18 @@ function openBulkDownloadModal() {
         `Скачать ${selectedItems.size} выбранных объектов одним архивом?`;
 
     bulkDownloadModal.classList.remove("hidden");
+}
+
+function formatDateTime(timestamp) {
+    if (!timestamp) return "";
+
+    return new Date(timestamp).toLocaleString("ru-RU", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
 }
 
 async function preparePreviewVideo(item) {
@@ -1268,6 +1334,7 @@ function enablePreviewPan(img) {
 }
 
 async function loadFiles(path = "") {
+    metadataLoaded=new Set();
     const response = await fetch(`/api/files/list?path=${encodeURIComponent(path)}`);
 
     if (!response.ok) {
@@ -1281,10 +1348,25 @@ async function loadFiles(path = "") {
     parentPath = data.parentPath;
     currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
 
-    renderItems(data.items);
+    /*renderItems(data.items);*/
+    /*loadVisibleMetadata();*/
+    renderItems(sortItems(data.items));
     updateNavButtons();
 }
+function updateItemsMetadata(metadataMap) {
+    Object.entries(metadataMap).forEach(([path, createdAt]) => {
 
+        const card = document.querySelector(`.file-card[data-path="${CSS.escape(path)}"]`);
+        if (!card) return;
+
+        const meta = card.querySelector(".meta");
+        if (!meta) return;
+
+        const size = meta.dataset.size;
+
+        meta.textContent = `${size} · ${formatDateTime(createdAt)}`;
+    });
+}
 async function confirmDelete() {
     if (selectedItems.size > 0 && deleteTargetPath == null) {
         for (const item of selectedItems.values()) {
@@ -1321,7 +1403,43 @@ async function confirmDelete() {
     closeDeleteModal();
     await loadFiles(currentPath);
 }
+function getVisibleItems() {
+    /*const cards = document.querySelectorAll(".file-card");*/
+    const cards = document.querySelectorAll(".card[data-path]");
+    const visible = [];
 
+    cards.forEach(card => {
+        const rect = card.getBoundingClientRect();
+
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+            const path = card.dataset.path;
+            if (path && !metadataLoaded.has(path)) {
+                visible.push(path);
+            }
+        }
+    });
+
+    return visible;
+}
+async function loadVisibleMetadata() {
+    const paths = getVisibleItems();
+
+    if (!paths.length) return;
+
+    paths.forEach(p => metadataLoaded.add(p));
+
+    const response = await fetch("/api/files/metadata/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(paths)
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+
+    updateItemsMetadata(data);
+}
 function closeDeleteModal() {
     deleteModal.classList.add("hidden");
     deleteTargetPath = null;
@@ -1396,15 +1514,35 @@ function renderItems(items) {
         body.className = "card-body";
 
         const sizeText = item.directory ? "Папка" : formatBytes(item.size);
-
+        /*const dateText = formatDateTime(item.lastModified);*/
+        /*const dateText = formatDateTime(item.createdAt || item.lastModified);*/
+        /*const dateText = formatDateTime(item.createdAt);*/
+        const dateText = "";
         body.innerHTML = `
     <div class="file-name">${escapeHtml(item.name)}</div>
     <div class="meta-row">
         <label class="select-line">
-            <span class="meta">${sizeText}</span>
+            <span class="meta" data-size="${escapeHtml(sizeText)}">
+                ${escapeHtml(sizeText)}
+                <span class="card-created-date" data-path="${escapeHtml(item.relativePath)}"></span>
+            </span>
         </label>
     </div>
 `;
+        /*body.innerHTML = `
+    <div class="file-name">${escapeHtml(item.name)}</div>
+    <div class="meta-row">
+        <label class="select-line">
+            <span class="meta">
+    ${sizeText}
+    <span class="card-created-date" data-path="${escapeHtml(item.relativePath)}"></span>
+</span>
+            <span class="meta" data-size="${sizeText}">
+    ${sizeText} · ${formatDateTime(item.createdAt)}
+</span>
+        </label>
+    </div>
+`;*/
         body.querySelector(".select-line").appendChild(selectBox);
         selectBox.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -1460,6 +1598,11 @@ function renderItems(items) {
         deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
         actions.appendChild(deleteBtn);
 
+        const propertiesBtn = document.createElement("button");
+        propertiesBtn.textContent = "Свойства";
+        propertiesBtn.onclick = () => openPropertiesModal(item.relativePath);
+        actions.appendChild(propertiesBtn);
+
         body.appendChild(actions);
         card.appendChild(thumb);
         card.appendChild(body);
@@ -1467,13 +1610,174 @@ function renderItems(items) {
     }
 
     initLazyThumbs();
+    initLazyMetadata();
     const imageThumbs = gallery.querySelectorAll("img.image-thumb");
     imageThumbs.forEach(img => enablePreviewPan(img));
     const videoThumbs = gallery.querySelectorAll("img.video-thumb-img");
     videoThumbs.forEach(img => enablePreviewPan(img));
     updateBulkButtons();
 }
+async function openPropertiesModal(path) {
+    propertiesModal.classList.remove("hidden");
+    propertiesBody.innerHTML = "Загрузка свойств...";
 
+    const response = await fetch(`/api/files/properties?path=${encodeURIComponent(path)}`);
+
+    if (!response.ok) {
+        propertiesBody.innerHTML = "Ошибка загрузки";
+        return;
+    }
+
+    const data = await response.json();
+
+    propertiesBody.innerHTML = renderFullProperties(data);
+
+    if (data.type === "folder") {
+        propertiesBody.innerHTML += `<div id="folderStatsBlock">Считаем размер папки...</div>`;
+
+        const statsResponse = await fetch(`/api/files/properties/folder-stats?path=${encodeURIComponent(path)}`);
+
+        if (statsResponse.ok) {
+            const stats = await statsResponse.json();
+            const merged = { ...data, ...stats };
+
+            propertiesBody.innerHTML = renderFullProperties(merged);
+        }
+    }
+}
+/*async function openPropertiesModal(path) {
+    propertiesModal.classList.remove("hidden");
+
+    // 👇 сразу показываем быстрый UI
+    propertiesBody.innerHTML = "Загрузка свойств...";
+
+    const response = await fetch(`/api/files/properties?path=${encodeURIComponent(path)}`);
+
+    if (!response.ok) {
+        propertiesBody.innerHTML = "Ошибка загрузки";
+        return;
+    }
+
+    const data = await response.json();
+
+    // 👇 1. быстро рисуем лёгкие данные
+    propertiesBody.innerHTML = renderBasicProperties(data);
+
+    // 👇 2. тяжёлые данные чуть позже (не блокируют UI)
+    setTimeout(() => {
+        propertiesBody.innerHTML = renderFullProperties(data);
+    }, 0);
+}*/
+function renderBasicProperties(data) {
+    return `
+        <div>
+            <div><b>Имя:</b> ${escapeHtml(data.name)}</div>
+            <div><b>Тип:</b> ${escapeHtml(data.type)}</div>
+            <div><b>Дата:</b> ${escapeHtml(data.created)}</div>
+        </div>
+    `;
+}
+function initLazyMetadata() {
+    const dateEls = document.querySelectorAll(".card-created-date[data-path]");
+
+    const observer = new IntersectionObserver((entries, obs) => {
+        const paths = [];
+
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+
+            const el = entry.target;
+            const path = el.dataset.path;
+
+            obs.unobserve(el);
+
+            if (path && !metadataLoaded.has(path)) {
+                metadataLoaded.add(path);
+                paths.push(path);
+            }
+        }
+
+        if (!paths.length) return;
+
+        fetch("/api/files/metadata/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(paths)
+        })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+
+                Object.entries(data).forEach(([path, createdAt]) => {
+                    const el = document.querySelector(
+                        `.card-created-date[data-path="${CSS.escape(path)}"]`
+                    );
+
+                    if (!el || !createdAt) return;
+
+                    el.textContent = " · " + formatDateTime(createdAt);
+                    el.dataset.createdAt = createdAt;
+                });
+            })
+            .catch(e => console.error("Metadata bulk load failed", e));
+    }, {
+        rootMargin: "500px"
+    });
+
+    dateEls.forEach(el => observer.observe(el));
+}
+/*function initLazyMetadata() {
+    const dateEls = document.querySelectorAll(".card-created-date[data-path]");
+
+    const observer = new IntersectionObserver((entries, obs) => {
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+
+            const el = entry.target;
+            const path = el.dataset.path;
+
+            obs.unobserve(el);
+
+            fetch(`/api/files/metadata/bulk?path=${encodeURIComponent(path)}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (!data || !data.createdAt) return;
+
+                    el.textContent = " · " + formatDateTime(data.createdAt);
+                    el.dataset.createdAt = data.createdAt;
+                })
+                .catch(e => console.error("Metadata date load failed", e));
+        }
+    }, {
+        rootMargin: "500px"
+    });
+
+    dateEls.forEach(el => observer.observe(el));
+}*/
+function renderFullProperties(data) {
+    return `
+        <div>
+            ${propRow("Имя", data.name)}
+            ${propRow("Тип", data.type)}
+            ${propRow("Размер", formatFileSize(data.size))}
+            ${propRow("Файлов внутри", data.fileCount)}
+            ${propRow("Папок внутри", data.folderCount)}
+            ${propRow("Длительность", data.duration)}
+            ${propRow("Разрешение", data.resolution)}
+            ${propRow("Устройство", data.device)}
+            ${propRow("Координаты", data.location)}
+            ${propRow("Дата создания", data.created)}
+            ${propRow("Дата изменения", data.modified)}
+        </div>
+    `;
+}
+function propRow(label, value) {
+    if (value === null || value === undefined || value === "" || value === "0") {
+        return "";
+    }
+
+    return `<div><b>${label}:</b> ${escapeHtml(String(value))}</div>`;
+}
 function initLazyThumbs() {
     const images = document.querySelectorAll("img.lazy-thumb[data-src]");
 
@@ -1691,7 +1995,53 @@ function renderViewerItem() {
     };
 
 }
+/*sortBtn.onclick = () => {
+    sortModal.classList.remove("hidden");
+};*/
+sortBtn.onclick = () => {
+    updateSortButtonsState();
+    sortModal.classList.remove("hidden");
+};
 
+closeSortModalBtn.onclick = () => {
+    sortModal.classList.add("hidden");
+};
+
+sortModal.addEventListener("click", (e) => {
+    if (e.target.classList.contains("delete-modal-backdrop")) {
+        sortModal.classList.add("hidden");
+    }
+});
+
+document.querySelectorAll(".sort-field-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+        sortField = btn.dataset.field;
+        localStorage.setItem("sortField", sortField);
+        updateSortButtonsState();
+        await loadFiles(currentPath);
+    });
+});
+closePropertiesModalBtn.onclick = () => {
+    propertiesModal.classList.add("hidden");
+};
+
+propertiesModal.addEventListener("click", (e) => {
+    if (e.target.classList.contains("delete-modal-backdrop")) {
+        propertiesModal.classList.add("hidden");
+    }
+});
+sortDirectionBtn.onclick = async () => {
+    sortDirection = sortDirection === "asc" ? "desc" : "asc";
+    localStorage.setItem("sortDirection", sortDirection);
+
+    sortDirectionBtn.dataset.direction = sortDirection;
+    sortDirectionBtn.textContent =
+        sortDirection === "asc"
+            ? "↑ От меньшего к большему"
+            : "↓ От большего к меньшему";
+    updateSortButtonsState();
+    await loadFiles(currentPath);
+};
 cancelPreviewBuildBtn.onclick = async () => {
     if (previewStatusTimer) {
         clearInterval(previewStatusTimer);
@@ -2099,3 +2449,4 @@ if (savedTopbarState === "1") {
 restoreTransferTasks();
 
 loadFiles();
+updateSortButtonsState();

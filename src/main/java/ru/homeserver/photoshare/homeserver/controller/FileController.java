@@ -10,6 +10,8 @@ import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.dto.RenamePreviewSessionDto;
 import ru.homeserver.photoshare.homeserver.dto.UploadSessionDto;
 import ru.homeserver.photoshare.homeserver.service.FileService;
+//import ru.homeserver.photoshare.homeserver.service.MetadataService;
+import ru.homeserver.photoshare.homeserver.service.MetadataService;
 import ru.homeserver.photoshare.homeserver.service.ThumbnailService;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -24,13 +26,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.file.*;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
-import java.util.UUID;
 
 /*
  * @RestController = @Controller + @ResponseBody
@@ -60,17 +59,19 @@ public class FileController {
     private final Map<String, Process> previewProcesses = new ConcurrentHashMap<>();
     private final Map<String, Integer> previewProgress = new ConcurrentHashMap<>();
     private final Map<String, Path> previewFiles = new ConcurrentHashMap<>();
+    private final MetadataService metadataService;
 
     public FileController(
             FileService fileService,
             ThumbnailService thumbnailService,
             @Value("${app.ffmpeg-path:ffmpeg}") String ffmpegPath,
-            @Value("${app.ffprobe-path:ffprobe}") String ffprobePath
+            @Value("${app.ffprobe-path:ffprobe}") String ffprobePath, MetadataService metadataService
     ) {
         this.fileService = fileService;
         this.thumbnailService = thumbnailService;
         this.ffmpegPath = ffmpegPath;
         this.ffprobePath = ffprobePath;
+        this.metadataService = metadataService;
     }
     private Path getUploadTempDir() throws IOException {
         Path dir = fileService.getRootPath().resolve(".upload_tmp");
@@ -523,6 +524,8 @@ public class FileController {
             @RequestParam String name
     ) throws IOException {
         fileService.createFolder(path, name);
+        fileService.rebuildFolderTreeCache();
+        metadataService.clearFolderCache();
         return ResponseEntity.ok(Map.of("message", "Folder created"));
     }
 
@@ -534,6 +537,8 @@ public class FileController {
     @DeleteMapping
     public ResponseEntity<Map<String, String>> delete(@RequestParam String path) throws IOException {
         fileService.delete(path);
+        fileService.rebuildFolderTreeCache();
+        metadataService.clearFolderCache();
         return ResponseEntity.ok(Map.of("message", "Deleted"));
     }
     @GetMapping("/image-thumbnail")
@@ -757,14 +762,86 @@ public ResponseEntity<StreamingResponseBody> stream(
             .headers(headers)
             .body(responseBody);
 }
+    @GetMapping("/metadata/created-at")
+    public ResponseEntity<?> createdAt(@RequestParam String path) throws IOException {
+        Path file = fileService.resolveSafe(path);
+
+        if (!Files.exists(file) || Files.isDirectory(file)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        long createdAt = metadataService.readCreatedAtMillisCached(file);
+
+        return ResponseEntity.ok(Map.of(
+                "path", path,
+                "createdAt", createdAt
+        ));
+    }
+    @PostMapping("/metadata/bulk")
+    public ResponseEntity<?> metadataBulk(@RequestBody List<String> paths) {
+
+        Map<String, Long> result = new HashMap<>();
+
+        for (String rel : paths) {
+            try {
+                Path file = fileService.resolveSafe(rel);
+
+                if (Files.isDirectory(file)) continue;
+
+                long created = metadataService.readCreatedAtMillisCached(file);
+
+                result.put(rel, created);
+
+            } catch (Exception ignored) {
+            }
+        }
+
+        return ResponseEntity.ok(result);
+    }
+    @GetMapping("/properties/folder-stats")
+    public ResponseEntity<?> folderStats(@RequestParam String path) throws IOException {
+        Path folder = fileService.resolveSafe(path);
+
+        if (!Files.exists(folder) || !Files.isDirectory(folder)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(metadataService.readFolderStats(folder));
+    }
     @PostMapping("/move")
     public ResponseEntity<Map<String, String>> move(
             @RequestParam String sourcePath,
             @RequestParam String targetPath
     ) throws IOException {
         fileService.move(sourcePath, targetPath);
+        fileService.rebuildFolderTreeCache();
+        metadataService.clearFolderCache();
         return ResponseEntity.ok(Map.of("message", "Moved"));
     }
+    @GetMapping("/properties")
+    public ResponseEntity<?> properties(@RequestParam String path) throws IOException {
+        Path file = fileService.resolveSafe(path);
+
+        if (!Files.exists(file)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        /*return ResponseEntity.ok(thumbnailService.readFileProperties(file));*/
+        return ResponseEntity.ok(metadataService.readFileProperties(file));
+    }
+    /*@GetMapping("/properties")
+    public ResponseEntity<?> properties(@RequestParam String path) throws IOException {
+        Path file = fileService.resolveSafe(path);
+
+        if (!Files.exists(file) || Files.isDirectory(file)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Map<String, Object> props = thumbnailService.readFileProperties(file);
+
+        return ResponseEntity.ok(props);
+    }*/
+
     @DeleteMapping("/clear-temp")
     public ResponseEntity<?> clearTemp() throws IOException {
         Path tempDir = fileService.getRootPath().resolve(".upload_tmp");
@@ -789,7 +866,8 @@ public ResponseEntity<StreamingResponseBody> stream(
     }
     @GetMapping("/folders/tree")
     public FolderNodeDto folderTree() throws IOException {
-        return fileService.getFolderTree();
+        /*return fileService.getFolderTree();*/
+        return fileService.getFolderTreeCached();
     }
     /*endpoint загрузки чанков*/
     @PostMapping("/upload-chunk")

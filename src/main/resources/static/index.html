@@ -35,6 +35,7 @@
                     <button id="homeBtn">На главную</button>
                     <button id="upBtn">Назад</button>
                     <button id="folderListBtn">Список папок</button>
+                    <button id="sortBtn">Сортировка</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -111,6 +112,27 @@
         </div>
     </div>
 </div>
+<div id="sortModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content">
+        <h3>Сортировка</h3>
+
+        <div class="sort-options">
+            <button class="sort-field-btn" data-field="name">Имя</button>
+            <button class="sort-field-btn" data-field="lastModified">Дата</button>
+            <button class="sort-field-btn" data-field="size">Размер</button>
+        </div>
+
+        <button id="sortDirectionBtn" data-direction="asc">
+            ↑ От меньшего к большему
+        </button>
+
+        <div class="delete-modal-actions">
+            <button id="closeSortModalBtn">Готово</button>
+        </div>
+    </div>
+</div>
 <div id="previewBuildModal" class="delete-modal hidden">
     <div class="delete-modal-backdrop"></div>
 
@@ -131,6 +153,21 @@
 
         <div class="delete-modal-actions">
             <button id="cancelPreviewBuildBtn" class="danger">Отмена</button>
+        </div>
+    </div>
+</div>
+<div id="propertiesModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content properties-content">
+        <h3>Свойства файла</h3>
+
+        <div id="propertiesBody">
+            Загрузка...
+        </div>
+
+        <div class="delete-modal-actions">
+            <button id="closePropertiesModalBtn">Закрыть</button>
         </div>
     </div>
 </div>
