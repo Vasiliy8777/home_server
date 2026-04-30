@@ -171,6 +171,23 @@
         </div>
     </div>
 </div>
+<div id="downloadFormatModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content">
+        <h3>В каком формате скачать?</h3>
+
+        <div class="format-options">
+            <button id="downloadOriginalFormatBtn" class="format-btn active">Текущий</button>
+            <button id="downloadMp4FormatBtn" class="format-btn">MP4</button>
+        </div>
+
+        <div class="delete-modal-actions">
+            <button id="confirmDownloadFormatBtn">Скачать</button>
+            <button id="cancelDownloadFormatBtn" class="secondary-btn">Отмена</button>
+        </div>
+    </div>
+</div>
 <div id="bulkDownloadModal" class="delete-modal hidden">
     <div class="delete-modal-backdrop"></div>
 
@@ -287,5 +304,13 @@
 </div>
 <script src="/app.js"></script>
 <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+<div id="actionToast" class="toast hidden">
+    <div class="toast-text"></div>
+
+    <div class="toast-actions">
+        <button id="toastCloseAndDownload">Закрыть и скачать</button>
+        <button id="toastGoToFile" class="secondary-btn">Перейти к файлу</button>
+    </div>
+</div>
 </body>
 </html>

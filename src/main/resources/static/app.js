@@ -14,8 +14,6 @@ const selectedItems = new Map();
 let currentPreviewId = null;
 let previewStatusTimer = null;
 
-/*localStorage.removeItem("sortField");
-localStorage.removeItem("sortDirection");*/
 let sortField = localStorage.getItem("sortField") || "name";
 let sortDirection = localStorage.getItem("sortDirection") || "asc";
 
@@ -53,6 +51,132 @@ const bulkMoveBtn = document.getElementById("bulkMoveBtn");
 const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
 const clearSelectionBtn = document.getElementById("clearSelectionBtn");
 const selectAllBtn = document.getElementById("selectAllBtn");
+
+const downloadFormatModal = document.getElementById("downloadFormatModal");
+const downloadOriginalFormatBtn = document.getElementById("downloadOriginalFormatBtn");
+const downloadMp4FormatBtn = document.getElementById("downloadMp4FormatBtn");
+const confirmDownloadFormatBtn = document.getElementById("confirmDownloadFormatBtn");
+const cancelDownloadFormatBtn = document.getElementById("cancelDownloadFormatBtn");
+
+let pendingDownloadItem = null;
+let pendingDownloadPreviewId = null;
+let selectedDownloadFormat = "original";
+
+function showToast(message) {
+    const toast = document.getElementById("toast");
+
+    toast.textContent = message;
+    toast.classList.remove("hidden");
+
+    requestAnimationFrame(() => {
+        toast.classList.add("show");
+    });
+
+    setTimeout(() => {
+        toast.classList.remove("show");
+
+        setTimeout(() => {
+            toast.classList.add("hidden");
+        }, 250);
+    }, 3000);
+}
+function showDownloadActionToast(item) {
+    const toast = document.getElementById("actionToast");
+    const text = toast.querySelector(".toast-text");
+
+    const btnDownload = document.getElementById("toastCloseAndDownload");
+    const btnGoToFile = document.getElementById("toastGoToFile");
+
+    text.textContent = "Чтобы скачать файл в оригинальном формате, выйдите из режима просмотра и скачайте его с карточки";
+
+    toast.classList.remove("hidden");
+
+    requestAnimationFrame(() => {
+        toast.classList.add("show");
+    });
+
+    // 🔹 Закрыть viewer и скачать
+    btnDownload.onclick = () => {
+        closeViewerModal();
+
+        setTimeout(() => {
+            window.location.href = item.downloadUrl;
+        }, 300);
+
+        hideActionToast();
+    };
+
+    // 🔹 Перейти к файлу
+    btnGoToFile.onclick = () => {
+        closeViewerModal();
+
+        setTimeout(() => {
+            scrollToFile(item.relativePath);
+        }, 300);
+
+        hideActionToast();
+    };
+
+    // автоскрытие (опционально)
+    setTimeout(() => {
+        hideActionToast();
+    }, 5000);
+}
+function scrollToFile(path) {
+    const el = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
+    if (!el) return;
+
+    el.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
+
+    el.classList.add("highlight");
+
+    setTimeout(() => {
+        el.classList.remove("highlight");
+    }, 1500);
+}
+function hideActionToast() {
+    const toast = document.getElementById("actionToast");
+
+    toast.classList.remove("show");
+
+    setTimeout(() => {
+        toast.classList.add("hidden");
+    }, 250);
+}
+
+function openDownloadFormatModal(item, previewId = null) {
+    pendingDownloadItem = item;
+    pendingDownloadPreviewId = previewId;
+    selectedDownloadFormat = "original";
+
+    updateDownloadFormatButtons();
+
+    downloadFormatModal.classList.remove("hidden");
+}
+
+/*function openDownloadFormatModal(item) {
+    pendingDownloadItem = item;
+    selectedDownloadFormat = "original";
+
+    updateDownloadFormatButtons();
+
+    downloadFormatModal.classList.remove("hidden");
+}*/
+
+function closeDownloadFormatModal() {
+    downloadFormatModal.classList.add("hidden");
+    pendingDownloadItem = null;
+    pendingDownloadPreviewId = null;
+    selectedDownloadFormat = "original";
+}
+
+function updateDownloadFormatButtons() {
+    downloadOriginalFormatBtn.classList.toggle("active", selectedDownloadFormat === "original");
+    downloadMp4FormatBtn.classList.toggle("active", selectedDownloadFormat === "mp4");
+}
 
 function updateBulkButtons() {
     const count = selectedItems.size;
@@ -497,7 +621,18 @@ function updateViewerSelectButton() {
     selectViewerBtn.textContent = selected ? "✓ Выбрано" : "Выбрать";
     selectViewerBtn.classList.toggle("selected", selected);
 }
+function syncSelectionToGallery(path, selected) {
+    const card = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
+    if (!card) return;
 
+    const checkbox = card.querySelector(".item-checkbox");
+
+    card.classList.toggle("selected", selected);
+
+    if (checkbox) {
+        checkbox.checked = selected;
+    }
+}
 function saveTransferTasks() {
     const plain = Array.from(transferTasks.values()).map(task => ({
         id: task.id,
@@ -1348,8 +1483,6 @@ async function loadFiles(path = "") {
     parentPath = data.parentPath;
     currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
 
-    /*renderItems(data.items);*/
-    /*loadVisibleMetadata();*/
     renderItems(sortItems(data.items));
     updateNavButtons();
 }
@@ -1404,7 +1537,7 @@ async function confirmDelete() {
     await loadFiles(currentPath);
 }
 function getVisibleItems() {
-    /*const cards = document.querySelectorAll(".file-card");*/
+
     const cards = document.querySelectorAll(".card[data-path]");
     const visible = [];
 
@@ -1514,9 +1647,7 @@ function renderItems(items) {
         body.className = "card-body";
 
         const sizeText = item.directory ? "Папка" : formatBytes(item.size);
-        /*const dateText = formatDateTime(item.lastModified);*/
-        /*const dateText = formatDateTime(item.createdAt || item.lastModified);*/
-        /*const dateText = formatDateTime(item.createdAt);*/
+
         const dateText = "";
         body.innerHTML = `
     <div class="file-name">${escapeHtml(item.name)}</div>
@@ -1529,20 +1660,6 @@ function renderItems(items) {
         </label>
     </div>
 `;
-        /*body.innerHTML = `
-    <div class="file-name">${escapeHtml(item.name)}</div>
-    <div class="meta-row">
-        <label class="select-line">
-            <span class="meta">
-    ${sizeText}
-    <span class="card-created-date" data-path="${escapeHtml(item.relativePath)}"></span>
-</span>
-            <span class="meta" data-size="${sizeText}">
-    ${sizeText} · ${formatDateTime(item.createdAt)}
-</span>
-        </label>
-    </div>
-`;*/
         body.querySelector(".select-line").appendChild(selectBox);
         selectBox.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -1580,11 +1697,20 @@ function renderItems(items) {
             openBtn.onclick = () => loadFiles(item.relativePath);
             actions.appendChild(openBtn);
         } else {
-            const downloadLink = document.createElement("a");
-            downloadLink.href = item.downloadUrl;
-            downloadLink.textContent = "Скачать";
-            downloadLink.setAttribute("download", item.name);
-            actions.appendChild(downloadLink);
+            const lower = item.name.toLowerCase();
+
+            if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+                const downloadBtn = document.createElement("button");
+                downloadBtn.textContent = "Скачать";
+                downloadBtn.onclick = () => openDownloadFormatModal(item);
+                actions.appendChild(downloadBtn);
+            } else {
+                const downloadLink = document.createElement("a");
+                downloadLink.href = item.downloadUrl;
+                downloadLink.textContent = "Скачать";
+                downloadLink.setAttribute("download", item.name);
+                actions.appendChild(downloadLink);
+            }
         }
         const moveBtn = document.createElement("button");
         moveBtn.textContent = "Переместить";
@@ -1645,29 +1771,6 @@ async function openPropertiesModal(path) {
         }
     }
 }
-/*async function openPropertiesModal(path) {
-    propertiesModal.classList.remove("hidden");
-
-    // 👇 сразу показываем быстрый UI
-    propertiesBody.innerHTML = "Загрузка свойств...";
-
-    const response = await fetch(`/api/files/properties?path=${encodeURIComponent(path)}`);
-
-    if (!response.ok) {
-        propertiesBody.innerHTML = "Ошибка загрузки";
-        return;
-    }
-
-    const data = await response.json();
-
-    // 👇 1. быстро рисуем лёгкие данные
-    propertiesBody.innerHTML = renderBasicProperties(data);
-
-    // 👇 2. тяжёлые данные чуть позже (не блокируют UI)
-    setTimeout(() => {
-        propertiesBody.innerHTML = renderFullProperties(data);
-    }, 0);
-}*/
 function renderBasicProperties(data) {
     return `
         <div>
@@ -1726,34 +1829,6 @@ function initLazyMetadata() {
 
     dateEls.forEach(el => observer.observe(el));
 }
-/*function initLazyMetadata() {
-    const dateEls = document.querySelectorAll(".card-created-date[data-path]");
-
-    const observer = new IntersectionObserver((entries, obs) => {
-        for (const entry of entries) {
-            if (!entry.isIntersecting) continue;
-
-            const el = entry.target;
-            const path = el.dataset.path;
-
-            obs.unobserve(el);
-
-            fetch(`/api/files/metadata/bulk?path=${encodeURIComponent(path)}`)
-                .then(r => r.ok ? r.json() : null)
-                .then(data => {
-                    if (!data || !data.createdAt) return;
-
-                    el.textContent = " · " + formatDateTime(data.createdAt);
-                    el.dataset.createdAt = data.createdAt;
-                })
-                .catch(e => console.error("Metadata date load failed", e));
-        }
-    }, {
-        rootMargin: "500px"
-    });
-
-    dateEls.forEach(el => observer.observe(el));
-}*/
 function renderFullProperties(data) {
     return `
         <div>
@@ -1928,8 +2003,11 @@ function renderViewerItem() {
         const lower = item.name.toLowerCase();
         if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
             viewerBody.innerHTML = `<div>Подготовка видео...</div>`;
-
             downloadViewerBtn.onclick = () => {
+                /*openDownloadFormatModal(item);*/
+                openDownloadFormatModal(item, currentPreviewId);
+            };
+            /*downloadViewerBtn.onclick = () => {
                 if (!currentPreviewId) {
                     console.log("Preview ещё не готов");
                     return;
@@ -1937,7 +2015,7 @@ function renderViewerItem() {
 
                 window.location.href =
                     `/api/files/preview/original?previewId=${encodeURIComponent(currentPreviewId)}`;
-            };
+            };*/
 
             openRenamePreview(item)
                 .then(url => {
@@ -1984,11 +2062,16 @@ function renderViewerItem() {
         const lower = item.name.toLowerCase();
 
         // если это insv/lrv и открыт preview
-        if ((lower.endsWith(".insv") || lower.endsWith(".lrv")) && currentPreviewId) {
+        if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+           /* openDownloadFormatModal(item);*/
+            openDownloadFormatModal(item, currentPreviewId);
+            return;
+        }
+        /*if ((lower.endsWith(".insv") || lower.endsWith(".lrv")) && currentPreviewId) {
             window.location.href =
                 `/api/files/preview/original?previewId=${encodeURIComponent(currentPreviewId)}`;
             return;
-        }
+        }*/
 
         // обычные файлы
         window.location.href = item.downloadUrl;
@@ -2024,7 +2107,77 @@ document.querySelectorAll(".sort-field-btn").forEach(btn => {
 closePropertiesModalBtn.onclick = () => {
     propertiesModal.classList.add("hidden");
 };
+downloadOriginalFormatBtn.onclick = () => {
+    selectedDownloadFormat = "original";
+    updateDownloadFormatButtons();
+};
 
+downloadMp4FormatBtn.onclick = () => {
+    selectedDownloadFormat = "mp4";
+    updateDownloadFormatButtons();
+};
+
+cancelDownloadFormatBtn.onclick = closeDownloadFormatModal;
+
+downloadFormatModal.addEventListener("click", (e) => {
+    if (e.target.classList.contains("delete-modal-backdrop")) {
+        closeDownloadFormatModal();
+    }
+});
+confirmDownloadFormatBtn.onclick = async () => {
+    if (!pendingDownloadItem) return;
+
+
+    const item = pendingDownloadItem;
+    const format = selectedDownloadFormat;
+    const previewId = pendingDownloadPreviewId;
+
+    closeDownloadFormatModal();
+
+        if (format === "original") {
+            if (previewId) {
+                showDownloadActionToast(item);
+                return;
+            }
+        window.location.href = item.downloadUrl;
+        return;
+    }
+
+    if (format === "mp4") {
+        if (previewId) {
+            window.location.href =
+                `/api/files/download/mp4-file?previewId=${encodeURIComponent(previewId)}`;
+            return;
+        }
+
+        const form = new URLSearchParams();
+        form.append("path", item.relativePath);
+
+        const response = await fetch("/api/files/download/mp4-start", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: form
+        });
+
+        if (!response.ok) {
+            alert("Не удалось подготовить MP4");
+            return;
+        }
+
+        const data = await response.json();
+
+        window.location.href =
+            `/api/files/download/mp4-file?previewId=${encodeURIComponent(data.previewId)}`;
+
+        setTimeout(() => {
+            fetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(data.previewId)}`, {
+                method: "DELETE"
+            });
+        }, 5000);
+    }
+};
 propertiesModal.addEventListener("click", (e) => {
     if (e.target.classList.contains("delete-modal-backdrop")) {
         propertiesModal.classList.add("hidden");
@@ -2243,16 +2396,21 @@ selectViewerBtn.addEventListener("click", () => {
 
     const item = viewerItems[viewerIndex];
 
+    let selected;
+
     if (selectedItems.has(item.relativePath)) {
         selectedItems.delete(item.relativePath);
+        selected = false;
     } else {
         selectedItems.set(item.relativePath, {
             path: item.relativePath,
             name: item.name,
             directory: item.directory
         });
+        selected = true;
     }
 
+    syncSelectionToGallery(item.relativePath, selected);
     updateViewerSelectButton();
     updateBulkButtons();
 });

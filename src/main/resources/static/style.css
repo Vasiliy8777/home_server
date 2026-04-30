@@ -13,7 +13,151 @@ body {
     background: #f4f6f9;
     color: #222;
 }
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
 
+    background: rgba(17, 17, 17, 0.75);
+    backdrop-filter: blur(10px);
+
+    color: white;
+    padding: 12px 18px;
+    border-radius: 12px;
+
+    font-size: 13px;
+    text-align: center;
+
+    opacity: 0;
+    transition: all 0.25s ease;
+
+    z-index: 9999;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+
+    background: rgba(17, 17, 17, 0.75);
+    backdrop-filter: blur(10px);
+
+    color: white;
+    padding: 14px 16px;
+    border-radius: 14px;
+
+    font-size: 13px;
+    text-align: center;
+
+    opacity: 0;
+    transition: all 0.25s ease;
+
+    z-index: 9999;
+    min-width: 280px;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+.card.highlight {
+    outline: 2px solid #22c55e;
+}
+.toast-actions button {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    background: #1f6feb;
+    color: white;
+}
+
+.toast-actions .secondary-btn {
+    background: #e5e7eb;
+    color: #111;
+}
+#downloadFormatModal .delete-modal-content {
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+
+    width: fit-content;
+    min-width: 280px;
+    max-width: 360px;
+
+    padding: 22px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+
+#downloadFormatModal h3 {
+    margin-top: 0;
+    margin-bottom: 18px;
+}
+
+.format-options {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin: 18px 0 28px;
+}
+
+#downloadFormatModal button {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    background: #1f6feb;
+    color: white;
+}
+
+#downloadFormatModal .format-btn.active {
+    background: #22c55e;
+}
+
+#downloadFormatModal .secondary-btn {
+    background: #e5e7eb;
+    color: #111;
+}
+
+#downloadFormatModal .delete-modal-actions {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+/*.format-options {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin: 18px 0 26px;
+}
+
+.format-btn {
+    background: #1f6feb;
+    color: white;
+}
+
+.format-btn.active {
+    background: #22c55e;
+}*/
 .small-btn {
     font-size: 12px;
     padding: 4px 8px;

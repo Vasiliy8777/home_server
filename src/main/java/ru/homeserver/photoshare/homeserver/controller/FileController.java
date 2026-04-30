@@ -777,6 +777,60 @@ public ResponseEntity<StreamingResponseBody> stream(
                 "createdAt", createdAt
         ));
     }
+    @PostMapping("/download/mp4-start")
+    public ResponseEntity<?> startDownloadMp4(@RequestParam String path) throws IOException {
+        Path source = fileService.resolveSafe(path);
+
+        if (!Files.exists(source) || Files.isDirectory(source)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String name = source.getFileName().toString();
+        String lowerName = name.toLowerCase();
+
+        if (!lowerName.endsWith(".lrv") && !lowerName.endsWith(".insv")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Only LRV/INSV supported"));
+        }
+
+        String previewId = UUID.randomUUID().toString();
+
+        String baseName = name.substring(0, name.lastIndexOf('.'));
+        Path renamed = source.getParent().resolve(baseName + "." + previewId + ".download.mp4");
+
+        RenamePreviewSessionDto session = new RenamePreviewSessionDto();
+        session.setPreviewId(previewId);
+        session.setOriginalPath(source.toAbsolutePath().toString());
+        session.setRenamedPath(renamed.toAbsolutePath().toString());
+        session.setStatus("OPEN");
+
+        writePreviewJournal(session);
+
+        Files.move(source, renamed, StandardCopyOption.ATOMIC_MOVE);
+
+        previewFiles.put(previewId, renamed);
+        previewProgress.put(previewId, 100);
+
+        return ResponseEntity.ok(Map.of("previewId", previewId));
+    }
+    @GetMapping("/download/mp4-file")
+    public ResponseEntity<Resource> downloadMp4File(@RequestParam String previewId) throws IOException {
+        Path file = previewFiles.get(previewId);
+
+        if (file == null || !Files.exists(file)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        RenamePreviewSessionDto session = readPreviewJournal(getPreviewJournalFile(previewId));
+        String originalName = Path.of(session.getOriginalPath()).getFileName().toString();
+        String baseName = originalName.replaceFirst("\\.[^.]+$", "");
+        String downloadName = baseName + ".mp4";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + downloadName + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .contentLength(Files.size(file))
+                .body(new FileSystemResource(file));
+    }
     @PostMapping("/metadata/bulk")
     public ResponseEntity<?> metadataBulk(@RequestBody List<String> paths) {
 
@@ -825,23 +879,8 @@ public ResponseEntity<StreamingResponseBody> stream(
         if (!Files.exists(file)) {
             return ResponseEntity.notFound().build();
         }
-
-        /*return ResponseEntity.ok(thumbnailService.readFileProperties(file));*/
         return ResponseEntity.ok(metadataService.readFileProperties(file));
     }
-    /*@GetMapping("/properties")
-    public ResponseEntity<?> properties(@RequestParam String path) throws IOException {
-        Path file = fileService.resolveSafe(path);
-
-        if (!Files.exists(file) || Files.isDirectory(file)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        Map<String, Object> props = thumbnailService.readFileProperties(file);
-
-        return ResponseEntity.ok(props);
-    }*/
-
     @DeleteMapping("/clear-temp")
     public ResponseEntity<?> clearTemp() throws IOException {
         Path tempDir = fileService.getRootPath().resolve(".upload_tmp");
