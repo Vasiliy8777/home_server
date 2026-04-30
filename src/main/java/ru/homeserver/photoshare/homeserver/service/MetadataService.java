@@ -45,13 +45,25 @@ public class MetadataService {
 
         Map<String, Object> result = baseProperties(path);
 
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
+        /*if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
             result.putAll(readImageMetadata(path));
         } else if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".mkv")
                 || lower.endsWith(".webm") || lower.endsWith(".lrv") || lower.endsWith(".insv")) {
             result.putAll(readVideoMetadata(path));
+        }*/
+        if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
+            // ВАЖНО:
+            // Для INSV/LRV временно НЕ запускаем ffprobe,
+            // чтобы он не конкурировал со стримингом видео.
+            return result;
         }
 
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
+            result.putAll(readImageMetadata(path));
+        } else if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".mkv")
+                || lower.endsWith(".webm")) {
+            result.putAll(readVideoMetadata(path));
+        }
         if (result.get("created") == null || result.get("created").toString().isBlank()) {
             result.put("created", result.get("modified"));
         }
@@ -64,6 +76,15 @@ public class MetadataService {
     }
 
     public long readCreatedAtMillis(Path path) {
+        String lower = path.getFileName().toString().toLowerCase();
+
+        if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
+            try {
+                return Files.getLastModifiedTime(path).toMillis();
+            } catch (IOException e) {
+                return 0L;
+            }
+        }
         try {
             Map<String, Object> props = readFileProperties(path);
             Object created = props.get("createdMillis");
@@ -251,6 +272,11 @@ public class MetadataService {
 
     private Map<String, Object> readVideoMetadata(Path file) {
         Map<String, Object> map = new HashMap<>();
+        String lower = file.getFileName().toString().toLowerCase();
+
+        if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
+            return map;
+        }
 
         try {
             ProcessBuilder pb = new ProcessBuilder(

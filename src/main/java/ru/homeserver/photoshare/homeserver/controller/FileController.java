@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import ru.homeserver.photoshare.homeserver.dto.FolderNodeDto;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
@@ -100,7 +101,7 @@ public class FileController {
         objectMapper.writeValue(metaFile.toFile(), meta);
     }
 
-    @PostMapping("/preview/rename-start")
+    /*@PostMapping("/preview/rename-start")
     public ResponseEntity<?> startRenamePreview(@RequestParam String path) throws IOException {
         Path source = fileService.resolveSafe(path);
 
@@ -149,7 +150,7 @@ public class FileController {
         }).start();
 
         return ResponseEntity.ok(Map.of("previewId", previewId));
-    }
+    }*/
     @PostMapping("/preview/start")
     public ResponseEntity<?> startPreview(@RequestParam String path) throws IOException {
         Path source = fileService.resolveSafe(path);
@@ -180,6 +181,21 @@ public class FileController {
                         ffmpegPath,
                         "-y",
 
+                        "-i", source.toAbsolutePath().toString(),
+
+                        "-map", "0:v:0",
+                        "-map", "0:a:0?",
+
+                        "-c", "copy",
+
+                        "-movflags", "+faststart",
+
+                        output.toAbsolutePath().toString()
+                );
+                /*ProcessBuilder pb = new ProcessBuilder(
+                        ffmpegPath,
+                        "-y",
+
                         "-ss","00:00:00",
                         "-analyzeduration","10M",
                         "-probesize","10M",
@@ -200,7 +216,8 @@ public class FileController {
 
                         "-movflags", "+faststart",
                         output.toAbsolutePath().toString()
-                );
+                );*/
+
 
                 pb.redirectErrorStream(true);
 
@@ -310,10 +327,10 @@ public class FileController {
             return ResponseEntity.ok(Map.of("message", "Preview cancel ignored"));
         }
     }
-    @GetMapping("/preview/file")
-    public ResponseEntity<StreamingResponseBody> previewFile(
+    /*@GetMapping("/preview/file")
+    public ResponseEntity<ResourceRegion> previewFile(
             @RequestParam String previewId,
-            @RequestHeader(value = "Range", required = false) String rangeHeader
+            @RequestHeader HttpHeaders requestHeaders
     ) throws IOException {
 
         Path file = previewFiles.get(previewId);
@@ -322,60 +339,209 @@ public class FileController {
             return ResponseEntity.notFound().build();
         }
 
-        long fileSize = Files.size(file);
+        FileSystemResource video = new FileSystemResource(file);
+        long fileSize = video.contentLength();
 
-        long start = 0;
-        long end = fileSize - 1;
+        List<HttpRange> ranges = requestHeaders.getRange();
 
-        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            String rangeValue = rangeHeader.substring("bytes=".length()).trim();
-            String[] parts = rangeValue.split("-", 2);
+        ResourceRegion region;
 
-            if (!parts[0].isBlank()) {
-                start = Long.parseLong(parts[0]);
-            }
+        if (ranges.isEmpty()) {
+            long chunkSize = Math.min(1024 * 1024, fileSize);
+            region = new ResourceRegion(video, 0, chunkSize);
 
-            if (parts.length > 1 && !parts[1].isBlank()) {
-                end = Long.parseLong(parts[1]);
-            }
+            return ResponseEntity.status(HttpStatus.OK)
+                    .contentType(MediaType.valueOf("video/mp4"))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .body(region);
         }
 
-        end = Math.min(end, fileSize - 1);
-        long contentLength = end - start + 1;
+        HttpRange range = ranges.get(0);
 
-        long finalStart = start;
-        long finalEnd = end;
+        long start = range.getRangeStart(fileSize);
+        long end = range.getRangeEnd(fileSize);
+        long rangeLength = Math.min(1024 * 1024, end - start + 1);
 
-        StreamingResponseBody body = outputStream -> {
-            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
-                raf.seek(finalStart);
+        region = new ResourceRegion(video, start, rangeLength);
 
-                byte[] buffer = new byte[8192];
-                long bytesLeft = contentLength;
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                .contentType(MediaType.valueOf("video/mp4"))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .body(region);
+    }*/
+    @GetMapping("/preview/file")
+    public ResponseEntity<ResourceRegion> previewFile(
+            @RequestParam String previewId,
+            @RequestHeader HttpHeaders headers
+    ) throws IOException {
 
-                while (bytesLeft > 0) {
-                    int bytesToRead = (int) Math.min(buffer.length, bytesLeft);
-                    int bytesRead = raf.read(buffer, 0, bytesToRead);
+        Path file = previewFiles.get(previewId);
 
-                    if (bytesRead == -1) break;
+        if (file == null || !Files.exists(file) || Files.size(file) == 0) {
+            return ResponseEntity.notFound().build();
+        }
 
-                    outputStream.write(buffer, 0, bytesRead);
-                    bytesLeft -= bytesRead;
-                }
-            }
-        };
+        FileSystemResource resource = new FileSystemResource(file);
+        long fileSize = resource.contentLength();
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.valueOf("video/mp4"));
-        headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
-        headers.set(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength));
-        headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize);
+        // 👉 размер чанка (очень важно для мобильных)
+        final long chunkSize = 1024 * 1024; // 1MB
 
-        return ResponseEntity
-                .status(rangeHeader == null ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
-                .headers(headers)
-                .body(body);
+        List<HttpRange> ranges = headers.getRange();
+
+        if (ranges.isEmpty()) {
+            ResourceRegion region = new ResourceRegion(resource, 0, Math.min(chunkSize, fileSize));
+
+            return ResponseEntity.status(HttpStatus.OK)
+                    .contentType(MediaType.parseMediaType("video/mp4"))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .body(region);
+        }
+
+        HttpRange range = ranges.get(0);
+
+        long start = range.getRangeStart(fileSize);
+        long end = range.getRangeEnd(fileSize);
+
+        long rangeLength = Math.min(chunkSize, end - start + 1);
+
+        ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
+
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                .contentType(MediaType.parseMediaType("video/mp4"))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .body(region);
     }
+//    @GetMapping("/preview/file")
+//    public ResponseEntity<StreamingResponseBody> previewFile(
+//            @RequestParam String previewId,
+//            @RequestHeader(value = "Range", required = false) String rangeHeader
+//    ) throws IOException {
+//
+//        Path file = previewFiles.get(previewId);
+//
+//        if (file == null || !Files.exists(file) || Files.size(file) == 0) {
+//            return ResponseEntity.notFound().build();
+//        }
+//
+//        long fileSize = Files.size(file);
+//
+//        long start = 0;
+//        long end = fileSize - 1;
+//
+//        /*if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+//            String rangeValue = rangeHeader.substring("bytes=".length()).trim();
+//            String[] parts = rangeValue.split("-", 2);
+//
+//            if (!parts[0].isBlank()) {
+//                start = Long.parseLong(parts[0]);
+//            }
+//
+//            if (parts.length > 1 && !parts[1].isBlank()) {
+//                end = Long.parseLong(parts[1]);
+//            }
+//        }
+//
+//        end = Math.min(end, fileSize - 1);*/
+//        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+//            String rangeValue = rangeHeader.substring("bytes=".length()).trim();
+//            String[] parts = rangeValue.split("-", 2);
+//
+//            try {
+//                if (!parts[0].isBlank()) {
+//                    start = Long.parseLong(parts[0]);
+//                }
+//
+//                if (parts.length > 1 && !parts[1].isBlank()) {
+//                    end = Long.parseLong(parts[1]);
+//                }
+//            } catch (NumberFormatException e) {
+//                return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+//                        .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+//                        .build();
+//            }
+//        }
+//
+//        if (start < 0 || start >= fileSize || end < start) {
+//            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+//                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+//                    .build();
+//        }
+//
+//        end = Math.min(end, fileSize - 1);
+//        long contentLength = end - start + 1;
+//
+//        long finalStart = start;
+//        //long finalEnd = end;
+//
+//        StreamingResponseBody body = outputStream -> {
+//            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+//                raf.seek(finalStart);
+//
+//                byte[] buffer = new byte[64 * 1024];
+//                long bytesLeft = contentLength;
+//
+//                while (bytesLeft > 0) {
+//                    int bytesToRead = (int) Math.min(buffer.length, bytesLeft);
+//                    int bytesRead = raf.read(buffer, 0, bytesToRead);
+//
+//                    if (bytesRead == -1) {
+//                        break;
+//                    }
+//
+//                    try {
+//                        outputStream.write(buffer, 0, bytesRead);
+//                    } catch (IOException e) {
+//                        if (isClientDisconnect(e)) {
+//                            return;
+//                        }
+//
+//                        System.out.println("Preview streaming write error: " + e.getMessage());
+//                        return;
+//                    }
+//
+//                    bytesLeft -= bytesRead;
+//                }
+//
+//            } catch (IOException e) {
+//                if (isClientDisconnect(e)) {
+//                    return;
+//                }
+//
+//                System.out.println("Preview streaming read error: " + e.getMessage());
+//            }
+//        };
+//        /*StreamingResponseBody body = outputStream -> {
+//            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+//                raf.seek(finalStart);
+//
+//                *//*byte[] buffer = new byte[8192];*//*
+//                byte[] buffer = new byte[64 * 1024];
+//                long bytesLeft = contentLength;
+//
+//                while (bytesLeft > 0) {
+//                    int bytesToRead = (int) Math.min(buffer.length, bytesLeft);
+//                    int bytesRead = raf.read(buffer, 0, bytesToRead);
+//
+//                    if (bytesRead == -1) break;
+//
+//                    outputStream.write(buffer, 0, bytesRead);
+//                    bytesLeft -= bytesRead;
+//                }
+//            }
+//        };*/
+//
+//        HttpHeaders headers = new HttpHeaders();
+//        headers.setContentType(MediaType.valueOf("video/mp4"));
+//        headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
+//        headers.set(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength));
+//        headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize);
+//
+//        return ResponseEntity
+//                .status(rangeHeader == null ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
+//                .headers(headers)
+//                .body(body);
+//    }
     @GetMapping("/preview/status")
     public ResponseEntity<?> previewStatus(@RequestParam String previewId) throws IOException {
         Integer progress = previewProgress.get(previewId);
@@ -650,118 +816,240 @@ public class FileController {
                 .contentLength(Files.size(file))
                 .body(resource);
     }
+    @GetMapping("/stream")
+    public ResponseEntity<ResourceRegion> stream(
+            @RequestParam String path,
+            @RequestHeader HttpHeaders requestHeaders
+    ) throws IOException {
 
-@GetMapping("/stream")
-public ResponseEntity<StreamingResponseBody> stream(
-        @RequestParam String path,
-        @RequestHeader(value = "Range", required = false) String rangeHeader) throws IOException {
+        Path file = fileService.resolveSafe(path);
 
-    Path file = fileService.resolveSafe(path);
-
-    if (!Files.exists(file) || Files.isDirectory(file)) {
-        return ResponseEntity.notFound().build();
-    }
-
-    long fileSize = Files.size(file);
-
-    String contentType = Files.probeContentType(file);
-    MediaType mediaType = contentType != null
-            ? MediaType.parseMediaType(contentType)
-            : MediaType.APPLICATION_OCTET_STREAM;
-
-    long start = 0;
-    long end = fileSize - 1;
-
-    if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-        String rangeValue = rangeHeader.substring("bytes=".length()).trim();
-        String[] parts = rangeValue.split("-", 2);
-
-        try {
-            if (!parts[0].isBlank()) {
-                start = Long.parseLong(parts[0]);
-            }
-
-            if (parts.length > 1 && !parts[1].isBlank()) {
-                end = Long.parseLong(parts[1]);
-            } else {
-                end = fileSize - 1;
-            }
-        } catch (NumberFormatException e) {
-            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
-                    .build();
+        if (!Files.exists(file) || Files.isDirectory(file)) {
+            return ResponseEntity.notFound().build();
         }
-    }
 
-    if (start < 0 || start >= fileSize || end < start) {
-        return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
-                .build();
-    }
+        FileSystemResource video = new FileSystemResource(file);
+        long fileSize = video.contentLength();
 
-    end = Math.min(end, fileSize - 1);
-    long contentLength = end - start + 1;
+        String contentType = Files.probeContentType(file);
+        MediaType mediaType = contentType != null
+                ? MediaType.parseMediaType(contentType)
+                : MediaType.APPLICATION_OCTET_STREAM;
 
-    long finalStart = start;
-    long finalEnd = end;
+        List<HttpRange> ranges = requestHeaders.getRange();
 
+        ResourceRegion region;
 
-    StreamingResponseBody responseBody = outputStream -> {
-        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
-            raf.seek(finalStart);
+        if (ranges.isEmpty()) {
+            long chunkSize = Math.min(1024 * 1024, fileSize);
+            region = new ResourceRegion(video, 0, chunkSize);
 
-            byte[] buffer = new byte[8192];
-            long bytesLeft = contentLength;
-
-            while (bytesLeft > 0) {
-                int bytesToRead = (int) Math.min(buffer.length, bytesLeft);
-                int bytesRead = raf.read(buffer, 0, bytesToRead);
-
-                if (bytesRead == -1) {
-                    break;
-                }
-
-                try {
-                    outputStream.write(buffer, 0, bytesRead);
-                } catch (IOException e) {
-                    if (isClientDisconnect(e)) {
-                        System.out.println("Client disconnected during streaming: " + e.getMessage());
-                        return;
-                    }
-                    throw e;
-                }
-
-                bytesLeft -= bytesRead;
-            }
-
-            try {
-                outputStream.flush();
-            } catch (IOException e) {
-                if (isClientDisconnect(e)) {
-                    System.out.println("Client disconnected during flush: " + e.getMessage());
-                    return;
-                }
-                throw e;
-            }
-        } catch (IOException e) {
-            if (isClientDisconnect(e)) {
-                System.out.println("Client disconnected outer catch: " + e.getMessage());
-                return;
-            }
-            throw e;
+            return ResponseEntity.status(HttpStatus.OK)
+                    .contentType(mediaType)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .body(region);
         }
-    };
 
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(mediaType);
-    headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
-    headers.set(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength));
-    headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize);
+        HttpRange range = ranges.get(0);
 
-    return ResponseEntity.status(rangeHeader == null ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
-            .headers(headers)
-            .body(responseBody);
-}
+        long start = range.getRangeStart(fileSize);
+        long end = range.getRangeEnd(fileSize);
+
+        long rangeLength = Math.min(1024 * 1024, end - start + 1);
+
+        region = new ResourceRegion(video, start, rangeLength);
+
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                .contentType(mediaType)
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .body(region);
+    }
+//@GetMapping("/stream")
+//public ResponseEntity<StreamingResponseBody> stream(
+//        @RequestParam String path,
+//        @RequestHeader(value = "Range", required = false) String rangeHeader) throws IOException {
+//
+//    Path file = fileService.resolveSafe(path);
+//
+//    if (!Files.exists(file) || Files.isDirectory(file)) {
+//        return ResponseEntity.notFound().build();
+//    }
+//
+//    long fileSize = Files.size(file);
+//
+//    String contentType = Files.probeContentType(file);
+//    MediaType mediaType = contentType != null
+//            ? MediaType.parseMediaType(contentType)
+//            : MediaType.APPLICATION_OCTET_STREAM;
+//
+//    long start = 0;
+//    long end = fileSize - 1;
+//
+//    if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+//        String rangeValue = rangeHeader.substring("bytes=".length()).trim();
+//        String[] parts = rangeValue.split("-", 2);
+//
+//        try {
+//            if (!parts[0].isBlank()) {
+//                start = Long.parseLong(parts[0]);
+//            }
+//
+//            if (parts.length > 1 && !parts[1].isBlank()) {
+//                end = Long.parseLong(parts[1]);
+//            } else {
+//                end = fileSize - 1;
+//            }
+//        } catch (NumberFormatException e) {
+//            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+//                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+//                    .build();
+//        }
+//    }
+//
+//    if (start < 0 || start >= fileSize || end < start) {
+//        return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+//                .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+//                .build();
+//    }
+//
+//    end = Math.min(end, fileSize - 1);
+//    long contentLength = end - start + 1;
+//
+//    long finalStart = start;
+//    //long finalEnd = end;
+//    StreamingResponseBody responseBody = outputStream -> {
+//        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+//            raf.seek(finalStart);
+//
+//            byte[] buffer = new byte[64 * 1024];
+//            long bytesLeft = contentLength;
+//
+//            while (bytesLeft > 0) {
+//                int bytesToRead = (int) Math.min(buffer.length, bytesLeft);
+//                int bytesRead = raf.read(buffer, 0, bytesToRead);
+//
+//                if (bytesRead == -1) {
+//                    break;
+//                }
+//
+//                try {
+//                    outputStream.write(buffer, 0, bytesRead);
+//                } catch (Throwable e) {
+//                    if (isClientDisconnect(e)) {
+//                        return;
+//                    }
+//
+//                    System.out.println("Streaming write error: " + e.getMessage());
+//                    return;
+//                }
+//
+//                bytesLeft -= bytesRead;
+//            }
+//
+//        } catch (Throwable e) {
+//            if (isClientDisconnect(e)) {
+//                return;
+//            }
+//
+//            System.out.println("Streaming error: " + e.getMessage());
+//        }
+//    };
+//    /*StreamingResponseBody responseBody = outputStream -> {
+//        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+//            raf.seek(finalStart);
+//
+//            byte[] buffer = new byte[64 * 1024];
+//            long bytesLeft = contentLength;
+//
+//            while (bytesLeft > 0) {
+//                int bytesToRead = (int) Math.min(buffer.length, bytesLeft);
+//                int bytesRead = raf.read(buffer, 0, bytesToRead);
+//
+//                if (bytesRead == -1) {
+//                    break;
+//                }
+//
+//                try {
+//                    outputStream.write(buffer, 0, bytesRead);
+//                } catch (IOException e) {
+//                    if (isClientDisconnect(e)) {
+//                        return;
+//                    }
+//
+//                    System.out.println("Streaming write error: " + e.getMessage());
+//                    return;
+//                }
+//
+//                bytesLeft -= bytesRead;
+//            }
+//
+//        } catch (IOException e) {
+//            if (isClientDisconnect(e)) {
+//                return;
+//            }
+//
+//            System.out.println("Streaming read error: " + e.getMessage());
+//        }
+//    };*/
+//    /*StreamingResponseBody responseBody = outputStream -> {
+//        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+//            raf.seek(finalStart);
+//
+//            byte[] buffer = new byte[8192];
+//            long bytesLeft = contentLength;
+//
+//            while (bytesLeft > 0) {
+//                int bytesToRead = (int) Math.min(buffer.length, bytesLeft);
+//                int bytesRead = raf.read(buffer, 0, bytesToRead);
+//
+//                if (bytesRead == -1) {
+//                    break;
+//                }
+//
+//                try {
+//                    outputStream.write(buffer, 0, bytesRead);
+//                } catch (IOException e) {
+//                    if (isClientDisconnect(e)) {
+//                        System.out.println("Client disconnected during streaming: " + e.getMessage());
+//                        return;
+//                    }
+//                    throw e;
+//                }
+//
+//                bytesLeft -= bytesRead;
+//            }
+//
+//            *//*try {
+//                outputStream.flush();
+//            } catch (IOException e) {
+//                if (isClientDisconnect(e)) {
+//                    System.out.println("Client disconnected during flush: " + e.getMessage());
+//                    return;
+//                }
+//                throw e;
+//            }*//*
+//        } catch (IOException e) {
+//            if (isClientDisconnect(e)) {
+//                System.out.println("Client disconnected outer catch: " + e.getMessage());
+//                return;
+//            }
+//            throw e;
+//        }
+//    };*/
+//
+//    HttpHeaders headers = new HttpHeaders();
+//    headers.setContentType(mediaType);
+//    headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
+//    headers.set(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength));
+//    /*headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize);*/
+//    if (rangeHeader != null) {
+//        headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize);
+//    }
+//
+//    return ResponseEntity.status(rangeHeader == null ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
+//            .headers(headers)
+//            .body(responseBody);
+//}
     @GetMapping("/metadata/created-at")
     public ResponseEntity<?> createdAt(@RequestParam String path) throws IOException {
         Path file = fileService.resolveSafe(path);
@@ -769,7 +1057,7 @@ public ResponseEntity<StreamingResponseBody> stream(
         if (!Files.exists(file) || Files.isDirectory(file)) {
             return ResponseEntity.notFound().build();
         }
-
+        System.out.println("STREAM VERSION 2026-04-30-15-55");
         long createdAt = metadataService.readCreatedAtMillisCached(file);
 
         return ResponseEntity.ok(Map.of(
@@ -1076,14 +1364,28 @@ public ResponseEntity<StreamingResponseBody> stream(
             } catch (IOException ignored) {
             }
         }).start();
-
         try (InputStream is = process.getInputStream();
+             OutputStream os = response.getOutputStream()) {
+
+            try {
+                is.transferTo(os);
+            } catch (IOException e) {
+                if (!isClientDisconnect(e)) {
+                    System.out.println("Video proxy streaming error: " + e.getMessage());
+                }
+            }
+
+        } finally {
+            process.destroyForcibly();
+        }
+
+        /*try (InputStream is = process.getInputStream();
              OutputStream os = response.getOutputStream()) {
 
             is.transferTo(os);
         } finally {
             process.destroyForcibly();
-        }
+        }*/
     }
     @GetMapping("/video-thumbnail")
     public ResponseEntity<Resource> videoThumbnail(@RequestParam String path) throws IOException, InterruptedException {
@@ -1112,7 +1414,27 @@ public ResponseEntity<StreamingResponseBody> stream(
                 .body(placeholder);
 
     }
-    private boolean isClientDisconnect(IOException e) {
+    private boolean isClientDisconnect(Throwable e) {
+        while (e != null) {
+            String msg = e.getMessage();
+
+            if (msg != null && (
+                    msg.contains("разорвала установленное подключение")
+                            || msg.contains("An established connection was aborted")
+                            || msg.contains("Broken pipe")
+                            || msg.contains("Connection reset by peer")
+                            || msg.contains("ClientAbortException")
+                            || msg.contains("AsyncRequestNotUsableException")
+            )) {
+                return true;
+            }
+
+            e = e.getCause();
+        }
+
+        return false;
+    }
+    /*private boolean isClientDisconnect(IOException e) {
         String msg = e.getMessage();
         return msg != null && (
                 msg.contains("разорвала установленное подключение")
@@ -1120,7 +1442,7 @@ public ResponseEntity<StreamingResponseBody> stream(
                         || msg.contains("Broken pipe")
                         || msg.contains("Connection reset by peer")
         );
-    }
+    }*/
     private Path getPreviewJournalDir() throws IOException {
         Path dir = fileService.getRootPath().resolve(".preview_journal");
         Files.createDirectories(dir);
@@ -1166,10 +1488,60 @@ public ResponseEntity<StreamingResponseBody> stream(
 
         writePreviewJournal(session);
 
-        Files.move(source, renamed, StandardCopyOption.ATOMIC_MOVE);
+        /*Files.move(source, renamed, StandardCopyOption.ATOMIC_MOVE);
 
         previewFiles.put(previewId, renamed);
-        previewProgress.put(previewId, 100);
+        previewProgress.put(previewId, 100);*/
+        previewFiles.put(previewId, renamed);
+        previewProgress.put(previewId, 0);
+
+        new Thread(() -> {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(
+                        ffmpegPath,
+                        "-y",
+
+                        "-i", source.toAbsolutePath().toString(),
+
+                        "-map", "0:v:0",
+                        "-map", "0:a:0?",
+
+                        "-c", "copy",
+
+                        "-movflags", "+faststart",
+
+                        renamed.toAbsolutePath().toString()
+                );
+
+                pb.redirectErrorStream(true);
+
+                Process process = pb.start();
+                previewProcesses.put(previewId, process);
+
+                try (InputStream is = process.getInputStream()) {
+                    is.transferTo(OutputStream.nullOutputStream());
+                }
+
+                int exitCode = process.waitFor();
+
+                if (exitCode == 0 && Files.exists(renamed) && Files.size(renamed) > 0) {
+                    previewProgress.put(previewId, 100);
+                } else {
+                    Files.deleteIfExists(renamed);
+                    previewProgress.put(previewId, -1);
+                }
+
+            } catch (Exception e) {
+                try {
+                    Files.deleteIfExists(renamed);
+                } catch (IOException ignored) {
+                }
+
+                previewProgress.put(previewId, -1);
+            } finally {
+                previewProcesses.remove(previewId);
+            }
+        }).start();
 
         return ResponseEntity.ok(Map.of("previewId", previewId));
     }

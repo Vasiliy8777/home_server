@@ -1298,7 +1298,6 @@ async function cleanupCurrentPreview() {
         previewStatusTimer = null;
     }
 }
-
 async function openRenamePreview(item) {
     const form = new URLSearchParams();
     form.append("path", item.relativePath);
@@ -1319,8 +1318,59 @@ async function openRenamePreview(item) {
     const data = await resp.json();
     currentPreviewId = data.previewId;
 
-    return `/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`;
+    return new Promise((resolve, reject) => {
+        previewStatusTimer = setInterval(async () => {
+            const statusResponse = await fetch(
+                `/api/files/preview/status?previewId=${encodeURIComponent(currentPreviewId)}`
+            );
+
+            if (!statusResponse.ok) {
+                clearInterval(previewStatusTimer);
+                previewStatusTimer = null;
+                reject(new Error("Ошибка статуса preview"));
+                return;
+            }
+
+            const status = await statusResponse.json();
+
+            if (status.progress < 0) {
+                clearInterval(previewStatusTimer);
+                previewStatusTimer = null;
+                reject(new Error("Ошибка подготовки preview"));
+                return;
+            }
+
+            if (status.ready) {
+                clearInterval(previewStatusTimer);
+                previewStatusTimer = null;
+
+                resolve(`/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`);
+            }
+        }, 500);
+    });
 }
+/*async function openRenamePreview(item) {
+    const form = new URLSearchParams();
+    form.append("path", item.relativePath);
+
+    const resp = await fetch("/api/files/preview/rename-original-start", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form
+    });
+
+    if (!resp.ok) {
+        alert("Ошибка подготовки файла для просмотра");
+        return null;
+    }
+
+    const data = await resp.json();
+    currentPreviewId = data.previewId;
+
+    return `/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`;
+}*/
 function expandAllTreeNodes(container) {
     container.querySelectorAll(".folder-children").forEach(el => {
         el.classList.remove("hidden");
@@ -2017,7 +2067,8 @@ function renderViewerItem() {
                     `/api/files/preview/original?previewId=${encodeURIComponent(currentPreviewId)}`;
             };*/
 
-            openRenamePreview(item)
+            /*openRenamePreview(item)*/
+            preparePreviewVideo(item)
                 .then(url => {
                     if (!url) {
                         viewerBody.innerHTML = `<div>Не удалось подготовить видео</div>`;
