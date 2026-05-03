@@ -6,6 +6,18 @@ let deleteTargetPath = null;
 let deleteTargetName = null;
 
 let currentItems = [];
+let virtualStart = -1;
+let virtualEnd = -1;
+let virtualTotalCount = -1;
+let virtualRenderScheduled = false;
+
+const VIRTUAL_BUFFER_ROWS = window.innerWidth <= 768 ? 2 : 4;
+
+let currentPreparedJobId = null;
+let preparedAllLoaded = false;
+
+/*const VIRTUAL_BUFFER = 30;*/
+const CARD_APPROX_HEIGHT = 340;
 
 let pendingResumeTaskId = null;
 let bulkMoveMode = false;
@@ -18,6 +30,19 @@ let sortField = localStorage.getItem("sortField") || "name";
 let sortDirection = localStorage.getItem("sortDirection") || "asc";
 
 let metadataLoaded = new Set();
+
+let offset = 0;
+/*const LIMIT = 500;*/
+let lastLoadTime = 0;
+let folderLoadSession = 0;
+let activeFolderPath = "";
+let backgroundFolderLoading = false;
+let folderLoadAbortController = null;
+let totalLoadedItems = 0;
+let estimatedTotalItems = 0;
+
+let loading = false;
+let allLoaded = false;
 
 const sortBtn = document.getElementById("sortBtn");
 const sortModal = document.getElementById("sortModal");
@@ -58,12 +83,160 @@ const downloadMp4FormatBtn = document.getElementById("downloadMp4FormatBtn");
 const confirmDownloadFormatBtn = document.getElementById("confirmDownloadFormatBtn");
 const cancelDownloadFormatBtn = document.getElementById("cancelDownloadFormatBtn");
 
+const metadataCache = new Map();
+
 let pendingDownloadItem = null;
 let pendingDownloadPreviewId = null;
 let selectedDownloadFormat = "original";
 
+let metadataTotal = 0;
+let metadataProcessed = 0;
+const METADATA_QUEUE = [];
+let metadataRunning = 0;
+const MAX_METADATA_REQUESTS = window.innerWidth <= 768 ? 2 : 4; // 🔥 для телефона критично
+const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20: 80;
+let currentPreparedTotal = 0;
+const PAGE_LIMIT = 1000;
+async function loadFilesPrepared(path = "") {
+    const sessionId = ++folderLoadSession;
+    const pathForLoading = path || "";
+
+
+    currentPath = pathForLoading;
+    activeFolderPath = pathForLoading;
+    parentPath = getParentPath(pathForLoading);
+
+    currentPreparedJobId = null;
+    preparedAllLoaded = false;
+    loading = false;
+
+    offset = 0;
+    lastLoadTime = 0;
+    currentItems = [];
+    viewerItems = [];
+    metadataLoaded = new Set();
+
+    virtualStart = -1;
+    virtualEnd = -1;
+    virtualTotalCount = -1;
+
+    gallery.innerHTML = "";
+    gallery.scrollTop = 0;
+
+    currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
+
+    showFolderLoadingRing(0);
+    /*showMetadataLoadingModal();*/
+
+    /*const res = await fetch(`/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}`, {
+        method: "POST"
+    });*/
+    const res = await fetch(
+        `/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}`,
+        { method: "POST" }
+    );
+
+    const { jobId } = await res.json();
+
+    if (sessionId !== folderLoadSession) return;
+    let ready = false;
+
+    while (!ready) {
+        const statusRes = await fetch(`/api/files/prepare-status?jobId=${encodeURIComponent(jobId)}`);
+        const status = await statusRes.json();
+        currentPreparedTotal = status.total || 0;
+        ready = status.ready;
+
+        /*updateMetadataLoadingModal(
+            status.progress || 0,
+            status.processed || 0,
+            status.total || 0
+        );*/
+
+        updateFolderLoadingRing(status.progress || 0);
+
+        if (!ready) {
+            await new Promise(r => setTimeout(r, 300));
+        }
+    }
+
+    /*hideMetadataLoadingModal();*/
+    currentPreparedJobId = jobId;
+
+    await loadPreparedPage(jobId);
+
+    /*setTimeout(handleLoadMoreScroll, 300);*/
+    updateNavButtons();
+}
+async function loadPreparedPage(jobId) {
+    if (preparedAllLoaded || loading) return;
+
+    loading = true;
+
+    try {
+        const res = await fetch(
+            /*`/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${LIMIT}`*/
+            `/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${PAGE_LIMIT}`
+        );
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const items = data.items || [];
+
+        estimatedTotalItems = data.total || estimatedTotalItems || 0;
+
+        if (items.length === 0) {
+            setTimeout(() => maybeLoadMorePrepared(), 500);
+            return;
+        }
+
+        appendItems(items);
+        /*appendItems(sortItems(items));*/
+        offset += items.length;
+
+        if (estimatedTotalItems > 0 && offset >= estimatedTotalItems) {
+            preparedAllLoaded = true;
+            hideFolderLoadingRing();
+        } else {
+            updateFolderLoadingRing(
+                estimatedTotalItems
+                    ? Math.round((offset / estimatedTotalItems) * 100)
+                    : 0
+            );
+        }
+    } finally {
+        loading = false;
+    }
+}
+async function loadFiles(path = "") {
+    return loadFilesPrepared(path);
+}
+async function maybeLoadMorePrepared(jobId = currentPreparedJobId) {
+    if (!jobId || jobId !== currentPreparedJobId) return;
+    if (preparedAllLoaded || loading) return;
+
+    const now = Date.now();
+    if (now - lastLoadTime < 400) return;
+
+    const totalLoaded = currentItems.length;
+    const visibleEnd = virtualEnd || 0;
+
+    const isMobile = window.innerWidth <= 768;
+    const preloadItems = isMobile ? 20 : getGalleryColumns() * 8;
+
+    if (totalLoaded - visibleEnd <= preloadItems) {
+        lastLoadTime = now;
+        await loadPreparedPage(jobId);
+    }
+}
 function showToast(message) {
     const toast = document.getElementById("toast");
+
+    if (!toast) {
+        console.warn("Toast not found");
+        return;
+    }
 
     toast.textContent = message;
     toast.classList.remove("hidden");
@@ -74,10 +247,7 @@ function showToast(message) {
 
     setTimeout(() => {
         toast.classList.remove("show");
-
-        setTimeout(() => {
-            toast.classList.add("hidden");
-        }, 250);
+        setTimeout(() => toast.classList.add("hidden"), 250);
     }, 3000);
 }
 function showDownloadActionToast(item) {
@@ -122,6 +292,179 @@ function showDownloadActionToast(item) {
         hideActionToast();
     }, 5000);
 }
+function getParentPath(path) {
+    if (!path) return "";
+
+    const parts = path.split("/").filter(Boolean);
+    parts.pop();
+
+    return parts.join("/");
+}
+async function fetchMetadataBulk(paths) {
+    if (!paths || paths.length === 0) return;
+
+    const response = await fetch("/api/files/metadata/card-bulk", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(paths)
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+
+    Object.entries(data).forEach(([path, meta]) => {
+        const card = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
+        if (!card || !meta) return;
+
+        const metaEl = card.querySelector(".meta");
+        const dateEl = card.querySelector(".card-created-date");
+
+        if (!metaEl) return;
+
+        if (meta.directory) {
+            if (meta.fileCount == null && meta.folderCount == null) return;
+            const hasContent = (meta.fileCount || 0) > 0 || (meta.folderCount || 0) > 0;
+
+            if (metaEl.childNodes[0]) {
+                metaEl.childNodes[0].textContent = hasContent
+                    ? "Папка с файлами"
+                    : "Пустая папка";
+            }
+        } else if (dateEl && meta.createdAt) {
+            dateEl.textContent = " · " + formatDateTime(meta.createdAt);
+            dateEl.dataset.createdAt = meta.createdAt;
+        }
+    });
+}
+
+function applyCardMetadata(path, meta) {
+    const card = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
+    if (!card || !meta) return;
+
+    const metaEl = card.querySelector(".meta");
+    const dateEl = card.querySelector(".card-created-date");
+
+    if (meta.directory) {
+        if (meta.directory) {
+            if (!metaEl) return;
+            if (meta.fileCount == null && meta.folderCount == null) {
+                return;
+            }
+
+            const hasContent = (meta.fileCount || 0) > 0 || (meta.folderCount || 0) > 0;
+
+            // 🔥 полностью перезаписываем текст
+            metaEl.innerHTML = hasContent
+                ? "Папка с файлами"
+                : "Пустая папка";
+
+            return;
+        }
+    }
+    if (metaEl && meta.createdAt) {
+        let dateEl = metaEl.querySelector(".card-created-date");
+
+        if (!dateEl) {
+            dateEl = document.createElement("span");
+            dateEl.className = "card-created-date";
+            metaEl.appendChild(dateEl);
+        }
+
+        dateEl.textContent = " · " + formatDateTime(meta.createdAt);
+    }
+}
+
+async function processMetadataQueue() {
+    if (metadataRunning >= MAX_METADATA_REQUESTS) return;
+    if (!METADATA_QUEUE.length) return;
+
+    const batch = METADATA_QUEUE.splice(0, METADATA_BATCH_SIZE);
+    metadataRunning++;
+
+    try {
+        const response = await fetch("/api/files/metadata/card-bulk", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(batch)
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+
+            Object.entries(data).forEach(([path, meta]) => {
+                metadataCache.set(path, meta);
+                applyCardMetadata(path, meta);
+            });
+            /*metadataProcessed += Object.keys(data).length;*/
+            metadataProcessed += batch.length;
+
+            const percent = metadataTotal > 0
+                ? Math.round(metadataProcessed * 100 / metadataTotal)
+                : 100;
+
+            updateMetadataLoadingModal(percent, metadataProcessed, metadataTotal);
+
+            if (metadataProcessed >= metadataTotal && METADATA_QUEUE.length === 0) {
+                setTimeout(() => {
+                    hideMetadataLoadingModal();
+                    metadataTotal = 0;
+                    metadataProcessed = 0;
+                }, 500);
+            }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+    } catch (e) {
+        console.error("Metadata queue failed", e);
+    } finally {
+        metadataRunning--;
+        processMetadataQueue();
+    }
+}
+
+function enqueueMetadata(paths) {
+    const newPaths = paths.filter(path =>
+        path &&
+        !metadataLoaded.has(path + "_queued") &&
+        !metadataCache.has(path)
+    );
+
+    if (!newPaths.length) return;
+
+    for (const path of newPaths) {
+        metadataLoaded.add(path + "_queued");
+    }
+
+    metadataTotal += newPaths.length;
+    showMetadataLoadingModal();
+
+    updateMetadataLoadingModal(
+        metadataTotal > 0 ? Math.round(metadataProcessed * 100 / metadataTotal) : 0,
+        metadataProcessed,
+        metadataTotal
+    );
+    for (const path of newPaths) {
+        if (!path) continue;
+
+        if (metadataCache.has(path)) {
+            applyCardMetadata(path, metadataCache.get(path));
+            continue;
+        }
+
+        if (!METADATA_QUEUE.includes(path)) {
+            METADATA_QUEUE.push(path);
+        }
+    }
+
+    processMetadataQueue();
+}
+
+/*function enqueueMetadata(paths) {
+    METADATA_QUEUE.push(...paths);
+    processMetadataQueue();
+}*/
 function scrollToFile(path) {
     const el = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
     if (!el) return;
@@ -137,6 +480,7 @@ function scrollToFile(path) {
         el.classList.remove("highlight");
     }, 1500);
 }
+
 function hideActionToast() {
     const toast = document.getElementById("actionToast");
 
@@ -157,14 +501,6 @@ function openDownloadFormatModal(item, previewId = null) {
     downloadFormatModal.classList.remove("hidden");
 }
 
-/*function openDownloadFormatModal(item) {
-    pendingDownloadItem = item;
-    selectedDownloadFormat = "original";
-
-    updateDownloadFormatButtons();
-
-    downloadFormatModal.classList.remove("hidden");
-}*/
 
 function closeDownloadFormatModal() {
     downloadFormatModal.classList.add("hidden");
@@ -190,6 +526,7 @@ function updateBulkButtons() {
     bulkMoveBtn.textContent = count ? `Переместить (${count})` : "Переместить выбранные";
     bulkDeleteBtn.textContent = count ? `Удалить (${count})` : "Удалить выбранные";
 }
+
 //функция сортировки
 function sortItems(items) {
     return [...items].sort((a, b) => {
@@ -200,13 +537,13 @@ function sortItems(items) {
         let result = 0;
 
         if (sortField === "name") {
-            result = a.name.localeCompare(b.name, "ru", { numeric: true });
+            result = a.name.localeCompare(b.name, "ru", {numeric: true});
         }
 
         if (sortField === "lastModified") {
             /*result = (a.lastModified || 0) - (b.lastModified || 0);*/
             result = (a.createdAt || a.lastModified || 0) - (b.createdAt || b.lastModified || 0);
-           /* result = (a.createdAt || 0) - (b.createdAt || 0);*/
+            /* result = (a.createdAt || 0) - (b.createdAt || 0);*/
         }
 
         if (sortField === "size") {
@@ -216,6 +553,7 @@ function sortItems(items) {
         return sortDirection === "asc" ? result : -result;
     });
 }
+
 function updateSortButtonsState() {
     document.querySelectorAll(".sort-field-btn").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.field === sortField);
@@ -229,6 +567,17 @@ function updateSortButtonsState() {
             ? "↑ От меньшего к большему"
             : "↓ От большего к меньшему";
 }
+document.querySelectorAll(".sort-field-btn").forEach(btn => {
+    btn.onclick = () => {
+        sortField = btn.dataset.field;
+
+        localStorage.setItem("sortField", sortField);
+        localStorage.setItem("sortDirection", sortDirection);
+
+        updateSortButtonsState();
+        loadFiles(currentPath);
+    };
+});
 function openBulkDownloadModal() {
     if (!selectedItems.size) return;
 
@@ -414,7 +763,7 @@ async function executeBulkMove() {
 const transferPanel = document.getElementById("transferPanel");
 const transferList = document.getElementById("transferList");
 const resumeAllTransfersBtn = document.getElementById("resumeAllTransfersBtn");
-/*resumeAllTransfersBtn.classList.add("resume-all-active");*/
+
 resumeAllTransfersBtn.textContent = "⏸ Пауза все";
 transferList.addEventListener("click", (e) => {
     const removeBtn = e.target.closest(".transfer-remove");
@@ -583,6 +932,23 @@ const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
 const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
 
 const gallery = document.getElementById("gallery");
+
+async function handleLoadMoreScroll() {
+    if (!currentPreparedJobId || preparedAllLoaded || loading) return;
+
+    const galleryBottom =
+        gallery.scrollTop + gallery.clientHeight >= gallery.scrollHeight - 1200;
+
+    const pageBottom =
+        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1200;
+
+    if (galleryBottom || pageBottom) {
+        await loadPreparedPage(currentPreparedJobId);
+    }
+}
+
+window.addEventListener("scroll", handleLoadMoreScroll);
+//gallery.addEventListener("scroll", handleLoadMoreScroll);
 const currentPathEl = document.getElementById("currentPath");
 const upBtn = document.getElementById("upBtn");
 const fileInput = document.getElementById("fileInput");
@@ -621,6 +987,7 @@ function updateViewerSelectButton() {
     selectViewerBtn.textContent = selected ? "✓ Выбрано" : "Выбрать";
     selectViewerBtn.classList.toggle("selected", selected);
 }
+
 function syncSelectionToGallery(path, selected) {
     const card = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
     if (!card) return;
@@ -633,6 +1000,7 @@ function syncSelectionToGallery(path, selected) {
         checkbox.checked = selected;
     }
 }
+
 function saveTransferTasks() {
     const plain = Array.from(transferTasks.values()).map(task => ({
         id: task.id,
@@ -1298,6 +1666,7 @@ async function cleanupCurrentPreview() {
         previewStatusTimer = null;
     }
 }
+
 async function openRenamePreview(item) {
     const form = new URLSearchParams();
     form.append("path", item.relativePath);
@@ -1349,28 +1718,7 @@ async function openRenamePreview(item) {
         }, 500);
     });
 }
-/*async function openRenamePreview(item) {
-    const form = new URLSearchParams();
-    form.append("path", item.relativePath);
 
-    const resp = await fetch("/api/files/preview/rename-original-start", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: form
-    });
-
-    if (!resp.ok) {
-        alert("Ошибка подготовки файла для просмотра");
-        return null;
-    }
-
-    const data = await resp.json();
-    currentPreviewId = data.previewId;
-
-    return `/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`;
-}*/
 function expandAllTreeNodes(container) {
     container.querySelectorAll(".folder-children").forEach(el => {
         el.classList.remove("hidden");
@@ -1517,25 +1865,214 @@ function enablePreviewPan(img) {
         }
     });
 }
+/*async function fillMobileStartPages(jobId = currentPreparedJobId) {
+    if (!jobId || jobId !== currentPreparedJobId || preparedAllLoaded) return;
 
-async function loadFiles(path = "") {
-    metadataLoaded=new Set();
-    const response = await fetch(`/api/files/list?path=${encodeURIComponent(path)}`);
+    let guard = 0;
 
-    if (!response.ok) {
-        alert("Не удалось загрузить список файлов");
+    while (
+        jobId === currentPreparedJobId &&
+        !preparedAllLoaded &&
+        !loading &&
+        gallery.scrollHeight <= gallery.clientHeight + 200 &&
+        guard < 3
+        ) {
+        lastLoadTime = 0;
+        await loadPreparedPage(jobId);
+        scheduleVirtualRender();
+
+        guard++;
+        await new Promise(r => setTimeout(r, 250));
+    }
+}*/
+function appendItems(items) {
+    if (!items || items.length === 0) return;
+
+    currentItems.push(...items);
+
+    viewerItems = currentItems.filter(item =>
+        !item.directory && (item.type === "image" || item.type === "video")
+    );
+
+    const fragment = document.createDocumentFragment();
+
+    for (const item of items) {
+        fragment.appendChild(createCard(item));
+    }
+
+    gallery.appendChild(fragment);
+    requestAnimationFrame(() => {
+        initLazyThumbs();
+        initLazyMetadata();
+
+        gallery.querySelectorAll("img.image-thumb, img.video-thumb-img").forEach(img => {
+            if (!img.dataset.panEnabled) {
+                img.dataset.panEnabled = "1";
+                enablePreviewPan(img);
+            }
+        });
+
+        updateBulkButtons();
+    });
+}
+const metadataLoadingModal = document.getElementById("metadataLoadingModal");
+const metadataLoadingBar = document.getElementById("metadataLoadingBar");
+const metadataLoadingCount = document.getElementById("metadataLoadingCount");
+const metadataLoadingText = document.getElementById("metadataLoadingText");
+
+function showMetadataLoadingModal() {
+    if (!metadataLoadingModal || !metadataLoadingBar || !metadataLoadingCount) {
+        console.warn("Metadata loading modal not found");
+        return;
+    }
+    metadataLoadingModal.classList.remove("hidden");
+    metadataLoadingBar.style.width = "0%";
+    metadataLoadingCount.textContent = "0 из 0 файлов";
+}
+
+function updateMetadataLoadingModal(progress, processed, total) {
+    metadataLoadingBar.style.width = `${progress || 0}%`;
+    metadataLoadingCount.textContent = `${processed || 0} из ${total || 0} файлов`;
+    metadataLoadingText.textContent = `Подготовка папки: ${progress || 0}%`;
+}
+
+function hideMetadataLoadingModal() {
+    if (!metadataLoadingModal) return;
+    metadataLoadingModal.classList.add("hidden");
+}
+function getGalleryColumns() {
+    const grid = getComputedStyle(gallery);
+    const columns = grid.gridTemplateColumns.split(" ").filter(Boolean).length;
+    return Math.max(1, columns);
+}
+function updateGalleryScrollMode() {
+    if (!gallery) return;
+
+    const total = estimatedTotalItems || currentItems.length;
+    const needScroll = total > 20;
+
+    gallery.classList.toggle("gallery-scroll", needScroll);
+}
+
+/*async function loadMoreFilesInBackground(pathForLoading, sessionId) {
+    if (loading || allLoaded) return;
+
+    loading = true;
+
+    try {
+        const response = await fetch(
+            `/api/files/list?path=${encodeURIComponent(pathForLoading)}&offset=${offset}&limit=${LIMIT}`,
+            {signal: folderLoadAbortController.signal}
+        );
+
+        if (sessionId !== folderLoadSession || currentPath !== pathForLoading) return;
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+
+        if (sessionId !== folderLoadSession || currentPath !== pathForLoading) return;
+
+        const items = sortItems(data.items || []);
+        appendItems(items);
+
+        offset += items.length;
+        totalLoadedItems += items.length;
+
+        const percent = estimatedTotalItems > 0
+            ? Math.min(100, Math.round((totalLoadedItems / estimatedTotalItems) * 100))
+            : 0;
+
+        updateFolderLoadingRing(percent);
+
+        if (items.length < LIMIT) {
+            allLoaded = true;
+            updateFolderLoadingRing(100);
+        }
+    } finally {
+        loading = false;
+    }
+}*/
+
+/*async function loadMoreFiles() {
+    const resp = await fetch(`/api/files/list?path=${encodeURIComponent(currentPath)}&offset=${offset}&limit=${LIMIT}`);
+
+    if (!resp.ok) {
+        loading = false;
         return;
     }
 
-    const data = await response.json();
+    const data = await resp.json();
+    const items = data.items || [];
 
-    currentPath = data.currentPath;
-    parentPath = data.parentPath;
-    currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
+    appendItems(sortItems(items));
 
-    renderItems(sortItems(data.items));
-    updateNavButtons();
+    offset += items.length;
+
+    if (items.length < LIMIT) {
+        allLoaded = true;
+    }
+
+    loading = false;
+}*/
+
+function showFolderLoadingRing(percent = 0) {
+    const ring = document.getElementById("folderLoadingRing");
+    if (!ring) return;
+
+    ring.classList.remove("hidden");
+    updateFolderLoadingRing(percent);
 }
+
+function updateFolderLoadingRing(percent) {
+    const progress = document.getElementById("folderLoadingRingProgress");
+    const text = document.getElementById("folderLoadingPercent");
+
+    if (!progress || !text) return;
+
+    const safePercent = Math.max(0, Math.min(100, percent));
+
+    progress.setAttribute("stroke-dasharray", `${safePercent}, 100`);
+    text.textContent = `${safePercent}%`;
+}
+
+function hideFolderLoadingRing() {
+    const ring = document.getElementById("folderLoadingRing");
+    if (!ring) return;
+
+    setTimeout(() => {
+        ring.classList.add("hidden");
+    }, 400);
+}
+
+/*async function startBackgroundFolderLoading(pathForLoading, sessionId) {
+    if (backgroundFolderLoading) return;
+
+    backgroundFolderLoading = true;
+
+    try {
+        while (
+            !allLoaded &&
+            sessionId === folderLoadSession &&
+            currentPath === pathForLoading
+            ) {
+            await loadMoreFilesInBackground(pathForLoading, sessionId);
+            const delay = window.innerWidth <= 768 ? 350 : 120;
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    } catch (e) {
+        if (e.name !== "AbortError") {
+            console.error("Background folder loading failed", e);
+        }
+    } finally {
+        backgroundFolderLoading = false;
+
+        if (sessionId === folderLoadSession && currentPath === pathForLoading) {
+            hideFolderLoadingRing();
+        }
+    }
+}
+
 function updateItemsMetadata(metadataMap) {
     Object.entries(metadataMap).forEach(([path, createdAt]) => {
 
@@ -1549,7 +2086,8 @@ function updateItemsMetadata(metadataMap) {
 
         meta.textContent = `${size} · ${formatDateTime(createdAt)}`;
     });
-}
+}*/
+
 async function confirmDelete() {
     if (selectedItems.size > 0 && deleteTargetPath == null) {
         for (const item of selectedItems.values()) {
@@ -1586,6 +2124,7 @@ async function confirmDelete() {
     closeDeleteModal();
     await loadFiles(currentPath);
 }
+
 function getVisibleItems() {
 
     const cards = document.querySelectorAll(".card[data-path]");
@@ -1604,25 +2143,30 @@ function getVisibleItems() {
 
     return visible;
 }
-async function loadVisibleMetadata() {
-    const paths = getVisibleItems();
 
-    if (!paths.length) return;
+function loadVisibleMetadata() {
+    const cards = document.querySelectorAll(".card");
 
-    paths.forEach(p => metadataLoaded.add(p));
+    const visible = [];
 
-    const response = await fetch("/api/files/metadata/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paths)
+    cards.forEach(card => {
+        const rect = card.getBoundingClientRect();
+
+        if (rect.top < window.innerHeight + 200) {
+            const path = card.dataset.path;
+
+            if (!metadataLoaded.has(path)) {
+                visible.push(path);
+                metadataLoaded.add(path);
+            }
+        }
     });
 
-    if (!response.ok) return;
-
-    const data = await response.json();
-
-    updateItemsMetadata(data);
+    if (visible.length) {
+        enqueueMetadata(visible);
+    }
 }
+
 function closeDeleteModal() {
     deleteModal.classList.add("hidden");
     deleteTargetPath = null;
@@ -1637,6 +2181,165 @@ function openDeleteModal(path, name) {
     deleteModal.classList.remove("hidden");
 }
 
+function createCard(item) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.path = item.relativePath;
+
+    const selectBox = document.createElement("input");
+    selectBox.type = "checkbox";
+    selectBox.className = "item-checkbox";
+    selectBox.checked = selectedItems.has(item.relativePath);
+
+    card.classList.toggle("selected", selectedItems.has(item.relativePath));
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+
+    if (item.directory) {
+        thumb.innerHTML = `<div class="folder-thumb">📁</div>`;
+        thumb.addEventListener("click", () => loadFiles(item.relativePath));
+    } else if (item.type === "image") {
+        thumb.innerHTML = `
+    <img
+        src="/image-placeholder.png"   // 👈 сразу показываем
+        loading="lazy"
+        data-src="${buildImageThumbnailUrl(item.relativePath)}"
+        alt="${escapeHtml(item.name)}"
+        class="lazy-thumb image-thumb"
+    >
+`;
+        thumb.addEventListener("click", () => openViewerByPath(item.relativePath));
+    } else if (item.type === "video") {
+        thumb.innerHTML = `
+    <div class="video-thumb-wrap">
+        <img
+            src="/video-placeholder.png"  // 👈 сразу показываем
+            loading="lazy"
+            data-src="${buildVideoThumbnailUrl(item.relativePath)}"
+            alt="${escapeHtml(item.name)}"
+            class="lazy-thumb video-thumb-img"
+        >
+        <div class="play-badge">▶</div>
+    </div>
+`;
+        thumb.addEventListener("click", () => openViewerByPath(item.relativePath));
+    } else {
+        thumb.innerHTML = `<div class="file-thumb">📄</div>`;
+    }
+
+    const body = document.createElement("div");
+    body.className = "card-body";
+
+    let sizeText; if (item.directory) {
+        sizeText = "Папка";
+    }else {
+        sizeText = formatBytes(item.size);
+    }
+    /*const dateText = "";*/
+    const dateText = item.createdAt
+        ? " · " + formatDateTime(item.createdAt)
+        : "";
+    body.innerHTML = `
+    <div class="file-name">${escapeHtml(item.name)}</div>
+    <div class="meta-row">
+        <label class="select-line">
+            <span class="meta ${item.directory ? 'folder-meta' : ''}" data-size="${escapeHtml(sizeText)}">
+    ${escapeHtml(sizeText)}
+               <span class="card-created-date" data-path="${escapeHtml(item.relativePath)}">${dateText}</span>
+            </span>
+        </label>
+    </div>
+`;
+    body.querySelector(".select-line").appendChild(selectBox);
+    selectBox.addEventListener("click", (e) => {
+        e.stopPropagation();
+
+        if (selectBox.checked) {
+            selectedItems.set(item.relativePath, {
+                path: item.relativePath,
+                name: item.name,
+                directory: item.directory
+            });
+        } else {
+            selectedItems.delete(item.relativePath);
+        }
+
+        card.classList.toggle("selected", selectBox.checked);
+        updateBulkButtons();
+    });
+
+    const line = body.querySelector(".select-line");
+
+    line.addEventListener("click", (e) => {
+        e.stopPropagation();
+
+        if (e.target === selectBox) return;
+
+        selectBox.checked = !selectBox.checked;
+        selectBox.dispatchEvent(new Event("click"));
+    });
+    const actions = document.createElement("div");
+    actions.className = "card-actions";
+
+    if (item.directory) {
+        const openBtn = document.createElement("button");
+        openBtn.textContent = "Открыть";
+        openBtn.onclick = () => loadFiles(item.relativePath);
+        actions.appendChild(openBtn);
+    } else {
+        const lower = item.name.toLowerCase();
+
+        if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+            const downloadBtn = document.createElement("button");
+            downloadBtn.textContent = "Скачать";
+            downloadBtn.onclick = () => openDownloadFormatModal(item);
+            actions.appendChild(downloadBtn);
+        } else {
+            const downloadLink = document.createElement("a");
+            downloadLink.href = item.downloadUrl;
+            downloadLink.textContent = "Скачать";
+            downloadLink.setAttribute("download", item.name);
+            actions.appendChild(downloadLink);
+        }
+    }
+    const moveBtn = document.createElement("button");
+    moveBtn.textContent = "Переместить";
+    moveBtn.onclick = () => openMoveModal(item.relativePath, item.name);
+    actions.appendChild(moveBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "danger";
+    deleteBtn.textContent = "Удалить";
+    //deleteBtn.onclick = () => removeItem(item.relativePath, item.name);
+    deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
+    actions.appendChild(deleteBtn);
+
+    const propertiesBtn = document.createElement("button");
+    propertiesBtn.textContent = "Свойства";
+    propertiesBtn.onclick = () => openPropertiesModal(item.relativePath);
+    actions.appendChild(propertiesBtn);
+
+    body.appendChild(actions);
+    card.appendChild(thumb);
+    card.appendChild(body);
+
+    return card;
+}
+
+function buildImageThumbnailUrl(path) {
+    if (!path) return "/image-placeholder.png";
+    return `/api/files/image-thumbnail?path=${encodeURIComponent(path)}`;
+}
+
+function buildVideoStreamUrl(path) {
+    return `/api/files/stream?path=${encodeURIComponent(path)}`;
+}
+
+function buildVideoThumbnailUrl(path) {
+    if (!path) return "/video-placeholder.png";
+    return `/api/files/video-thumbnail?path=${encodeURIComponent(path)}`;
+}
+
 function renderItems(items) {
     gallery.innerHTML = "";
 
@@ -1648,140 +2351,7 @@ function renderItems(items) {
     viewerItems = items.filter(item => !item.directory && (item.type === "image" || item.type === "video"));
 
     for (const item of items) {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.dataset.path = item.relativePath;
-
-        const selectBox = document.createElement("input");
-        selectBox.type = "checkbox";
-        selectBox.className = "item-checkbox";
-        selectBox.checked = selectedItems.has(item.relativePath);
-
-        card.classList.toggle("selected", selectedItems.has(item.relativePath));
-        const thumb = document.createElement("div");
-        thumb.className = "thumb";
-
-        if (item.directory) {
-            thumb.innerHTML = `<div class="folder-thumb">📁</div>`;
-            thumb.addEventListener("click", () => loadFiles(item.relativePath));
-        } else if (item.type === "image") {
-            thumb.innerHTML = `
-    <img
-        src="/image-placeholder.png"   // 👈 сразу показываем
-        loading="lazy"
-        data-src="${item.thumbnailUrl || item.previewUrl}"
-        alt="${escapeHtml(item.name)}"
-        class="lazy-thumb image-thumb"
-    >
-`;
-            thumb.addEventListener("click", () => openViewerByPath(item.relativePath));
-        } else if (item.type === "video") {
-            thumb.innerHTML = `
-    <div class="video-thumb-wrap">
-        <img
-            src="/video-placeholder.png"  // 👈 сразу показываем
-            loading="lazy"
-            data-src="${item.thumbnailUrl || '/video-placeholder.png'}"
-            alt="${escapeHtml(item.name)}"
-            class="lazy-thumb video-thumb-img"
-        >
-        <div class="play-badge">▶</div>
-    </div>
-`;
-            thumb.addEventListener("click", () => openViewerByPath(item.relativePath));
-        } else {
-            thumb.innerHTML = `<div class="file-thumb">📄</div>`;
-        }
-
-        const body = document.createElement("div");
-        body.className = "card-body";
-
-        const sizeText = item.directory ? "Папка" : formatBytes(item.size);
-
-        const dateText = "";
-        body.innerHTML = `
-    <div class="file-name">${escapeHtml(item.name)}</div>
-    <div class="meta-row">
-        <label class="select-line">
-            <span class="meta" data-size="${escapeHtml(sizeText)}">
-                ${escapeHtml(sizeText)}
-                <span class="card-created-date" data-path="${escapeHtml(item.relativePath)}"></span>
-            </span>
-        </label>
-    </div>
-`;
-        body.querySelector(".select-line").appendChild(selectBox);
-        selectBox.addEventListener("click", (e) => {
-            e.stopPropagation();
-
-            if (selectBox.checked) {
-                selectedItems.set(item.relativePath, {
-                    path: item.relativePath,
-                    name: item.name,
-                    directory: item.directory
-                });
-            } else {
-                selectedItems.delete(item.relativePath);
-            }
-
-            card.classList.toggle("selected", selectBox.checked);
-            updateBulkButtons();
-        });
-
-        const line = body.querySelector(".select-line");
-
-        line.addEventListener("click", (e) => {
-            e.stopPropagation();
-
-            if (e.target === selectBox) return;
-
-            selectBox.checked = !selectBox.checked;
-            selectBox.dispatchEvent(new Event("click"));
-        });
-        const actions = document.createElement("div");
-        actions.className = "card-actions";
-
-        if (item.directory) {
-            const openBtn = document.createElement("button");
-            openBtn.textContent = "Открыть";
-            openBtn.onclick = () => loadFiles(item.relativePath);
-            actions.appendChild(openBtn);
-        } else {
-            const lower = item.name.toLowerCase();
-
-            if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
-                const downloadBtn = document.createElement("button");
-                downloadBtn.textContent = "Скачать";
-                downloadBtn.onclick = () => openDownloadFormatModal(item);
-                actions.appendChild(downloadBtn);
-            } else {
-                const downloadLink = document.createElement("a");
-                downloadLink.href = item.downloadUrl;
-                downloadLink.textContent = "Скачать";
-                downloadLink.setAttribute("download", item.name);
-                actions.appendChild(downloadLink);
-            }
-        }
-        const moveBtn = document.createElement("button");
-        moveBtn.textContent = "Переместить";
-        moveBtn.onclick = () => openMoveModal(item.relativePath, item.name);
-        actions.appendChild(moveBtn);
-
-        const deleteBtn = document.createElement("button");
-        deleteBtn.className = "danger";
-        deleteBtn.textContent = "Удалить";
-        //deleteBtn.onclick = () => removeItem(item.relativePath, item.name);
-        deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
-        actions.appendChild(deleteBtn);
-
-        const propertiesBtn = document.createElement("button");
-        propertiesBtn.textContent = "Свойства";
-        propertiesBtn.onclick = () => openPropertiesModal(item.relativePath);
-        actions.appendChild(propertiesBtn);
-
-        body.appendChild(actions);
-        card.appendChild(thumb);
-        card.appendChild(body);
+        const card = createCard(item);
         gallery.appendChild(card);
     }
 
@@ -1793,6 +2363,7 @@ function renderItems(items) {
     videoThumbs.forEach(img => enablePreviewPan(img));
     updateBulkButtons();
 }
+
 async function openPropertiesModal(path) {
     propertiesModal.classList.remove("hidden");
     propertiesBody.innerHTML = "Загрузка свойств...";
@@ -1815,12 +2386,13 @@ async function openPropertiesModal(path) {
 
         if (statsResponse.ok) {
             const stats = await statsResponse.json();
-            const merged = { ...data, ...stats };
+            const merged = {...data, ...stats};
 
             propertiesBody.innerHTML = renderFullProperties(merged);
         }
     }
 }
+
 function renderBasicProperties(data) {
     return `
         <div>
@@ -1830,55 +2402,41 @@ function renderBasicProperties(data) {
         </div>
     `;
 }
-function initLazyMetadata() {
-    const dateEls = document.querySelectorAll(".card-created-date[data-path]");
 
+function initLazyMetadata() {
+    const els = document.querySelectorAll(".card[data-path]");
+    if (window.metadataObserver) {
+        window.metadataObserver.disconnect();
+    }
     const observer = new IntersectionObserver((entries, obs) => {
+
         const paths = [];
 
         for (const entry of entries) {
             if (!entry.isIntersecting) continue;
 
-            const el = entry.target;
-            const path = el.dataset.path;
+            const card = entry.target;
+            const path = card.dataset.path;
 
-            obs.unobserve(el);
+            obs.unobserve(card);
 
-            if (path && !metadataLoaded.has(path)) {
-                metadataLoaded.add(path);
-                paths.push(path);
-            }
+            if (!path || metadataLoaded.has(path)) continue;
+
+            metadataLoaded.add(path);
+            paths.push(path);
         }
 
-        if (!paths.length) return;
-
-        fetch("/api/files/metadata/bulk", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(paths)
-        })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-                if (!data) return;
-
-                Object.entries(data).forEach(([path, createdAt]) => {
-                    const el = document.querySelector(
-                        `.card-created-date[data-path="${CSS.escape(path)}"]`
-                    );
-
-                    if (!el || !createdAt) return;
-
-                    el.textContent = " · " + formatDateTime(createdAt);
-                    el.dataset.createdAt = createdAt;
-                });
-            })
-            .catch(e => console.error("Metadata bulk load failed", e));
+        if (paths.length) {
+            enqueueMetadata(paths);
+        }
     }, {
-        rootMargin: "500px"
+        root: gallery,
+        rootMargin: "300px"
     });
-
-    dateEls.forEach(el => observer.observe(el));
+    window.metadataObserver = observer;
+    els.forEach(el => observer.observe(el));
 }
+
 function renderFullProperties(data) {
     return `
         <div>
@@ -1896,6 +2454,7 @@ function renderFullProperties(data) {
         </div>
     `;
 }
+
 function propRow(label, value) {
     if (value === null || value === undefined || value === "" || value === "0") {
         return "";
@@ -1903,6 +2462,7 @@ function propRow(label, value) {
 
     return `<div><b>${label}:</b> ${escapeHtml(String(value))}</div>`;
 }
+
 function initLazyThumbs() {
     const images = document.querySelectorAll("img.lazy-thumb[data-src]");
 
@@ -2053,22 +2613,12 @@ function renderViewerItem() {
         const lower = item.name.toLowerCase();
         if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
             viewerBody.innerHTML = `<div>Подготовка видео...</div>`;
+
             downloadViewerBtn.onclick = () => {
-                /*openDownloadFormatModal(item);*/
                 openDownloadFormatModal(item, currentPreviewId);
             };
-            /*downloadViewerBtn.onclick = () => {
-                if (!currentPreviewId) {
-                    console.log("Preview ещё не готов");
-                    return;
-                }
 
-                window.location.href =
-                    `/api/files/preview/original?previewId=${encodeURIComponent(currentPreviewId)}`;
-            };*/
-
-            /*openRenamePreview(item)*/
-            preparePreviewVideo(item)
+            openRenamePreview(item)
                 .then(url => {
                     if (!url) {
                         viewerBody.innerHTML = `<div>Не удалось подготовить видео</div>`;
@@ -2078,8 +2628,8 @@ function renderViewerItem() {
                     viewerBody.innerHTML = `
                 <video id="player"
                        controls
-                       preload="metadata"
-                       ${item.thumbnailUrl ? `poster="${item.thumbnailUrl}"` : `poster="/video-placeholder.png"`}
+                       preload="auto"
+                       poster="${buildVideoThumbnailUrl(item.relativePath)}"
                        style="width:100%; max-height:75vh;">
                     <source src="${url}" type="video/mp4">
                 </video>
@@ -2099,9 +2649,9 @@ function renderViewerItem() {
         <video id="player"
                controls
                preload="metadata"
-               ${item.thumbnailUrl ? `poster="${item.thumbnailUrl}"` : ""}
+               poster="${buildVideoThumbnailUrl(item.relativePath)}"
                style="width:100%; max-height:75vh;">
-            <source src="${item.previewUrl}">
+            <source src="${buildVideoStreamUrl(item.relativePath)}" type="video/mp4">
         </video>
     `;
 
@@ -2114,24 +2664,16 @@ function renderViewerItem() {
 
         // если это insv/lrv и открыт preview
         if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
-           /* openDownloadFormatModal(item);*/
+            /* openDownloadFormatModal(item);*/
             openDownloadFormatModal(item, currentPreviewId);
             return;
         }
-        /*if ((lower.endsWith(".insv") || lower.endsWith(".lrv")) && currentPreviewId) {
-            window.location.href =
-                `/api/files/preview/original?previewId=${encodeURIComponent(currentPreviewId)}`;
-            return;
-        }*/
-
         // обычные файлы
         window.location.href = item.downloadUrl;
     };
 
 }
-/*sortBtn.onclick = () => {
-    sortModal.classList.remove("hidden");
-};*/
+
 sortBtn.onclick = () => {
     updateSortButtonsState();
     sortModal.classList.remove("hidden");
@@ -2185,11 +2727,11 @@ confirmDownloadFormatBtn.onclick = async () => {
 
     closeDownloadFormatModal();
 
-        if (format === "original") {
-            if (previewId) {
-                showDownloadActionToast(item);
-                return;
-            }
+    if (format === "original") {
+        if (previewId) {
+            showDownloadActionToast(item);
+            return;
+        }
         window.location.href = item.downloadUrl;
         return;
     }
@@ -2234,17 +2776,14 @@ propertiesModal.addEventListener("click", (e) => {
         propertiesModal.classList.add("hidden");
     }
 });
-sortDirectionBtn.onclick = async () => {
+sortDirectionBtn.onclick = () => {
     sortDirection = sortDirection === "asc" ? "desc" : "asc";
+
+    localStorage.setItem("sortField", sortField);
     localStorage.setItem("sortDirection", sortDirection);
 
-    sortDirectionBtn.dataset.direction = sortDirection;
-    sortDirectionBtn.textContent =
-        sortDirection === "asc"
-            ? "↑ От меньшего к большему"
-            : "↓ От большего к меньшему";
     updateSortButtonsState();
-    await loadFiles(currentPath);
+    loadFiles(currentPath);
 };
 cancelPreviewBuildBtn.onclick = async () => {
     if (previewStatusTimer) {
@@ -2642,6 +3181,15 @@ toggleTransfersBtn.onclick = () => {
     }
 };
 
+function debounce(fn, delay = 100) {
+    let timer;
+
+    return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
 function escapeHtml(value) {
     return value
         .replaceAll("&", "&amp;")
@@ -2656,6 +3204,47 @@ if (savedTopbarState === "1") {
     setTopbarCollapsed(true);
 }
 restoreTransferTasks();
+//window.addEventListener("scroll", debounce(loadVisibleMetadata, 200));
+document.addEventListener("DOMContentLoaded", () => {
+    loadFiles();
+    window.metadataLoadingModal = document.getElementById("metadataLoadingModal");
+    window.metadataLoadingBar = document.getElementById("metadataLoadingBar");
+    window.metadataLoadingCount = document.getElementById("metadataLoadingCount");
+    window.metadataLoadingText = document.getElementById("metadataLoadingText");
+});
+async function handleLoadMoreScroll() {
+    if (!currentPreparedJobId || preparedAllLoaded || loading) return;
 
-loadFiles();
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const windowHeight = window.innerHeight;
+    const fullHeight = document.documentElement.scrollHeight;
+
+    const nearBottom = scrollTop + windowHeight >= fullHeight - 1200;
+
+    if (nearBottom) {
+        await loadPreparedPage(currentPreparedJobId);
+    }
+}
+
+window.addEventListener("scroll", handleLoadMoreScroll);
+
+/*Запрет масштабирования галереи*/
+let lastTouchEnd = 0;
+
+document.addEventListener("touchend", function (event) {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+        event.preventDefault();
+    }
+    lastTouchEnd = now;
+}, { passive: false });
+document.addEventListener("gesturestart", function (e) {
+    e.preventDefault();
+});
+document.addEventListener("gesturechange", function (e) {
+    e.preventDefault();
+});
+document.addEventListener("gestureend", function (e) {
+    e.preventDefault();
+});
 updateSortButtonsState();

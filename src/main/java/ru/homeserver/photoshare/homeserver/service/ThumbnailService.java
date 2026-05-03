@@ -1,14 +1,5 @@
 package ru.homeserver.photoshare.homeserver.service;
 
-import com.drew.imaging.ImageMetadataReader;
-import com.drew.metadata.Metadata;
-import com.drew.metadata.exif.ExifIFD0Directory;
-import com.drew.metadata.exif.ExifSubIFDDirectory;
-import com.drew.metadata.exif.GpsDirectory;
-import com.drew.metadata.jpeg.JpegDirectory;
-import com.drew.metadata.png.PngDirectory;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,18 +12,15 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.Semaphore;
-import java.util.stream.Stream;
 
 @Service
 public class ThumbnailService {
@@ -78,6 +66,7 @@ public class ThumbnailService {
     }
     public Path getOrCreateVideoThumbnail(Path videoPath) throws IOException, InterruptedException {
         String ext = getExtension(videoPath.getFileName().toString()).toLowerCase(Locale.ROOT);
+
         if ("insv".equals(ext) || "lrv".equals(ext)) {
 
             String hash = sha256(videoPath.toAbsolutePath().normalize().toString());
@@ -86,43 +75,57 @@ public class ThumbnailService {
             if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
                 return thumbnail;
             }
-            ProcessBuilder pb = new ProcessBuilder(
-                    ffmpegPath,
-                    "-y",
-                    "-ss", "00:00:01",
-                    "-i", videoPath.toAbsolutePath().toString(),
-                    "-vf", "scale=320:-1",
-                    "-frames:v", "1",
-                    "-q:v", "5",
-                    thumbnail.toAbsolutePath().toString()
-            );
 
-            pb.redirectErrorStream(true);
+            boolean acquired = false;
 
-            Process process = pb.start();
+            try {
+                videoSemaphore.acquire();
+                acquired = true;
 
-            StringBuilder log = new StringBuilder();
+                if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+                    return thumbnail;
+                }
 
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                ProcessBuilder pb = new ProcessBuilder(
+                        ffmpegPath,
+                        "-y",
+                        "-i", videoPath.toAbsolutePath().toString(),
+                        "-vf", "select=eq(n\\,0),scale=320:-2",
+                        "-frames:v", "1",
+                        "-q:v", "5",
+                        thumbnail.toAbsolutePath().toString()
+                );
 
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.append(line).append(System.lineSeparator());
+                pb.redirectErrorStream(true);
+
+                Process process = pb.start();
+
+                StringBuilder log = new StringBuilder();
+
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        log.append(line).append(System.lineSeparator());
+                    }
+                }
+
+                int exitCode = process.waitFor();
+
+                if (exitCode != 0 || !Files.exists(thumbnail) || Files.size(thumbnail) == 0) {
+                    Files.deleteIfExists(thumbnail);
+                    System.out.println("FFmpeg INSV/LRV thumbnail skipped for: " + videoPath);
+                    return null;
+                }
+
+                return thumbnail;
+
+            } finally {
+                if (acquired) {
+                    videoSemaphore.release();
                 }
             }
-
-            int exitCode = process.waitFor();
-
-            if (exitCode != 0 || !Files.exists(thumbnail) || Files.size(thumbnail) == 0) {
-                Files.deleteIfExists(thumbnail);
-                System.out.println("FFmpeg INSV/LRV thumbnail failed:");
-                System.out.println(log);
-                return null;
-            }
-
-            return thumbnail;
-
         }
 
         if (!isVideoExtension(ext)) {
@@ -146,11 +149,29 @@ public class ThumbnailService {
                 return output;
             }
 
-            generateVideoThumbnail(videoPath, output);
+            /*generateVideoThumbnail(videoPath, output);
 
             if (Files.exists(output) && Files.size(output) > 0) {
                 return output;
             }
+
+            return null;*/
+            try {
+                generateVideoThumbnail(videoPath, output);
+            } catch (Exception e) {
+                Files.deleteIfExists(output);
+                System.out.println("⚠️ Video thumbnail skipped for: " + videoPath);
+                System.out.println("Reason: too short / no frames / corrupted video");
+                return null;
+            }
+
+            if (Files.exists(output) && Files.size(output) > 0) {
+                return output;
+            }
+
+            Files.deleteIfExists(output);
+            System.out.println("⚠️ Video thumbnail skipped for: " + videoPath);
+            System.out.println("Reason: no thumbnail file created");
 
             return null;
         } catch (InterruptedException e) {
@@ -182,7 +203,7 @@ public class ThumbnailService {
         );
 
         pb.redirectErrorStream(true);
-
+        try {
         Process process = pb.start();
 
         StringBuilder log = new StringBuilder();
@@ -196,23 +217,27 @@ public class ThumbnailService {
             }
         }
 
-        try {
-            int exitCode = process.waitFor();
 
+            int exitCode = process.waitFor();
             if (exitCode != 0 || !Files.exists(thumbnail) || Files.size(thumbnail) == 0) {
                 Files.deleteIfExists(thumbnail);
-                throw new IOException(
-                        "ImageMagick failed to convert HEIC: " + file +
-                                "\nExit code: " + exitCode +
-                                "\nLog:\n" + log
-                );
-            }
 
+                System.out.println("⚠️ HEIC thumbnail skipped for: " + file);
+                System.out.println("Reason: ImageMagick failed (too short/corrupted/unsupported)");
+                System.out.println("Exit code: " + exitCode);
+
+                return null;
+            }
             return thumbnail;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+
+        } catch (Exception e) {
             Files.deleteIfExists(thumbnail);
-            throw new IOException("HEIC conversion interrupted", e);
+
+            System.out.println("⚠️ HEIC thumbnail skipped for: " + file);
+            System.out.println("Reason: exception during conversion");
+            e.printStackTrace();
+
+            return null;
         }
     }
     public Path getOrCreateImageThumbnail(Path imagePath) throws IOException {
@@ -259,8 +284,52 @@ public class ThumbnailService {
             }
         }
     }
-
     private void generateVideoThumbnail(Path input, Path output) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(
+                ffmpegPath,
+                "-y",
+
+                "-i", input.toAbsolutePath().toString(),
+
+                "-vf", "select=eq(n\\,0),scale=320:-2",
+                "-frames:v", "1",
+
+                output.toAbsolutePath().toString()
+        );
+
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+
+        StringBuilder ffmpegLog = new StringBuilder();
+
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                ffmpegLog.append(line).append(System.lineSeparator());
+            }
+        }
+
+        try {
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0 || !Files.exists(output) || Files.size(output) == 0) {
+                Files.deleteIfExists(output);
+
+                System.out.println("FFmpeg thumbnail skipped for: " + input);
+                System.out.println("Reason: no video frame or too short/corrupted video");
+                System.out.println("FFmpeg exit code: " + exitCode);
+                return;
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Files.deleteIfExists(output);
+            return;
+        }
+    }
+    /*private void generateVideoThumbnail(Path input, Path output) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(
                 ffmpegPath,
                 "-y",
@@ -299,7 +368,7 @@ public class ThumbnailService {
             Files.deleteIfExists(output);
             throw new IOException("Thumbnail generation interrupted", e);
         }
-    }
+    }*/
 
     private void generateImageThumbnail(Path input, Path output, int maxWidth, int maxHeight, float quality) throws IOException {
         BufferedImage original = ImageIO.read(input.toFile());

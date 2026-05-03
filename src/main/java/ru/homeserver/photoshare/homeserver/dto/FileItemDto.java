@@ -66,6 +66,8 @@ public record FileItemDto(
         long lastModified,
         // Дата создания из метаданных, если есть.
         // Если нет — fallback на дату изменения.
-        long createdAt
+        long createdAt,
+        Long fileCount,
+        Long folderCount
 ) {
 }

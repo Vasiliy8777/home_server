@@ -9,7 +9,7 @@
       Кодировка UTF-8 нужна, чтобы русский текст корректно отображался
     -->
 
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
     <!--
       Нужно для адаптивного отображения на телефоне
     -->
@@ -27,8 +27,24 @@
         <div class="topbar-inner">
             <div class="path-row">
                 <span id="currentPath">/</span>
+                <div id="folderLoadingRing" class="folder-loading-ring hidden">
+                    <svg viewBox="0 0 36 36">
+                        <path class="ring-bg"
+                              d="M18 2.0845
+                 a 15.9155 15.9155 0 0 1 0 31.831
+                 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        <path id="folderLoadingRingProgress"
+                              class="ring-progress"
+                              stroke-dasharray="0, 100"
+                              d="M18 2.0845
+                 a 15.9155 15.9155 0 0 1 0 31.831
+                 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <div id="folderLoadingPercent" class="folder-loading-percent">0%</div>
+                </div>
                 <button id="toggleTopbarBtn" class="topbar-toggle-btn">▴</button>
             </div>
+
             <div class="actions-row">
 
                 <div class="toolbar-group">
@@ -76,7 +92,7 @@
 
     <div class="viewer-content">
         <div class="viewer-toolbar">
-            <button id="selectViewerBtn">Выбрать</button>
+            <button id="selectViewerBtn" class="viewer-btn">Выбрать</button>
             <button id="downloadViewerBtn" class="viewer-btn">Скачать</button>
             <button id="fullscreenViewerBtn" class="viewer-btn">⛶</button>
             <button id="closeViewer" class="viewer-btn close-btn">✕</button>
@@ -302,6 +318,22 @@
     </div>
     <div id="transferList"></div>
 </div>
+<div id="toast" class="toast hidden"></div>
+<div id="metadataLoadingModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content metadata-loading-content">
+        <h3>Подготовка папки</h3>
+
+        <p id="metadataLoadingText">Обработка метаданных...</p>
+
+        <div class="metadata-progress">
+            <div id="metadataLoadingBar"></div>
+        </div>
+
+        <div id="metadataLoadingCount">0 из 0 файлов</div>
+    </div>
+</div>
 <script src="/app.js"></script>
 <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
 <div id="actionToast" class="toast hidden">
@@ -312,5 +344,11 @@
         <button id="toastGoToFile" class="secondary-btn">Перейти к файлу</button>
     </div>
 </div>
+<!--<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        eruda.init();
+    }
+</script>-->
 </body>
 </html>

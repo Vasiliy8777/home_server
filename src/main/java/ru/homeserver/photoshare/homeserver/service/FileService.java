@@ -44,9 +44,18 @@ public class FileService {
     private static final List<String> HIDDEN_DIRS = List.of(
             ".thumbnails",
             ".upload_tmp",
-            ".preview_journal"
+            ".preview_journal",
+            ".metadata_cache"
     );
+    public long countItems(String relativePath) throws IOException {
+        Path current = resolveSafe(relativePath);
 
+        try (Stream<Path> stream = Files.list(current)) {
+            return stream
+                    .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
+                    .count();
+        }
+    }
     public FileService(MetadataService metadataService, @Value("${app.storage-root}") String storageRoot) throws IOException {
         this.metadataService = metadataService;
 
@@ -83,14 +92,14 @@ public class FileService {
      * "photos"          -> папка photos
      * "photos/2026"     -> подпапка
      */
-    public List<FileItemDto> list(String relativePath) throws IOException {
+    public List<FileItemDto> list(String relativePath, int offset, int limit) throws IOException {
         /*
          * resolveSafe() делает две вещи:
          * 1) строит реальный путь на диске
          * 2) проверяет, что он не выходит за rootPath
          */
         Path current = resolveSafe(relativePath);
-
+        String absolutePath;
         /*
          * Проверяем, что папка существует
          */
@@ -115,123 +124,106 @@ public class FileService {
          * но не обходит рекурсивно все подпапки.
          */
         try (Stream<Path> stream = Files.list(current)) {
-            stream.filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString())).sorted(
+            List<Path> all = stream
+                    .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
+                    .sorted(
                             Comparator
-                                    /*
-                                     * Хотим, чтобы сначала шли папки, потом файлы.
-                                     *
-                                     * Files.isDirectory(p) -> true для папки
-                                     * Но мы сравниваем !Files.isDirectory(p),
-                                     * чтобы папки стали "меньше" файлов при сортировке.
-                                     */
                                     .comparing((Path p) -> !Files.isDirectory(p))
-
-                                    /*
-                                     * Внутри групп сортируем по имени без учета регистра
-                                     */
                                     .thenComparing(p -> p.getFileName().toString().toLowerCase(Locale.ROOT))
                     )
-                    .forEach(path -> {
-                        try {
-                            boolean isDir = Files.isDirectory(path);
+                    .skip(offset)
+                    .limit(limit)
+                    .toList();
 
-                            /*
-                             * rootPath.relativize(path)
-                             * превращает абсолютный путь в относительный относительно корня.
-                             *
-                             * Например:
-                             * rootPath = D:/MediaLibrary
-                             * path     = D:/MediaLibrary/photos/a.jpg
-                             * result   = photos/a.jpg
-                             */
-                            Path rel = rootPath.relativize(path);
+            for (Path path : all) {
+                try {
+                    boolean isDir = Files.isDirectory(path);
 
-                            /*
-                             * replace("\\", "/")
-                             * нужен, чтобы на Windows слеши были единообразные
-                             * и фронтенду было проще работать.
-                             */
-                            String relStr = rel.toString().replace("\\", "/");
+                    Path rel = rootPath.relativize(path);
+                    String relStr = rel.toString().replace("\\", "/");
 
-                            /*
-                             * Размер файла.
-                             * Для директории поставим 0.
-                             */
-                            long size = isDir ? 0L : Files.size(path);
+                    long size = isDir ? 0L : Files.size(path);
+                    String type = detectType(path, isDir);
 
-                            /*
-                             * Определяем логический тип файла.
-                             */
-                            String type = detectType(path, isDir);
+                    String previewUrl = null;
+                    String downloadUrl = isDir ? null : "/api/files/download?path=" + encodePath(relStr);
+                    String thumbnailUrl = null;
 
-                            /*
-                             * previewUrl —
-                             * по какому URL браузер сможет открыть сам файл.
-                             *
-                             * Для папки такого URL нет.
-                             */
-                            //String previewUrl = isDir ? null : "/api/files/raw?path=" + encodePath(relStr);
-                            String previewUrl = null;
-                            String downloadUrl = isDir ? null : "/api/files/download?path=" + encodePath(relStr);
-                            String thumbnailUrl = null;
-                            if (!isDir) {
-                                if ("image".equals(type)) {
-                                    previewUrl = "/api/files/raw?path=" + encodePath(relStr);
-                                    thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
-                                } else if ("video".equals(type)) {
+                    if (!isDir) {
+                        if ("image".equals(type)) {
+                            previewUrl = "/api/files/raw?path=" + encodePath(relStr);
+                            thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
+                        } else if ("video".equals(type)) {
+                            String lower = relStr.toLowerCase();
 
-                                    String lower = relStr.toLowerCase();
-
-                                    if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
-                                        previewUrl = "/api/files/video-proxy?path=" + encodePath(relStr);
-                                    } else {
-                                        previewUrl = "/api/files/stream?path=" + encodePath(relStr);
-                                    }
-
-                                    thumbnailUrl = "/api/files/video-thumbnail?path=" + encodePath(relStr);
-                                }
-                                 else {
-                                    previewUrl = "/api/files/raw?path=" + encodePath(relStr);
-                                }
+                            if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+                                previewUrl = "/api/files/video-proxy?path=" + encodePath(relStr);
+                            } else {
+                                previewUrl = "/api/files/stream?path=" + encodePath(relStr);
                             }
-                            long modified = Files.getLastModifiedTime(path).toMillis();
-                            long createdAt = modified; // временно = modified
-                            /*long createdAt = Files.isDirectory(path)
-                                    ? modified
-                                    : metadataService.readCreatedAtMillis(path);*/
-                            /*
-                             * Создаем DTO и добавляем в результат
-                             */
-                            result.add(new FileItemDto(
-                                    path.getFileName().toString(),
-                                    relStr,
-                                    isDir,
-                                    size,
-                                    type,
-                                    previewUrl,
-                                    thumbnailUrl,
-                                    downloadUrl,
-                                    modified,
-                                    createdAt
-                            ));
-                        } catch (IOException e) {
-                            /*
-                             * Внутри stream.forEach checked exceptions неудобны,
-                             * поэтому оборачиваем в RuntimeException.
-                             */
-                            throw new RuntimeException(e);
-                        }
-                    });
-        }
 
+                            thumbnailUrl = "/api/files/video-thumbnail?path=" + encodePath(relStr);
+                        } else {
+                            previewUrl = "/api/files/raw?path=" + encodePath(relStr);
+                        }
+                    }
+                    long modified = Files.getLastModifiedTime(path).toMillis();
+
+                    /*long createdAt = isDir
+                            ? modified
+                            : metadataService.readCreatedAtMillisCached(path);*/
+                    long createdAt = modified;
+
+                    result.add(new FileItemDto(
+                            path.getFileName().toString(),
+                            relStr,
+                            isDir,
+                            size,
+                            type,
+                            previewUrl,
+                            thumbnailUrl,
+                            downloadUrl,
+                            modified,
+                            createdAt,
+                            null,
+                            null
+                    ));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
         return result;
     }
-    /*public FolderNodeDto getFolderTree() throws IOException {
-        return buildFolderNode(rootPath);
-    }*/
     private FolderNodeDto buildFolderTree() throws IOException {
         return buildFolderNode(rootPath);
     }
+
+    private long[] countDirectFolderChildren(Path folder) {
+        long files = 0;
+        long folders = 0;
+
+        try (Stream<Path> stream = Files.list(folder)) {
+            for (Path child : stream.toList()) {
+                String name = child.getFileName().toString();
+
+                if (HIDDEN_DIRS.contains(name)) {
+                    continue;
+                }
+
+                if (Files.isDirectory(child)) {
+                    folders++;
+                } else {
+                    files++;
+                }
+            }
+        } catch (IOException e) {
+            return new long[]{0, 0};
+        }
+
+        return new long[]{files, folders};
+    }
+
     public void move(String sourceRelativePath, String targetDirectoryRelativePath) throws IOException {
         Path source = resolveSafe(sourceRelativePath);
         Path targetDirectory = resolveSafe(targetDirectoryRelativePath);
@@ -516,6 +508,7 @@ public class FileService {
 
         return "file";
     }
+
     /*
      * Очень простое экранирование пробелов.
      *
@@ -525,12 +518,14 @@ public class FileService {
     private String encodePath(String path) {
         return path.replace(" ", "%20");
     }
+
     private boolean isVideoExtension(String ext) {
         return switch (ext.toLowerCase()) {
             case "mp4", "mov", "avi", "mkv", "webm", "m4v", "ogv", "insv", "lrv" -> true;
             default -> false;
         };
     }
+
     private boolean isImageExtension(String ext) {
         return switch (ext.toLowerCase()) {
             case "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "tif", "tiff",
@@ -538,10 +533,12 @@ public class FileService {
             default -> false;
         };
     }
+
     private String getExtension(String filename) {
         int index = filename.lastIndexOf('.');
         return index >= 0 ? filename.substring(index + 1) : "";
     }
+
     @PostConstruct
     public void initFolderTreeCache() {
         try {
@@ -550,6 +547,7 @@ public class FileService {
             e.printStackTrace();
         }
     }
+
     public FolderNodeDto getFolderTreeCached() throws IOException {
         if (cachedFolderTree == null) {
             rebuildFolderTreeCache();
@@ -557,6 +555,7 @@ public class FileService {
 
         return cachedFolderTree;
     }
+
     public synchronized void rebuildFolderTreeCache() throws IOException {
         this.cachedFolderTree = buildFolderTree();
     }

@@ -12,8 +12,10 @@ server:
 app:
   # Корневая папка на диске, которую мы открываем в веб-интерфейсе.
   # Все операции будут разрешены только внутри этой папки.
+  metadata-cache-dir: G:/arc_Y_disc/.metadata_cache
   storage-root: G:/arc_Y_disc
   magick-path: magick
+  ffprobe-path: ffprobe
   # Путь к ffmpeg.
   # Если ffmpeg добавлен в PATH системы,
   # можно просто оставить "ffmpeg".
