@@ -9,8 +9,8 @@ import com.drew.metadata.jpeg.JpegDirectory;
 import com.drew.metadata.png.PngDirectory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import ru.homeserver.photoshare.homeserver.config.AppProperties;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,8 +30,7 @@ import java.util.stream.Stream;
 public class MetadataService {
 
     private final String ffprobePath;
-    /*private final Map<Path, Long> createdCache = new ConcurrentHashMap<>();
-    private final Map<Path, Map<String, Object>> folderCache = new ConcurrentHashMap<>();*/
+
 
     private final Map<Path, Long> createdAtCache = new ConcurrentHashMap<>();
     private final Map<Path, Map<String, Object>> folderStatsCache = new ConcurrentHashMap<>();
@@ -40,50 +39,86 @@ public class MetadataService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Path metadataCacheRoot;
 
-    public MetadataService(
-            @Value("${app.ffprobe-path:ffprobe}") String ffprobePath,
-            @Value("${app.metadata-cache-dir:.metadata_cache}") String metadataCacheDir
-    ) throws IOException {
-        this.ffprobePath = ffprobePath;
-        this.metadataCacheRoot = Path.of(metadataCacheDir);
+    public MetadataService(AppProperties appProperties) throws IOException {
+        this.ffprobePath = appProperties.getFfprobePath() != null
+                ? appProperties.getFfprobePath()
+                : "ffprobe";
+
+        this.metadataCacheRoot = Path.of(appProperties.getMetadataCacheDir());
         Files.createDirectories(this.metadataCacheRoot);
     }
+    private long computeFolderSignature(Path folder) {
+        try (Stream<Path> stream = Files.list(folder)) {
+            return stream
+                    .mapToLong(p -> {
+                        try {
+                            return Files.getLastModifiedTime(p).toMillis();
+                        } catch (IOException e) {
+                            return 0L;
+                        }
+                    })
+                    .sum();
+        } catch (IOException e) {
+            return 0L;
+        }
+    }
+    private Path folderCacheDir(Path folder) throws IOException {
+        String safeDir = folder.toAbsolutePath().normalize().toString()
+                .replace(":", "")
+                .replace("\\", "_")
+                .replace("/", "_");
 
-    /*public MetadataService(@Value("${app.ffprobe-path:ffprobe}") String ffprobePath) {
-        this.ffprobePath = ffprobePath;
-    }*/
-    private Path cacheFileFor(Path path, String suffix) {
-        String key = Integer.toHexString(path.toAbsolutePath().normalize().toString().hashCode());
-        return metadataCacheRoot.resolve(key + "." + suffix + ".json");
+        Path dir = metadataCacheRoot.resolve(safeDir);
+        Files.createDirectories(dir);
+
+        return dir;
     }
 
-    private Map<String, Object> readJsonCache(Path path, String suffix) {
+    private String safeFileName(Path file) {
+        return file.getFileName().toString()
+                .replace("\\", "_")
+                .replace("/", "_")
+                .replace(":", "_");
+    }
+
+    private Path filePropertiesCacheFile(Path file) throws IOException {
+        Path folder = file.getParent();
+
+        if (folder == null) {
+            folder = file.toAbsolutePath().normalize().getParent();
+        }
+
+        Path propertiesDir = folderCacheDir(folder).resolve("properties");
+        Files.createDirectories(propertiesDir);
+
+        return propertiesDir.resolve(safeFileName(file) + ".json");
+    }
+
+    private Map<String, Object> readSingleFilePropertiesCache(Path file) {
         try {
-            Path cacheFile = cacheFileFor(path, suffix);
+            Path cacheFile = filePropertiesCacheFile(file);
 
             if (!Files.exists(cacheFile)) {
                 return null;
             }
 
-            Map<String, Object> cache = objectMapper.readValue(cacheFile.toFile(), Map.class);
+            Map<String, Object> wrapper = objectMapper.readValue(cacheFile.toFile(), Map.class);
 
-            long cachedModified = ((Number) cache.getOrDefault("_modifiedMillis", -1)).longValue();
-            long currentModified = Files.getLastModifiedTime(path).toMillis();
+            long cachedModified = ((Number) wrapper.getOrDefault("_modifiedMillis", -1)).longValue();
+            long currentModified = Files.getLastModifiedTime(file).toMillis();
 
             if (cachedModified != currentModified) {
                 Files.deleteIfExists(cacheFile);
                 return null;
             }
 
-            Object value = cache.get("value");
+            Object value = wrapper.get("value");
 
-            if (value instanceof Map<?,?> map) {
+            if (value instanceof Map<?, ?> map) {
                 Map<String, Object> result = new HashMap<>();
-
-                for (Map.Entry<?,?> entry : map.entrySet()) {
+                for (Map.Entry<?, ?> entry : map.entrySet()) {
                     result.put(String.valueOf(entry.getKey()), entry.getValue());
                 }
-
                 return result;
             }
 
@@ -94,17 +129,13 @@ public class MetadataService {
         }
     }
 
-    private void writeJsonCache(Path path, String suffix, Map
-
-            value) {
+    private void writeSingleFilePropertiesCache(Path file, Map<String, Object> value) {
         try {
-            Path cacheFile = cacheFileFor(path, suffix);
+            Path cacheFile = filePropertiesCacheFile(file);
 
-            Map
-
-                    wrapper = new HashMap<>();
-            wrapper.put("_path", path.toAbsolutePath().normalize().toString());
-            wrapper.put("_modifiedMillis", Files.getLastModifiedTime(path).toMillis());
+            Map<String, Object> wrapper = new HashMap<>();
+            wrapper.put("_path", file.toAbsolutePath().normalize().toString());
+            wrapper.put("_modifiedMillis", Files.getLastModifiedTime(file).toMillis());
             wrapper.put("value", value);
 
             objectMapper.writeValue(cacheFile.toFile(), wrapper);
@@ -112,14 +143,11 @@ public class MetadataService {
         } catch (Exception ignored) {
         }
     }
-
     public Map<String, Object> readFileProperties(Path path) throws IOException {
         Path key = path.toAbsolutePath().normalize();
 
-        Map<String, Object> diskCached = readJsonCache(key, "file-properties");
-        if (diskCached != null) {
-            filePropertiesCache.put(key, diskCached);
-            return diskCached;
+        if (Files.isDirectory(key)) {
+            return readFolderProperties(key);
         }
 
         Map<String, Object> memoryCached = filePropertiesCache.get(key);
@@ -127,14 +155,42 @@ public class MetadataService {
             return memoryCached;
         }
 
+        Map<String, Object> diskCached = readSingleFilePropertiesCache(key);
+        if (diskCached != null) {
+            filePropertiesCache.put(key, diskCached);
+            return diskCached;
+        }
+
         Map<String, Object> result = readFilePropertiesUncached(key);
 
         filePropertiesCache.put(key, result);
-        writeJsonCache(key, "file-properties", result);
+        writeSingleFilePropertiesCache(key, result);
 
         return result;
     }
+    public long readCreatedAtFromPropertiesCache(Path file) {
+        try {
+            Map<String, Object> props = readFileProperties(file);
 
+            Object createdMillis = props.get("createdMillis");
+            if (createdMillis instanceof Number number) {
+                return number.longValue();
+            }
+
+            Object modifiedMillis = props.get("modifiedMillis");
+            if (modifiedMillis instanceof Number number) {
+                return number.longValue();
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return Files.getLastModifiedTime(file).toMillis();
+        } catch (IOException e) {
+            return 0L;
+        }
+    }
     /*public Map<String, Object> readFileProperties(Path path) throws IOException {*/
     private Map<String, Object> readFilePropertiesUncached(Path path) throws IOException {
         if (Files.isDirectory(path)) {
@@ -179,26 +235,23 @@ public class MetadataService {
 
         return result;
     }
-
     public long readCreatedAtMillis(Path path) {
-        String lower = path.getFileName().toString().toLowerCase();
-
-        if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
-            try {
-                return Files.getLastModifiedTime(path).toMillis();
-            } catch (IOException e) {
-                return 0L;
-            }
-        }
         try {
-            Map<String, Object> props = readFileProperties(path);
-            Object created = props.get("createdMillis");
+            String lower = path.getFileName().toString().toLowerCase();
 
-            if (created instanceof Number number) {
-                return number.longValue();
+            if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
+                return Files.getLastModifiedTime(path).toMillis();
             }
-        } catch (Exception ignored) {
-        }
+
+            Metadata metadata = ImageMetadataReader.readMetadata(path.toFile());
+
+            ExifSubIFDDirectory exif = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+
+            if (exif != null && exif.getDateOriginal() != null) {
+                return exif.getDateOriginal().getTime();
+            }
+
+        } catch (Exception ignored) {}
 
         try {
             return Files.getLastModifiedTime(path).toMillis();
@@ -231,78 +284,12 @@ public class MetadataService {
     public Map<String, Object> readFolderStats(Path folder) {
         Path key = folder.toAbsolutePath().normalize();
 
-        Map<String, Object> diskCached = readJsonCache(key, "folder-stats");
-        if (diskCached != null) {
-            return diskCached;
+        Map<String, Object> memoryCached = folderStatsCache.get(key);
+        if (memoryCached != null) {
+            return memoryCached;
         }
 
         Map<String, Object> result = folderStatsCache.computeIfAbsent(key, f -> {
-            try {
-                long size = 0;
-                long files = 0;
-                long folders = 0;
-
-                try (Stream<Path> stream = Files.walk(f)) {
-                    for (Path p : stream.toList()) {
-                        if (Files.isDirectory(p)) {
-                            if (!p.equals(f)) {
-                                folders++;
-                            }
-                        } else {
-                            files++;
-                            size += Files.size(p);
-                        }
-                    }
-                }
-
-                Map<String, Object> map = new HashMap<>();
-                map.put("size", size);
-                map.put("fileCount", files);
-                map.put("folderCount", folders);
-
-                return map;
-
-            } catch (Exception e) {
-                return Map.of(
-                        "size", 0,
-                        "fileCount", 0,
-                        "folderCount", 0
-                );
-            }
-        });
-
-        writeJsonCache(key, "folder-stats", result);
-
-        return result;
-    }
-    public long readCreatedAtMillisCached(Path file) {
-        try {
-            Map<String, Object> props = readFileProperties(file);
-
-            Object created = props.get("createdMillis");
-            if (created instanceof Number number) {
-                return number.longValue();
-            }
-
-            Object modified = props.get("modifiedMillis");
-            if (modified instanceof Number number) {
-                return number.longValue();
-            }
-
-        } catch (Exception ignored) {
-        }
-
-        try {
-            return Files.getLastModifiedTime(file).toMillis();
-        } catch (IOException e) {
-            return 0L;
-        }
-    }
-    /*public Map<String, Object> readFolderStats(Path folder) {
-        *//*return folderStatsCache.computeIfAbsent(folder, f -> {*//*
-
-        Path key = folder.toAbsolutePath().normalize();
-        return folderStatsCache.computeIfAbsent(key, f -> {
             try {
                 long size = 0;
                 long files = 0;
@@ -319,106 +306,19 @@ public class MetadataService {
                     }
                 }
 
-                Map<String, Object> result = new HashMap<>();
-                result.put("size", size);
-                result.put("fileCount", files);
-                result.put("folderCount", folders);
-
-                return result;
+                Map<String, Object> map = new HashMap<>();
+                map.put("size", size);
+                map.put("fileCount", files);
+                map.put("folderCount", folders);
+                return map;
 
             } catch (Exception e) {
-                return Map.of(
-                        "size", 0,
-                        "fileCount", 0,
-                        "folderCount", 0
-                );
+                return Map.of("size", 0, "fileCount", 0, "folderCount", 0);
             }
         });
-    }*/
-    /*public Map<String, Object> readFolderStats(Path folder) throws IOException {
-        Path key = folder.toAbsolutePath().normalize();
-
-        Map<String, Object> cached = folderCache.get(key);
-        if (cached != null) {
-            return cached;
-        }
-
-        long[] files = {0};
-        long[] folders = {0};
-        long[] totalSize = {0};
-
-        try (Stream<Path> stream = Files.walk(folder)) {
-            stream
-                    .filter(p -> !p.equals(folder))
-                    .forEach(p -> {
-                        try {
-                            if (Files.isDirectory(p)) {
-                                folders[0]++;
-                            } else {
-                                files[0]++;
-                                totalSize[0] += Files.size(p);
-                            }
-                        } catch (IOException ignored) {
-                        }
-                    });
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("fileCount", files[0]);
-        result.put("folderCount", folders[0]);
-        result.put("size", totalSize[0]);
-        result.put("folderStatsLoading", false);
-
-        folderCache.put(key, result);
 
         return result;
-    }*/
-
-
-    /*public long readCreatedAtMillisCached(Path path) {
-        return createdCache.computeIfAbsent(
-                path.toAbsolutePath().normalize(),
-                this::readCreatedAtMillis
-        );
-    }*/
-    /*public long readCreatedAtMillisCached(Path file) {
-        Path key = file.toAbsolutePath().normalize();
-
-        Map<String, Object> diskCached = readJsonCache(key, "created-at");
-        if (diskCached != null && diskCached.get("createdAt") instanceof Number number) {
-            return number.longValue();
-        }
-
-        long createdAt = createdAtCache.computeIfAbsent(key, f -> {
-            try {
-                return readCreatedAtMillis(f);
-            } catch (Exception e) {
-                try {
-                    return Files.getLastModifiedTime(f).toMillis();
-                } catch (IOException ex) {
-                    return 0L;
-                }
-            }
-        });
-
-        writeJsonCache(key, "created-at", Map.of("createdAt", createdAt));
-
-        return createdAt;
-    }*/
-    /*public long readCreatedAtMillisCached(Path file) {
-        *//*return createdAtCache.computeIfAbsent(file, f -> {*//*
-
-        Path key = file.toAbsolutePath().normalize();
-        return createdAtCache.computeIfAbsent(key, f -> {
-            try {
-                return Files.readAttributes(f, BasicFileAttributes.class)
-                        .creationTime()
-                        .toMillis();
-            } catch (IOException e) {
-                return System.currentTimeMillis();
-            }
-        });
-    }*/
+    }
     private Map<String, Object> readFolderProperties(Path folder) throws IOException {
         Map<String, Object> map = baseProperties(folder);
 
@@ -566,22 +466,6 @@ public class MetadataService {
                 .atZone(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
     }
-   /* public void clearFolderCache() {
-        *//*folderCache.clear();*//*
-        folderStatsCache.clear();
-        createdAtCache.clear();
-        try (Stream<Path> stream = Files.list(metadataCacheRoot)) {
-            stream
-                    .filter(Files::isRegularFile)
-                    .forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException ignored) {
-                        }
-                    });
-        } catch (IOException ignored) {
-        }
-    }*/
 
     public void clearFolderCache() {
         folderStatsCache.clear();

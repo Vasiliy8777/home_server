@@ -9,17 +9,10 @@ let currentItems = [];
 let virtualStart = -1;
 let virtualEnd = -1;
 let virtualTotalCount = -1;
-let virtualRenderScheduled = false;
-
-const VIRTUAL_BUFFER_ROWS = window.innerWidth <= 768 ? 2 : 4;
-
 let currentPreparedJobId = null;
 let preparedAllLoaded = false;
 
-/*const VIRTUAL_BUFFER = 30;*/
-const CARD_APPROX_HEIGHT = 340;
 
-let pendingResumeTaskId = null;
 let bulkMoveMode = false;
 const selectedItems = new Map();
 
@@ -32,7 +25,7 @@ let sortDirection = localStorage.getItem("sortDirection") || "asc";
 let metadataLoaded = new Set();
 
 let offset = 0;
-/*const LIMIT = 500;*/
+
 let lastLoadTime = 0;
 let folderLoadSession = 0;
 let activeFolderPath = "";
@@ -83,6 +76,9 @@ const downloadMp4FormatBtn = document.getElementById("downloadMp4FormatBtn");
 const confirmDownloadFormatBtn = document.getElementById("confirmDownloadFormatBtn");
 const cancelDownloadFormatBtn = document.getElementById("cancelDownloadFormatBtn");
 
+const metadataLoadingTitle = document.getElementById("metadataLoadingTitle");
+
+
 const metadataCache = new Map();
 
 let pendingDownloadItem = null;
@@ -126,11 +122,8 @@ async function loadFilesPrepared(path = "") {
     currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
 
     showFolderLoadingRing(0);
-    /*showMetadataLoadingModal();*/
+    showMetadataLoadingModal();
 
-    /*const res = await fetch(`/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}`, {
-        method: "POST"
-    });*/
     const res = await fetch(
         `/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}`,
         { method: "POST" }
@@ -146,13 +139,12 @@ async function loadFilesPrepared(path = "") {
         const status = await statusRes.json();
         currentPreparedTotal = status.total || 0;
         ready = status.ready;
-
-        /*updateMetadataLoadingModal(
+        updateMetadataLoadingModal(
             status.progress || 0,
             status.processed || 0,
-            status.total || 0
-        );*/
-
+            status.total || 0,
+            status.stage || "Подготовка папки"
+        );
         updateFolderLoadingRing(status.progress || 0);
 
         if (!ready) {
@@ -160,12 +152,12 @@ async function loadFilesPrepared(path = "") {
         }
     }
 
-    /*hideMetadataLoadingModal();*/
+    hideMetadataLoadingModal();
     currentPreparedJobId = jobId;
 
     await loadPreparedPage(jobId);
 
-    /*setTimeout(handleLoadMoreScroll, 300);*/
+
     updateNavButtons();
 }
 async function loadPreparedPage(jobId) {
@@ -460,11 +452,6 @@ function enqueueMetadata(paths) {
 
     processMetadataQueue();
 }
-
-/*function enqueueMetadata(paths) {
-    METADATA_QUEUE.push(...paths);
-    processMetadataQueue();
-}*/
 function scrollToFile(path) {
     const el = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
     if (!el) return;
@@ -1865,26 +1852,6 @@ function enablePreviewPan(img) {
         }
     });
 }
-/*async function fillMobileStartPages(jobId = currentPreparedJobId) {
-    if (!jobId || jobId !== currentPreparedJobId || preparedAllLoaded) return;
-
-    let guard = 0;
-
-    while (
-        jobId === currentPreparedJobId &&
-        !preparedAllLoaded &&
-        !loading &&
-        gallery.scrollHeight <= gallery.clientHeight + 200 &&
-        guard < 3
-        ) {
-        lastLoadTime = 0;
-        await loadPreparedPage(jobId);
-        scheduleVirtualRender();
-
-        guard++;
-        await new Promise(r => setTimeout(r, 250));
-    }
-}*/
 function appendItems(items) {
     if (!items || items.length === 0) return;
 
@@ -1930,10 +1897,17 @@ function showMetadataLoadingModal() {
     metadataLoadingCount.textContent = "0 из 0 файлов";
 }
 
-function updateMetadataLoadingModal(progress, processed, total) {
+function updateMetadataLoadingModal(progress, processed, total, stage = "Подготовка папки") {
     metadataLoadingBar.style.width = `${progress || 0}%`;
     metadataLoadingCount.textContent = `${processed || 0} из ${total || 0} файлов`;
-    metadataLoadingText.textContent = `Подготовка папки: ${progress || 0}%`;
+    //metadataLoadingText.textContent = `Подготовка папки: ${progress || 0}%`;
+    if (metadataLoadingTitle) {
+        metadataLoadingTitle.textContent = stage;
+    }
+
+    if (metadataLoadingText) {
+        metadataLoadingText.textContent = `${processed} / ${total}`;
+    }
 }
 
 function hideMetadataLoadingModal() {
@@ -1953,68 +1927,6 @@ function updateGalleryScrollMode() {
 
     gallery.classList.toggle("gallery-scroll", needScroll);
 }
-
-/*async function loadMoreFilesInBackground(pathForLoading, sessionId) {
-    if (loading || allLoaded) return;
-
-    loading = true;
-
-    try {
-        const response = await fetch(
-            `/api/files/list?path=${encodeURIComponent(pathForLoading)}&offset=${offset}&limit=${LIMIT}`,
-            {signal: folderLoadAbortController.signal}
-        );
-
-        if (sessionId !== folderLoadSession || currentPath !== pathForLoading) return;
-
-        if (!response.ok) return;
-
-        const data = await response.json();
-
-        if (sessionId !== folderLoadSession || currentPath !== pathForLoading) return;
-
-        const items = sortItems(data.items || []);
-        appendItems(items);
-
-        offset += items.length;
-        totalLoadedItems += items.length;
-
-        const percent = estimatedTotalItems > 0
-            ? Math.min(100, Math.round((totalLoadedItems / estimatedTotalItems) * 100))
-            : 0;
-
-        updateFolderLoadingRing(percent);
-
-        if (items.length < LIMIT) {
-            allLoaded = true;
-            updateFolderLoadingRing(100);
-        }
-    } finally {
-        loading = false;
-    }
-}*/
-
-/*async function loadMoreFiles() {
-    const resp = await fetch(`/api/files/list?path=${encodeURIComponent(currentPath)}&offset=${offset}&limit=${LIMIT}`);
-
-    if (!resp.ok) {
-        loading = false;
-        return;
-    }
-
-    const data = await resp.json();
-    const items = data.items || [];
-
-    appendItems(sortItems(items));
-
-    offset += items.length;
-
-    if (items.length < LIMIT) {
-        allLoaded = true;
-    }
-
-    loading = false;
-}*/
 
 function showFolderLoadingRing(percent = 0) {
     const ring = document.getElementById("folderLoadingRing");
@@ -2044,49 +1956,6 @@ function hideFolderLoadingRing() {
         ring.classList.add("hidden");
     }, 400);
 }
-
-/*async function startBackgroundFolderLoading(pathForLoading, sessionId) {
-    if (backgroundFolderLoading) return;
-
-    backgroundFolderLoading = true;
-
-    try {
-        while (
-            !allLoaded &&
-            sessionId === folderLoadSession &&
-            currentPath === pathForLoading
-            ) {
-            await loadMoreFilesInBackground(pathForLoading, sessionId);
-            const delay = window.innerWidth <= 768 ? 350 : 120;
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    } catch (e) {
-        if (e.name !== "AbortError") {
-            console.error("Background folder loading failed", e);
-        }
-    } finally {
-        backgroundFolderLoading = false;
-
-        if (sessionId === folderLoadSession && currentPath === pathForLoading) {
-            hideFolderLoadingRing();
-        }
-    }
-}
-
-function updateItemsMetadata(metadataMap) {
-    Object.entries(metadataMap).forEach(([path, createdAt]) => {
-
-        const card = document.querySelector(`.file-card[data-path="${CSS.escape(path)}"]`);
-        if (!card) return;
-
-        const meta = card.querySelector(".meta");
-        if (!meta) return;
-
-        const size = meta.dataset.size;
-
-        meta.textContent = `${size} · ${formatDateTime(createdAt)}`;
-    });
-}*/
 
 async function confirmDelete() {
     if (selectedItems.size > 0 && deleteTargetPath == null) {

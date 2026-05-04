@@ -2,6 +2,7 @@ package ru.homeserver.photoshare.homeserver.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import ru.homeserver.photoshare.homeserver.config.AppProperties;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -32,19 +33,18 @@ public class ThumbnailService {
 
     private final String magickPath;
     private final Path thumbnailsRoot;
+    public ThumbnailService(AppProperties appProperties) throws IOException {
+        this.ffmpegPath = appProperties.getFfmpegPath() != null
+                ? appProperties.getFfmpegPath()
+                : "ffmpeg";
 
-    public ThumbnailService(
-            @Value("${app.ffmpeg-path:ffmpeg}") String ffmpegPath,
-            @Value("${app.magick-path:magick}") String magickPath,
-            FileService fileService
-    ) throws IOException {
-        this.ffmpegPath = ffmpegPath;
-        this.magickPath = magickPath;
-        this.thumbnailsRoot = fileService.getRootPath().resolve(".thumbnails");
+        this.magickPath = appProperties.getMagickPath() != null
+                ? appProperties.getMagickPath()
+                : "magick";
+
+        this.thumbnailsRoot = Path.of(appProperties.getThumbnailCacheDir());
         Files.createDirectories(this.thumbnailsRoot);
     }
-
-
     private String formatFileTime(long millis) {
         return java.time.Instant.ofEpochMilli(millis)
                 .atZone(ZoneId.systemDefault())
@@ -148,14 +148,6 @@ public class ThumbnailService {
             if (Files.exists(output) && Files.size(output) > 0) {
                 return output;
             }
-
-            /*generateVideoThumbnail(videoPath, output);
-
-            if (Files.exists(output) && Files.size(output) > 0) {
-                return output;
-            }
-
-            return null;*/
             try {
                 generateVideoThumbnail(videoPath, output);
             } catch (Exception e) {
@@ -329,46 +321,6 @@ public class ThumbnailService {
             return;
         }
     }
-    /*private void generateVideoThumbnail(Path input, Path output) throws IOException {
-        ProcessBuilder pb = new ProcessBuilder(
-                ffmpegPath,
-                "-y",
-                "-ss", "00:00:02",
-                "-i", input.toAbsolutePath().toString(),
-                "-vf", "thumbnail,scale=320:240",
-                "-frames:v", "1",
-                output.toAbsolutePath().toString()
-        );
-
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-
-        StringBuilder ffmpegLog = new StringBuilder();
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-
-            String line;
-            while ((line = reader.readLine()) != null) {
-                ffmpegLog.append(line).append(System.lineSeparator());
-            }
-        }
-
-        try {
-            int exitCode = process.waitFor();
-
-            if (exitCode != 0) {
-                Files.deleteIfExists(output);
-                System.out.println("FFmpeg thumbnail generation failed for: " + input);
-                System.out.println("FFmpeg exit code: " + exitCode);
-                System.out.println("FFmpeg log:\n" + ffmpegLog);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            Files.deleteIfExists(output);
-            throw new IOException("Thumbnail generation interrupted", e);
-        }
-    }*/
 
     private void generateImageThumbnail(Path input, Path output, int maxWidth, int maxHeight, float quality) throws IOException {
         BufferedImage original = ImageIO.read(input.toFile());

@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.*;
 import ru.homeserver.photoshare.homeserver.service.FileService;
 //import ru.homeserver.photoshare.homeserver.service.MetadataService;
@@ -56,13 +57,27 @@ public class FileController {
 
     private final String ffmpegPath;
     private final String ffprobePath;
-
+    private final AppProperties appProperties;
     private final Map<String, Process> previewProcesses = new ConcurrentHashMap<>();
     private final Map<String, Integer> previewProgress = new ConcurrentHashMap<>();
     private final Map<String, Path> previewFiles = new ConcurrentHashMap<>();
     private final MetadataService metadataService;
-
     public FileController(
+            FileService fileService,
+            ThumbnailService thumbnailService,
+            AppProperties appProperties,
+            @Value("${app.ffmpeg-path:ffmpeg}") String ffmpegPath,
+            @Value("${app.ffprobe-path:ffprobe}") String ffprobePath,
+            MetadataService metadataService
+    ) {
+        this.fileService = fileService;
+        this.thumbnailService = thumbnailService;
+        this.appProperties = appProperties;
+        this.ffmpegPath = ffmpegPath;
+        this.ffprobePath = ffprobePath;
+        this.metadataService = metadataService;
+    }
+    /*public FileController(
             FileService fileService,
             ThumbnailService thumbnailService,
             @Value("${app.ffmpeg-path:ffmpeg}") String ffmpegPath,
@@ -73,13 +88,17 @@ public class FileController {
         this.ffmpegPath = ffmpegPath;
         this.ffprobePath = ffprobePath;
         this.metadataService = metadataService;
-    }
-    private Path getUploadTempDir() throws IOException {
+    }*/
+    /*private Path getUploadTempDir() throws IOException {
         Path dir = fileService.getRootPath().resolve(".upload_tmp");
         Files.createDirectories(dir);
         return dir;
+    }*/
+    private Path getUploadTempDir() throws IOException {
+        Path dir = Path.of(appProperties.getPreviewCacheDir()).resolve("upload_tmp");
+        Files.createDirectories(dir);
+        return dir;
     }
-
     private Path getMetaFile(String uploadId) throws IOException {
         return getUploadTempDir().resolve(uploadId + ".meta.json");
     }
@@ -116,7 +135,9 @@ public class FileController {
 
         String previewId = UUID.randomUUID().toString();
 
-        Path tempDir = fileService.getRootPath().resolve(".upload_tmp");
+        /*Path tempDir = fileService.getRootPath().resolve(".upload_tmp");*/
+        Path tempDir = Path.of(appProperties.getPreviewCacheDir());
+
         Files.createDirectories(tempDir);
 
         Path output = tempDir.resolve(previewId + ".preview.mp4");
@@ -225,8 +246,16 @@ public class FileController {
                 "progress", job.progress,
                 "processed", job.processed,
                 "total", job.total,
+                "stage", job.stage,
                 "itemsTotal", job.items != null ? job.items.size() : 0
         );
+        /*return Map.of(
+                "ready", job.ready,
+                "progress", job.progress,
+                "processed", job.processed,
+                "total", job.total,
+                "itemsTotal", job.items != null ? job.items.size() : 0
+        );*/
     }
     @GetMapping("/prepared-items")
     public Map<String, Object> preparedItems(
@@ -508,7 +537,7 @@ public class FileController {
     ) throws IOException {
         fileService.createFolder(path, name);
         fileService.rebuildFolderTreeCache();
-        metadataService.clearFolderCache();
+        /*metadataService.clearFolderCache();*/
         return ResponseEntity.ok(Map.of("message", "Folder created"));
     }
 
@@ -521,7 +550,7 @@ public class FileController {
     public ResponseEntity<Map<String, String>> delete(@RequestParam String path) throws IOException {
         fileService.delete(path);
         fileService.rebuildFolderTreeCache();
-        metadataService.clearFolderCache();
+        /*metadataService.clearFolderCache();*/
         return ResponseEntity.ok(Map.of("message", "Deleted"));
     }
     @GetMapping("/image-thumbnail")
@@ -689,7 +718,7 @@ public class FileController {
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .body(region);
     }
-    @GetMapping("/metadata/created-at")
+    /*@GetMapping("/metadata/created-at")
     public ResponseEntity<?> createdAt(@RequestParam String path) throws IOException {
         Path file = fileService.resolveSafe(path);
 
@@ -697,13 +726,13 @@ public class FileController {
             return ResponseEntity.notFound().build();
         }
         System.out.println("STREAM VERSION 2026-04-30-15-55");
-        long createdAt = metadataService.readCreatedAtMillisCached(file);
+        long createdAt = metadataService.getCreatedAt(file);
 
         return ResponseEntity.ok(Map.of(
                 "path", path,
                 "createdAt", createdAt
         ));
-    }
+    }*/
     @PostMapping("/download/mp4-start")
     public ResponseEntity<?> startDownloadMp4(@RequestParam String path) throws IOException {
         Path source = fileService.resolveSafe(path);
@@ -770,7 +799,7 @@ public class FileController {
 
                 if (Files.isDirectory(file)) continue;
 
-                long created = metadataService.readCreatedAtMillisCached(file);
+                long created = metadataService.readCreatedAtFromPropertiesCache(file);
 
                 result.put(rel, created);
 
@@ -797,7 +826,7 @@ public class FileController {
     ) throws IOException {
         fileService.move(sourcePath, targetPath);
         fileService.rebuildFolderTreeCache();
-        metadataService.clearFolderCache();
+        /*metadataService.clearFolderCache();*/
         return ResponseEntity.ok(Map.of("message", "Moved"));
     }
     @GetMapping("/properties")
@@ -1080,13 +1109,19 @@ public class FileController {
         return false;
     }
     private Path getPreviewJournalDir() throws IOException {
-        Path dir = fileService.getRootPath().resolve(".preview_journal");
+        /*Path dir = fileService.getRootPath().resolve(".preview_journal");*/
+        Path dir = Path.of(appProperties.getPreviewCacheDir()).resolve("journal");
         Files.createDirectories(dir);
         return dir;
     }
 
-    private Path getPreviewJournalFile(String previewId) throws IOException {
+    /*private Path getPreviewJournalFile(String previewId) throws IOException {
         return getPreviewJournalDir().resolve(previewId + ".json");
+    }*/
+    private Path getPreviewJournalFile(String previewId) throws IOException {
+        Path journalDir = fileService.getRootPath().resolve(".preview_journal");
+        Files.createDirectories(journalDir);
+        return journalDir.resolve(previewId + ".json");
     }
 
     private void writePreviewJournal(RenamePreviewSessionDto session) throws IOException {
@@ -1124,7 +1159,7 @@ public class FileController {
                     item.put("folderCount", folders);
                 } else {
                     item.put("directory", false);
-                    item.put("createdAt", metadataService.readCreatedAtMillisCached(path));
+                    item.put("createdAt", metadataService.readCreatedAtFromPropertiesCache(path));
                 }
 
                 result.put(relPath, item);

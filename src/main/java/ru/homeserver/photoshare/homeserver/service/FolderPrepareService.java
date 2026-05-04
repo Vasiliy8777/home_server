@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class FolderPrepareService {
@@ -44,38 +45,6 @@ public class FolderPrepareService {
 
         return jobId;
     }
-
-    /*private void process(FolderPrepareJob job) {
-        try {
-            List<FileItemDto> all = new ArrayList<>();
-
-            int offset = 0;
-            int limit = 200;
-
-            while (true) {
-                List<FileItemDto> batch = fileService.list(job.path, offset, limit);
-
-                if (batch.isEmpty()) break;
-
-                all.addAll(batch);
-
-                offset += limit;
-
-                job.progress = Math.min(95, offset / 50);
-
-                // 🔥 даём дыхание CPU (важно для телефона)
-                Thread.sleep(10);
-            }
-
-            job.items = all;
-            job.ready = true;
-            job.progress = 100;
-
-        } catch (Exception e) {
-            job.ready = true;
-            job.items = List.of();
-        }
-    }*/
     private void process(FolderPrepareJob job) {
         try {
             List<FileItemDto> all = new ArrayList<>();
@@ -93,29 +62,39 @@ public class FolderPrepareService {
                 if (batch.isEmpty()) break;
 
                 all.addAll(batch);
-
+                job.stage = "Загрузка карточек";
                 job.processed = all.size();
                 job.progress = job.total > 0
-                        ? Math.min(99, Math.round(job.processed * 100f / job.total))
-                        : 100;
+                        ? Math.min(49, Math.round(job.processed * 50f / job.total))
+                        : 50;
+
 
                 offset += limit;
 
                 Thread.sleep(10);
             }
+
             ForkJoinPool pool = new ForkJoinPool(4);
 
             List<FileItemDto> source = all;
+            AtomicInteger metadataDone = new AtomicInteger(0);
+            int metadataTotal = source.size();
 
+            job.stage = "Подготовка/Чтение метаданных";
+            job.processed = 0;
+            job.progress = 50;
             List<FileItemDto> enriched = pool.submit(() ->
                     source.parallelStream().map(item -> {
-                        if (!item.directory()) {
-                            try {
-                                long created = metadataService.readCreatedAtMillisCached(
+                        try {
+                            FileItemDto result = item;
+
+                            if (!item.directory()) {
+
+                                long created = metadataService.readCreatedAtFromPropertiesCache(
                                         fileService.resolveSafe(item.relativePath())
                                 );
 
-                                return new FileItemDto(
+                                result = new FileItemDto(
                                         item.name(),
                                         item.relativePath(),
                                         item.directory(),
@@ -129,10 +108,22 @@ public class FolderPrepareService {
                                         item.fileCount(),
                                         item.folderCount()
                                 );
+                            }
 
-                            } catch (Exception ignored) {}
+                            return result;
+
+                        } catch (Exception ignored) {
+                            return item;
+
+                        } finally {
+                            int done = metadataDone.incrementAndGet();
+
+                            job.processed = done;
+                            job.total = metadataTotal;
+                            job.progress = metadataTotal > 0
+                                    ? Math.min(99, 50 + Math.round(done * 49f / metadataTotal))
+                                    : 99;
                         }
-                        return item;
                     }).collect(java.util.stream.Collectors.toCollection(ArrayList::new))
             ).get();
 
@@ -144,13 +135,6 @@ public class FolderPrepareService {
             job.processed = enriched.size();
             job.ready = true;
             job.progress = 100;
-
-            /*all = enriched;
-            all.sort(createComparator(job.sortField, job.sortDirection));
-            job.items = all;
-            job.processed = all.size();
-            job.ready = true;
-            job.progress = 100;*/
 
         } catch (Exception e) {
             e.printStackTrace();

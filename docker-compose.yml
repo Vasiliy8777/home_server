@@ -8,12 +8,20 @@ services:
       - "8080:8080"
     environment:
       APP_STORAGE_ROOT: /data
+      APP_METADATA_CACHE_DIR: /cache/metadata
+      APP_THUMBNAIL_CACHE_DIR: /cache/thumbnails
+      APP_PREVIEW_CACHE_DIR: /cache/previews
+
       APP_FFMPEG_PATH: ffmpeg
+      APP_FFPROBE_PATH: ffprobe
       APP_MAGICK_PATH: convert
-      APP_USERNAME: admin
-      APP_PASSWORD: 12345
+      APP_SECURITY_USERNAME: admin
+      APP_SECURITY_PASSWORD: 12345
       SERVER_ADDRESS: 0.0.0.0
       SERVER_PORT: 8080
     volumes:
       - "G:/arc_Y_disc:/data"
+      - home_gallery_cache:/cache
     restart: unless-stopped
+volumes:
+    home_gallery_cache:

@@ -17,11 +17,12 @@ RUN apt-get update \
         ffmpeg \
         imagemagick \
         libheif1 \
+        libheif-examples \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/build/libs/*.jar app.jar
 
-RUN mkdir -p /data
+RUN mkdir -p /data /cache/metadata /cache/thumbnails /cache/previews
 
 EXPOSE 8080
 

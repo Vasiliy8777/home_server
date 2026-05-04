@@ -2,10 +2,10 @@ package ru.homeserver.photoshare.homeserver.service;
 
 
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.dto.FolderNodeDto;
 
@@ -56,29 +56,11 @@ public class FileService {
                     .count();
         }
     }
-    public FileService(MetadataService metadataService, @Value("${app.storage-root}") String storageRoot) throws IOException {
+    public FileService(MetadataService metadataService, AppProperties appProperties) throws IOException {
         this.metadataService = metadataService;
-
-        /*
-         * Paths.get(storageRoot) создает Path из строки.
-         *
-         * toAbsolutePath() -> превращает путь в абсолютный
-         * normalize() -> убирает лишние "." и ".."
-         *
-         * Пример:
-         * D:/MediaLibrary/../MediaLibrary/photos
-         * ->
-         * D:/MediaLibrary/photos
-         */
-        this.rootPath = Paths.get(storageRoot).toAbsolutePath().normalize();
-
-
-        /*
-         * Создаем корневую папку, если ее еще нет.
-         */
+        this.rootPath = Paths.get(appProperties.getStorageRoot()).toAbsolutePath().normalize();
         Files.createDirectories(this.rootPath);
     }
-
     public Path getRootPath() {
         return rootPath;
     }

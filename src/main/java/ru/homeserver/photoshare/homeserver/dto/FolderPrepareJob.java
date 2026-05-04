@@ -9,6 +9,7 @@ public class FolderPrepareJob {
     public volatile boolean ready;
     public volatile int progress;
 
+    public String stage = "Подготовка папки";
     public List<FileItemDto> items;
     public int processed = 0;
     public int total = 0;
