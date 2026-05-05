@@ -752,7 +752,10 @@ body.topbar-collapsed .container {
     border-radius: 14px;
     background: rgba(0, 0, 0, 0.04);
 }
-
+.topbar-back-btn {
+    white-space: nowrap;
+    padding: 6px 10px;
+}
 .toolbar-group + .toolbar-group {
     margin-left: 4px;
 }

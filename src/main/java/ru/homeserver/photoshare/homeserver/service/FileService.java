@@ -154,8 +154,16 @@ public class FileService {
                     /*long createdAt = isDir
                             ? modified
                             : metadataService.readCreatedAtMillisCached(path);*/
-                    long createdAt = modified;
+                    long createdAt = isDir ? 0L : modified;
+                    Long fileCount = null;
+                    Long folderCount = null;
 
+                    /*long createdAt = modified;*/
+                    if (isDir) {
+                        long[] counts = countDirectFolderChildren(path);
+                        fileCount = counts[0];
+                        folderCount = counts[1];
+                    }
                     result.add(new FileItemDto(
                             path.getFileName().toString(),
                             relStr,
@@ -167,8 +175,8 @@ public class FileService {
                             downloadUrl,
                             modified,
                             createdAt,
-                            null,
-                            null
+                            fileCount,
+                            folderCount
                     ));
                 } catch (IOException e) {
                     throw new RuntimeException(e);

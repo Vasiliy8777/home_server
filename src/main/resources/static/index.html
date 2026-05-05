@@ -26,6 +26,7 @@
     <header class="topbar">
         <div class="topbar-inner">
             <div class="path-row">
+                <button id="toggleTopbarBtn" class="topbar-toggle-btn">▴</button>
                 <span id="currentPath">/</span>
                 <div id="folderLoadingRing" class="folder-loading-ring hidden">
                     <svg viewBox="0 0 36 36">
@@ -42,14 +43,14 @@
                     </svg>
                     <div id="folderLoadingPercent" class="folder-loading-percent">0%</div>
                 </div>
-                <button id="toggleTopbarBtn" class="topbar-toggle-btn">▴</button>
+                <button id="upBtn" class="topbar-back-btn">&larr;</button>
             </div>
 
             <div class="actions-row">
 
                 <div class="toolbar-group">
                     <button id="homeBtn">На главную</button>
-                    <button id="upBtn">Назад</button>
+                    <!--<button id="upBtn">Назад</button>-->
                     <button id="folderListBtn">Список папок</button>
                     <button id="sortBtn">Сортировка</button>
                 </div>
