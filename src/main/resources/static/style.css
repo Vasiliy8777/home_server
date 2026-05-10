@@ -6,20 +6,18 @@
     box-sizing: border-box;
 }
 
+
 body {
     margin: 0;
     font-family: Arial, sans-serif;
     background: #f4f6f9;
     color: #222;
 }
+
 .folder-meta {
     font-weight: 700;
 }
 
-.toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
 .toast {
     position: fixed;
     bottom: 24px;
@@ -39,14 +37,16 @@ body {
     opacity: 0;
     transition: all 0.25s ease;
 
-    z-index: 9999;
+    z-index: 13000;
     min-width: 280px;
 }
+
 
 .toast.show {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
+
 
 .toast-actions {
     display: flex;
@@ -54,9 +54,11 @@ body {
     gap: 10px;
     margin-top: 10px;
 }
+
 .card.highlight {
     outline: 2px solid #22c55e;
 }
+
 .toast-actions button {
     font-size: 12px;
     padding: 4px 10px;
@@ -67,10 +69,12 @@ body {
     color: white;
 }
 
+
 .toast-actions .secondary-btn {
     background: #e5e7eb;
     color: #111;
 }
+
 .folder-loading-ring {
     width: 44px;
     height: 44px;
@@ -79,9 +83,11 @@ body {
     flex-shrink: 0;
 }
 
+
 .folder-loading-ring.hidden {
     display: none;
 }
+
 
 .folder-loading-ring svg {
     width: 44px;
@@ -89,11 +95,13 @@ body {
     transform: rotate(-90deg);
 }
 
+
 .ring-bg {
     fill: none;
     stroke: #eae5eb;
     stroke-width: 3;
 }
+
 
 .ring-progress {
     fill: none;
@@ -102,6 +110,7 @@ body {
     stroke-linecap: round;
     transition: stroke-dasharray 0.25s ease;
 }
+
 
 .folder-loading-percent {
     position: absolute;
@@ -115,7 +124,8 @@ body {
     color: #22c55e; /* 💚 зелёный */
 }
 
-#folderListModal .modal-content{
+
+#folderListModal .modal-content {
     background: rgba(20, 24, 32, 0.96);
     color: #fff;
     border-radius: 18px;
@@ -124,6 +134,7 @@ body {
     max-height: 80vh;
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
+
 #folderListModal .delete-modal-content {
     background: rgba(17, 17, 17, 0.5);
     backdrop-filter: blur(8px);
@@ -137,6 +148,7 @@ body {
     border-radius: 16px;
     padding: 20px;
 }
+
 #folderListTreeContainer {
     margin-top: 14px;
     max-height: 55vh;
@@ -146,6 +158,7 @@ body {
     border-radius: 12px;
     padding: 10px;
 }
+
 #folderListModal button {
     border: none;
     border-radius: 12px;
@@ -155,30 +168,36 @@ body {
     font-weight: 600;
 }
 
+
 #folderListModal button:hover {
     filter: brightness(1.1);
 }
+
 
 #folderListModal .danger,
 #folderListModal #cancelFolderListBtn,
 #folderListModal #closeFolderListModalBtn {
     background: #374151;
 }
+
 #folderListModal .folder-tree-row {
     padding: 8px 10px;
     border-radius: 10px;
     cursor: pointer;
 }
 
+
 #folderListModal .folder-tree-row:hover {
     background: rgba(255, 255, 255, 0.08);
 }
+
 
 #folderListModal .folder-tree-row.selected {
     background: #dbeafe;
     border: 1px solid #93c5fd;
     color: #111;
 }
+
 #downloadFormatModal .delete-modal-content {
     background: rgba(17, 17, 17, 0.5);
     backdrop-filter: blur(8px);
@@ -194,10 +213,12 @@ body {
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 
+
 #downloadFormatModal h3 {
     margin-top: 0;
     margin-bottom: 18px;
 }
+
 
 .format-options {
     display: flex;
@@ -205,6 +226,7 @@ body {
     justify-content: center;
     margin: 18px 0 28px;
 }
+
 
 #downloadFormatModal button {
     font-size: 12px;
@@ -217,14 +239,17 @@ body {
     color: white;
 }
 
+
 #downloadFormatModal .format-btn.active {
     background: #22c55e;
 }
+
 
 #downloadFormatModal .secondary-btn {
     background: #e5e7eb;
     color: #111;
 }
+
 
 #downloadFormatModal .delete-modal-actions {
     margin-top: 24px;
@@ -232,19 +257,23 @@ body {
     justify-content: center;
     gap: 12px;
 }
+
 .format-btn {
     background: #1f6feb;
     color: white;
 }
 
+
 .format-btn.active {
     background: #22c55e;
 }
+
 .small-btn {
     font-size: 12px;
     padding: 4px 8px;
     min-height: 28px;
 }
+
 
 /*
   Центральный контейнер страницы
@@ -256,12 +285,14 @@ body {
     padding: 140px 20px 20px;
 }
 
+
 /* кнопка прогресса */
 #toggleTransfersBtn {
     background: #2f80ed;
     height: 28px;
     font-size: 12px;
 }
+
 
 /* верхняя панель */
 
@@ -278,9 +309,11 @@ body {
 
     transition: all 0.2s ease;
 }
+
 #toggleTransfersBtn {
     color: #ffffff !important;
 }
+
 .transfer-control,
 .transfer-actions .control {
     border: none;
@@ -289,13 +322,15 @@ body {
     cursor: pointer;
     font-size: 12px;
     position: relative;
-    z-index: 10;
+    z-index: 13000;
 }
+
 
 /* крестик */
 .transfer-remove {
     line-height: 1;
 }
+
 
 /* play */
 .control.playing {
@@ -303,17 +338,20 @@ body {
     color: white;
 }
 
+
 /* pause */
 .control.paused {
     background: #f0c000;
     color: black;
 }
 
+
 /* кнопки в шапке модалки */
 .transfer-header-actions {
     display: flex;
     gap: 6px;
 }
+
 
 /* фикс кликов */
 .transfer-actions,
@@ -322,6 +360,7 @@ body {
     z-index: 3;
     pointer-events: auto;
 }
+
 
 /* сами кнопки */
 .transfer-remove,
@@ -332,13 +371,6 @@ body {
     cursor: pointer;
 }
 
-.progress-bar {
-    pointer-events: none;
-}
-
-.card {
-    position: relative;
-}
 .item-checkbox {
     width: 20px;
     height: 20px;
@@ -351,10 +383,12 @@ body {
     transition: all 0.2s ease;
 }
 
+
 .item-checkbox:checked {
     background: #2f80ed;
     border-color: #2f80ed;
 }
+
 
 .item-checkbox:checked::after {
     content: "";
@@ -368,9 +402,11 @@ body {
     transform: rotate(45deg);
 }
 
+
 .meta-row {
     margin-bottom: 10px;
 }
+
 .select-line {
     display: flex;
     align-items: center;
@@ -379,17 +415,6 @@ body {
     cursor: pointer;
 }
 
-.meta {
-    font-size: 12px;
-    color: rgba(255,255,255,0.75); /* было #666 */
-}
-.card.selected {
-    outline: 2px solid rgba(139, 92, 246, 0.9);
-
-    box-shadow:
-            0 0 12px rgba(139, 92, 246, 0.7),
-            0 0 30px rgba(139, 92, 246, 0.5);
-}
 @keyframes purpleGlow {
     0% {
         box-shadow:
@@ -408,9 +433,6 @@ body {
     }
 }
 
-.card.selected {
-    animation: purpleGlow 2.5s infinite ease-in-out;
-}
 .transfer-remove,
 .control,
 .small-btn,
@@ -427,19 +449,23 @@ body {
     border: none;
     cursor: pointer;
 }
+
 #resumeAllTransfersBtn.resume-all-active {
     background: #43d17c;
     color: white;
 }
+
 
 #resumeAllTransfersBtn.resume-all-paused {
     background: #f0c000;
     color: black;
 }
 
+
 .transfer-remove {
     line-height: 1;
 }
+
 
 .transfer-row {
     display: flex;
@@ -451,6 +477,7 @@ body {
     pointer-events: auto;
 }
 
+
 .small-btn,
 #clearTransfersBtn,
 #resumeAllTransfersBtn {
@@ -459,19 +486,23 @@ body {
     min-height: 24px;
 }
 
+
 .control.playing {
     background: #43d17c;
     color: white;
 }
+
 #previewBuildModal .delete-modal-content {
     padding: 32px 36px;
     min-height: 280px;
 }
 
+
 #previewBuildText {
     margin-bottom: 16px;
     line-height: 1.5;
 }
+
 
 #previewBuildSize {
     display: block;
@@ -484,27 +515,25 @@ body {
     min-height: 30px;
 }
 
+
 #previewBuildTime {
     margin-top: 18px;
     margin-bottom: 22px;
     line-height: 1.5;
 }
+
 .transfer-header-actions {
     display: flex;
     gap: 6px;
     align-items: center;
 }
 
+
 .control.paused {
     background: #f0c000;
     color: black;
 }
 
-.transfer-progress-btn {
-    position: relative;
-    overflow: hidden;
-    padding: 10px 14px;
-}
 
 .transfer-progress-btn {
     position: relative;
@@ -516,18 +545,12 @@ body {
     border: none;
     cursor: pointer;
 }
-.transfer-progress-btn .tp-bar {
-    background: linear-gradient(
-            90deg,
-            #43d17c,
-            #5be38f,
-            #43d17c
-    );
-}
+
 
 .transfer-progress-btn.loading .tp-bar {
     animation: progressPulse 1.5s infinite linear;
 }
+
 
 @keyframes progressPulse {
     0% {
@@ -541,36 +564,47 @@ body {
     }
 }
 
+
 .transfer-progress-btn .tp-bar {
     position: absolute;
     left: 0;
     top: 0;
     height: 100%;
     width: 0%;
-    background: #43d17c;
+    background: linear-gradient(
+            90deg,
+            #43d17c,
+            #5be38f,
+            #43d17c
+    );
     z-index: 0;
     transition: width 0.2s linear;
 }
+
 
 .transfer-progress-btn .tp-label {
     position: relative;
     z-index: 1;
 }
 
+
 .transfer-panel.collapsed {
     display: none;
 }
+
 
 .transfer-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 12px 14px;
+    margin-bottom: 8px;
     background: rgba(0, 0, 0, 0.18);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     color: white;
     box-sizing: border-box;
 }
+
 
 .transfer-panel {
     position: fixed;
@@ -586,9 +620,10 @@ body {
     -webkit-backdrop-filter: blur(8px);
     border-radius: 16px;
     padding: 0;
-    z-index: 9999;
+    z-index: 13000;
     box-sizing: border-box;
 }
+
 
 #transferList {
     overflow-y: auto;
@@ -597,9 +632,11 @@ body {
     box-sizing: border-box;
 }
 
+
 body.topbar-collapsed .container {
     padding-top: 90px;
 }
+
 
 /*
   Верхняя панель
@@ -634,11 +671,13 @@ body.topbar-collapsed .container {
 
     transition: all 0.3s ease;
 }
+
 .topbar:hover {
     box-shadow:
             0 0 12px rgba(0, 255, 150, 0.6),
             0 0 30px rgba(0, 255, 150, 0.25);
 }
+
 /* Внутренняя ширина панели как у галереи */
 .topbar-inner {
     width: 100%;
@@ -647,6 +686,7 @@ body.topbar-collapsed .container {
     padding: 0 16px;
 }
 
+
 /* Путь */
 .path-row {
     display: flex;
@@ -654,6 +694,7 @@ body.topbar-collapsed .container {
     gap: 10px;
     margin-bottom: 12px;
 }
+
 #currentPath {
     flex: 1;
 
@@ -669,6 +710,7 @@ body.topbar-collapsed .container {
     box-shadow: inset 0 0 6px rgba(0,255,150,0.15);
 }
 
+
 .topbar button {
     background: rgba(0,255,150,0.1);
     border: 1px solid rgba(0,255,150,0.3);
@@ -681,10 +723,12 @@ body.topbar-collapsed .container {
     transition: all 0.2s ease;
 }
 
+
 /*.topbar button:hover {
     background: rgba(0,255,150,0.2);
     box-shadow: 0 0 10px rgba(0,255,150,0.5);
-}*/
+}
+*/
 
 .topbar-toggle-btn {
     flex: 0 0 auto;
@@ -692,27 +736,33 @@ body.topbar-collapsed .container {
     padding: 10px 12px;
 }
 
+
 .topbar.collapsed .actions-row {
     display: none;
 }
+
 
 .topbar.collapsed .path-row {
     margin-bottom: 0;
 }
 
+
 .topbar.collapsed {
     padding-bottom: 8px;
 }
+
 
 .topbar.collapsed + .container,
 body.topbar-collapsed .container {
     padding-top: 90px;
 }
 
+
 .topbar h1 {
     margin: 0;
     font-size: 28px;
 }
+
 
 /*
   Блок с текущим путем
@@ -724,6 +774,7 @@ body.topbar-collapsed .container {
     flex-wrap: wrap;
 }
 
+
 /*
   Блок кнопок действий
 */
@@ -734,6 +785,7 @@ body.topbar-collapsed .container {
     flex-wrap: wrap;
 }
 
+
 /* Ряд кнопок */
 
 .actions-row {
@@ -742,6 +794,7 @@ body.topbar-collapsed .container {
     gap: 14px;
     flex-wrap: wrap;
 }
+
 
 .toolbar-group {
     display: flex;
@@ -752,13 +805,16 @@ body.topbar-collapsed .container {
     border-radius: 14px;
     background: rgba(0, 0, 0, 0.04);
 }
+
 .topbar-back-btn {
     white-space: nowrap;
     padding: 6px 10px;
 }
+
 .toolbar-group + .toolbar-group {
     margin-left: 4px;
 }
+
 /* Левая и правая зоны */
 .actions-left,
 .actions-right {
@@ -768,10 +824,12 @@ body.topbar-collapsed .container {
     flex-wrap: wrap;
 }
 
+
 /* Правая зона прибивается вправо на широких экранах */
 .actions-right {
     margin-left: auto;
 }
+
 
 /*
   Одинаковый базовый стиль для кнопок и псевдокнопки загрузки
@@ -794,6 +852,7 @@ button,
     cursor: pointer;
 }
 
+
 /*
   Небольшой hover-эффект
 */
@@ -802,18 +861,13 @@ button:hover,
     opacity: 0.92;
 }
 
-.transfer-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-}
 
 .transfer-size {
     font-size: 11px;
     opacity: 0.7;
     white-space: nowrap;
 }
+
 
 /*
   Галерея на CSS Grid
@@ -827,30 +881,34 @@ button:hover,
     gap: 16px;
     overflow: auto;
     height: 100%;
-}*/
+}
+*/
 .gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
     height: auto;        /* ❗ убираем фикс высоту */
     overflow: visible;   /* ❗ убираем внутренний скролл */
-   /* height: calc(100vh - 160px);
-    overflow-y: auto;
-    overflow-x: hidden;
-    align-content: start;*/
+    /* height: calc(100vh - 160px);
+     overflow-y: auto;
+     overflow-x: hidden;
+     align-content: start;*/
 }
+
 #homeBtn {
     background: #2ea043; /* зеленая, чтобы отличалась */
 }
+
 
 #homeBtn:hover {
     opacity: 0.9;
 }
 
+
 /*
   Верхняя часть карточки — превью
 */
-.thumb {
+/*.thumb {
     width: 100%;
     height: 180px;
     background: #eef2f7;
@@ -860,6 +918,23 @@ button:hover,
     overflow: hidden;
     cursor: pointer;
 }
+*/
+.thumb {
+    width: 100%;
+    height: 180px;
+
+    background: rgba(255,255,255,0.08);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    overflow: hidden;
+    border-radius: 16px 16px 0 0;
+
+    cursor: pointer;
+}
+
 
 .image-thumb {
     width: 100%;
@@ -873,6 +948,7 @@ button:hover,
     cursor: grab;
 }
 
+
 .video-thumb-img {
     width: 100%;
     height: 100%;
@@ -884,9 +960,11 @@ button:hover,
     touch-action: none;
 }
 
+
 .image-thumb.dragging-thumb {
     cursor: grabbing;
 }
+
 
 /*
   Фото и видео в режиме "заполнить превью"
@@ -898,33 +976,41 @@ button:hover,
     object-fit: cover;
 }
 
+
 .folder-thumb {
     font-size: 56px;
 }
+
 
 .folder-children.hidden {
     display: none;
 }
 
+
 .file-thumb {
     font-size: 52px;
 }
+
 
 .card-body {
     padding: 12px;
 }
 
+
 .file-name {
     font-weight: bold;
     word-break: break-word;
     margin-bottom: 8px;
+    color: white;
 }
+
 
 .meta {
     font-size: 12px;
-    color: #666;
+    color: rgba(255, 255, 255, 0.72);
     margin-bottom: 10px;
 }
+
 
 .card-actions {
     display: flex;
@@ -932,22 +1018,25 @@ button:hover,
     flex-wrap: wrap;
 }
 
+
 .card-actions button,
 .card-actions a {
     text-decoration: none;
-    background: #e9eef7;
-    color: #111;
+    background: #1f6feb;
+    color: white;
     padding: 8px 10px;
-    border-radius: 8px;
+    border-radius: 12px;
     font-size: 13px;
     border: none;
     cursor: pointer;
 }
 
+
 .card-actions .danger {
-    background: #ffdddd;
-    color: #8a1111;
+    background: #dc2626;
+    color: white;
 }
+
 
 /*
   Модальное окно занимает весь экран
@@ -959,12 +1048,14 @@ button:hover,
     z-index: 12000;
 }
 
+
 /*
   Скрытое состояние
 */
 .viewer.hidden {
     display: none;
 }
+
 
 /*
   Затемнение фона
@@ -975,6 +1066,7 @@ button:hover,
     /*background: rgba(0,0,0,0.75);*/
     background: rgba(0, 0, 0, 0.82);
 }
+
 
 /*
   Контейнер самого контента окна
@@ -1006,6 +1098,7 @@ button:hover,
     overflow: hidden;
 }
 
+
 /*
   Центрирование картинки или видео
 */
@@ -1018,14 +1111,15 @@ button:hover,
     min-height: 0;
 }
 
+
 #viewerBody img,
 #viewerBody video {
     max-width: 100%;
-    max-height: calc(100vh - 140px);
-    /*max-height: 80vh;*/
+    max-height: 75vh;
     display: block;
     object-fit: contain;
 }
+
 
 /* Верхние кнопки */
 .viewer-toolbar {
@@ -1053,10 +1147,12 @@ button:hover,
     transition: all 0.2s ease;
 }
 
+
 .viewer-btn:hover {
     background: rgba(0,255,150,0.2);
     box-shadow: 0 0 10px rgba(0,255,150,0.5);
 }
+
 
 #viewerBody {
     display: flex;
@@ -1066,16 +1162,11 @@ button:hover,
     position: relative;
 }
 
-#viewerBody img,
-#viewerBody video {
-    max-width: 100%;
-    max-height: 75vh;
-    display: block;
-}
 
 .close-btn {
     font-weight: bold;
 }
+
 
 .viewer-nav {
     position: absolute;
@@ -1103,16 +1194,20 @@ button:hover,
     justify-content: center;
 }
 
+
 .viewer-nav-left {
     left: 12px;
 }
 
+
 .viewer-nav-right {
     right: 12px;
 }
+
 .viewer-nav:hover {
     background: rgba(0,255,150,0.25);
 }
+
 /*
   Обертка миниатюры видео
 */
@@ -1122,12 +1217,6 @@ button:hover,
     height: 100%;
 }
 
-.video-thumb-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
 
 #prevViewerBtn,
 #nextViewerBtn {
@@ -1145,18 +1234,22 @@ button:hover,
     color: white;
 }
 
+
 #prevViewerBtn {
     left: 10px;
 }
+
 
 #nextViewerBtn {
     right: 10px;
 }
 
+
 /* Полноэкранный режим */
 .viewer:fullscreen {
     background: #000;
 }
+
 
 .viewer:fullscreen .viewer-content {
     width: 100vw;
@@ -1166,30 +1259,36 @@ button:hover,
     padding: 70px 20px 20px;
 }
 
+
 .viewer:fullscreen #viewerBody img,
 .viewer:fullscreen #viewerBody video {
     max-width: 100vw;
     max-height: calc(100vh - 110px);
 }
 
+
 .viewer:fullscreen .viewer-toolbar {
     z-index: 100;
 }
+
 
 .viewer:fullscreen .viewer-nav {
     z-index: 12100;
 }
 
+
 /* Чтобы кнопка назад не уезжала */
 #upBtn {
     order: 1;
 }
+
 .viewer-content:hover {
     box-shadow:
             0 0 16px rgba(0, 255, 150, 0.6),
             0 0 40px rgba(0, 255, 150, 0.25),
             0 12px 40px rgba(0,0,0,0.6);
 }
+
 
 /*
   Кнопка play поверх миниатюры
@@ -1208,6 +1307,7 @@ button:hover,
     justify-content: center;
     font-size: 18px;
 }
+
 /*стили модалки дерева*/
 /*стили модалки дерева — в стиле остальных модалок*/
 .move-modal {
@@ -1216,15 +1316,18 @@ button:hover,
     z-index: 11000;
 }
 
+
 .move-modal.hidden {
     display: none;
 }
+
 
 .move-modal-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.65);
 }
+
 
 .move-modal-content {
     position: relative;
@@ -1249,6 +1352,7 @@ button:hover,
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 
+
 .move-modal-header {
     display: flex;
     justify-content: space-between;
@@ -1257,15 +1361,18 @@ button:hover,
     margin-bottom: 12px;
 }
 
+
 .move-modal-header h3 {
     margin: 0;
     font-size: 18px;
 }
 
+
 .move-modal-close {
     background: #e5e7eb;
     color: #111;
 }
+
 
 .move-modal-target-name {
     font-weight: 700;
@@ -1273,6 +1380,7 @@ button:hover,
     word-break: break-word;
     color: white;
 }
+
 
 .selected-move-path {
     margin-bottom: 14px;
@@ -1287,6 +1395,7 @@ button:hover,
     word-break: break-word;
 }
 
+
 .folder-tree-container {
     width: min(82vw, 460px);
     max-height: 48vh;
@@ -1300,10 +1409,12 @@ button:hover,
     color: white;
 }
 
+
 .folder-tree-node {
     margin-left: 14px;
     margin-top: 5px;
 }
+
 
 .folder-tree-row {
     display: flex;
@@ -1317,14 +1428,17 @@ button:hover,
     color: white;
 }
 
+
 .folder-tree-row:hover {
     background: rgba(255, 255, 255, 0.12);
 }
+
 
 .folder-tree-row.selected {
     background: rgba(34, 197, 94, 0.28);
     border: 1px solid rgba(34, 197, 94, 0.75);
 }
+
 
 .folder-toggle {
     width: 22px;
@@ -1336,14 +1450,12 @@ button:hover,
     opacity: 0.85;
 }
 
+
 .folder-label {
     flex: 1;
     word-break: break-word;
 }
 
-.folder-children.hidden {
-    display: none;
-}
 .move-modal-actions {
     display: flex;
     justify-content: flex-end;
@@ -1351,13 +1463,7 @@ button:hover,
 
     margin-top: 16px; /* 👈 вот это и отлепляет */
 }
-.move-modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
 
-    margin-top: 16px; /* 👈 вот это и отлепляет */
-}
 .move-modal-actions button,
 .move-modal-header button {
     font-size: 12px;
@@ -1366,26 +1472,31 @@ button:hover,
     border-radius: 12px;
 }
 
+
 .move-modal-actions .secondary-btn {
     background: #e5e7eb;
     color: #111;
 }
 
+
 .delete-modal {
     position: fixed;
     inset: 0;
-    z-index: 11000;
+    z-index: 13000;
 }
+
 
 .delete-modal.hidden {
     display: none;
 }
+
 
 .delete-modal-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.65);
 }
+
 
 .delete-modal-content {
     position: relative;
@@ -1398,7 +1509,9 @@ button:hover,
     border-radius: 16px;
     padding: 20px;
     text-align: center;
+    color: white;
 }
+
 
 .delete-target-name {
     margin: 12px 0;
@@ -1406,11 +1519,13 @@ button:hover,
     word-break: break-word;
 }
 
+
 .delete-warning {
     margin-bottom: 16px;
     color: #b91c1c;
     font-size: 14px;
 }
+
 
 .delete-modal-actions {
     display: flex;
@@ -1419,15 +1534,18 @@ button:hover,
     flex-wrap: wrap;
 }
 
+
 .danger {
     background: #dc2626;
     color: white;
 }
 
+
 .secondary-btn {
     background: #e5e7eb;
     color: #111;
 }
+
 
 .modal-text-input {
     width: 100%;
@@ -1439,15 +1557,11 @@ button:hover,
     box-sizing: border-box;
 }
 
+
 .transfer-panel.hidden {
     display: none;
 }
 
-.transfer-header {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
-}
 
 /* карточка */
 
@@ -1461,6 +1575,7 @@ button:hover,
     position: relative;
 }
 
+
 .transfer-name {
     position: relative;
     max-width: 100%;
@@ -1468,15 +1583,18 @@ button:hover,
     overflow: hidden;
 }
 
+
 .transfer-name span {
     display: inline-block;
     white-space: nowrap;
 }
 
+
 .transfer-name.marquee span {
     animation: marquee 8s linear infinite;
     animation-delay: 1s;
 }
+
 
 @keyframes marquee {
     0% {
@@ -1486,6 +1604,7 @@ button:hover,
         transform: translateX(-100%);
     }
 }
+
 
 /* прогресс НЕ должен перехватывать клики */
 
@@ -1501,6 +1620,7 @@ button:hover,
     pointer-events: none;
 }
 
+
 .progress-bar {
     pointer-events: none;
     height: 100%;
@@ -1510,19 +1630,24 @@ button:hover,
     transition: width 0.2s linear;
 }
 
+
 .transfer-actions {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 6px;
     margin-top: 4px;
     position: relative;
-    z-index: 5;
+    z-index: 13000;
     pointer-events: auto;
 }
+
 
 .transfer-actions button {
     font-size: 12px;
     padding: 4px 6px;
 }
+
 
 #collapseTransfersBtn {
     font-size: 12px;
@@ -1534,9 +1659,11 @@ button:hover,
     color: white;
 }
 
+
 #collapseTransfersBtn:hover {
     background: #1c6fe0;
 }
+
 #sortModal .delete-modal-content {
     width: fit-content;
     min-width: 220px;
@@ -1550,11 +1677,13 @@ button:hover,
     color: white;
 }
 
+
 #sortModal .delete-modal-actions {
     margin-top: 32px;
     display: flex;
     justify-content: center;
 }
+
 
 .sort-options {
     display: flex;
@@ -1563,6 +1692,7 @@ button:hover,
     flex-wrap: wrap;
     justify-content: center;
 }
+
 
 #sortModal button {
     font-size: 12px;
@@ -1575,22 +1705,27 @@ button:hover,
     color: white;
 }
 
+
 .sort-field-btn.active {
     background: #22c55e !important;
 }
+
 
 #sortDirectionBtn {
     width: 100%;
     margin-top: 8px;
 }
 
+
 #sortDirectionBtn.asc {
     background: #2563eb !important;
 }
 
+
 #sortDirectionBtn.desc {
     background: #22c55e !important;
 }
+
 #moveModal #expandMoveTreeBtn,
 #moveModal #collapseMoveTreeBtn {
     font-size: 12px;
@@ -1601,19 +1736,18 @@ button:hover,
     cursor: pointer;
     background: #1f6feb;
     color: white;
+    margin-bottom: 14px;
 }
+
 #moveModal #expandMoveTreeBtn {
     margin-right: 8px;
 }
 
-#moveModal #expandMoveTreeBtn,
-#moveModal #collapseMoveTreeBtn {
-    margin-bottom: 14px;
-}
 #moveModal #expandMoveTreeBtn:hover,
 #moveModal #collapseMoveTreeBtn:hover {
     opacity: 0.92;
 }
+
 #createFolderModal .delete-modal-content {
     background: rgba(17, 17, 17, 0.5);
     backdrop-filter: blur(8px);
@@ -1630,16 +1764,19 @@ button:hover,
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 
+
 #createFolderModal h3 {
     margin-top: 0;
     color: white;
 }
 
+
 #createFolderModal .modal-text-input {
     background: rgba(255,255,255,0.9);
     color: #111;
     border: 1px solid rgba(255,255,255,0.2);
 }
+
 
 #createFolderModal .delete-modal-actions {
     display: flex;
@@ -1648,45 +1785,6 @@ button:hover,
     margin-top: 18px;
 }
 
-#createFolderModal button {
-    font-size: 12px;
-    padding: 4px 8px;
-    min-height: 28px;
-    border-radius: 12px;
-}
-
-#createFolderModal .secondary-btn,
-#createFolderModal #cancelCreateFolderBtn {
-    background: #e5e7eb;
-    color: #111;
-}#createFolderModal .delete-modal-content {
-     background: rgba(17, 17, 17, 0.5);
-     backdrop-filter: blur(8px);
-     -webkit-backdrop-filter: blur(8px);
-     color: white;
-
-     width: min(90vw, 420px);
-     margin: 120px auto;
-
-     border-radius: 16px;
-     padding: 20px;
-     text-align: center;
-
-     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
- }
-
-#createFolderModal .modal-text-input {
-    background: rgba(255,255,255,0.9);
-    color: #111;
-    border: 1px solid rgba(255,255,255,0.2);
-}
-
-#createFolderModal .delete-modal-actions {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 18px;
-}
 
 #createFolderModal button {
     font-size: 12px;
@@ -1695,81 +1793,47 @@ button:hover,
     border-radius: 12px;
 }
 
+
 #createFolderModal .secondary-btn,
 #createFolderModal #cancelCreateFolderBtn {
     background: #e5e7eb;
     color: #111;
 }
-.card {
-    background: rgba(30, 30, 40, 0.6); /* темная карточка */
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
 
-    border: 1px solid rgba(139, 92, 246, 0.2);
-
-    color: white; /* 🔥 ключевое */
-}
 
 .thumb {
     background: rgba(255,255,255,0.08);
 }
 
-.file-name {
-    color: white;
-}
-
-.meta {
-    color: rgba(255,255,255,0.72);
-}
-
-.card-actions button,
-.card-actions a {
-    background: #1f6feb;
-    color: white;
-    border-radius: 12px;
-}
 
 .card-actions button:hover,
 .card-actions a:hover {
     opacity: 0.92;
 }
 
-.card-actions .danger {
-    background: #dc2626;
-    color: white;
-}
-
-.card.selected {
-    outline: 3px solid #22c55e;
-    outline-offset: -3px;
-}
 
 .folder-thumb,
 .file-thumb {
     color: white;
 }
 
+
 .gallery .card {
     min-height: 320px;
 }
+
 
 .gallery .thumb {
     height: 180px;
     min-height: 180px;
 }
 
+
 .gallery .card-body {
     display: block;
     min-height: 120px;
 }
-.card {
-    transition: all 0.25s ease;
 
-    /* мягкая фиолетовая подсветка */
-    box-shadow:
-            0 0 6px rgba(139, 92, 246, 0.25),
-            0 0 14px rgba(139, 92, 246, 0.15);
-}
 .card:hover {
     transform: translateY(-4px);
     box-shadow:
@@ -1777,23 +1841,16 @@ button:hover,
             0 0 25px rgba(139, 92, 246, 0.3),
             0 8px 20px rgba(0,0,0,0.2);
 }
-/*body {
-    background-color: #0f0f19;
-    background-image:
-            linear-gradient(rgba(15, 15, 25, 0.75), rgba(15, 15, 25, 0.85)),
-            url("/bg.jpg");
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-    color: #fff;
-}*/
 
 #gallery {
     background: transparent;
 }
 
+
 .card {
+    position: relative;
+    overflow: hidden;
+
     background: rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -1809,6 +1866,7 @@ button:hover,
             0 0 14px rgba(139, 92, 246, 0.15);
 }
 
+
 .card.selected {
     outline: 2px solid rgba(139, 92, 246, 0.9);
     outline-offset: -2px;
@@ -1816,36 +1874,10 @@ button:hover,
     box-shadow:
             0 0 12px rgba(139, 92, 246, 0.7),
             0 0 30px rgba(139, 92, 246, 0.5);
+
+    animation: purpleGlow 2.5s infinite ease-in-out;
 }
 
-.thumb {
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.file-name {
-    color: white;
-}
-
-.meta {
-    color: rgba(255, 255, 255, 0.72);
-}
-
-.card-actions button,
-.card-actions a {
-    background: #1f6feb;
-    color: white;
-    border-radius: 12px;
-}
-
-.card-actions .danger {
-    background: #dc2626;
-    color: white;
-}
-
-.folder-thumb,
-.file-thumb {
-    color: white;
-}
 
 @media (max-width: 768px) {
     body {
@@ -1932,6 +1964,2652 @@ button:hover,
     }
 
 }
+
+
+html, body {
+    touch-action: pan-y pan-x;
+    overscroll-behavior: contain;
+}
+
+html {
+    min-height: 100%;
+    background: url("/bg.jpg") center center / cover no-repeat fixed;
+}
+
+
+body {
+    min-height: 100%;
+    background: transparent;
+}
+
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+
+    background: url("/bg.jpg") center center / cover no-repeat;
+    filter: blur(20px) brightness(0.7);
+    transform: scale(1.1);
+}
+
+.metadata-loading-content {
+    color: white;
+}
+
+
+.metadata-progress {
+    width: 100%;
+    height: 10px;
+    margin: 18px 0 12px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+
+#metadataLoadingBar {
+    height: 100%;
+    width: 0%;
+    background: #22c55e;
+    transition: width 0.25s ease;
+}
+
+
+#metadataLoadingCount {
+    font-size: 13px;
+    opacity: 0.85;
+}
+
+.total-cache-content {
+    position: relative;
+}
+
+
+.total-cache-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+
+    border-radius: 50%;
+    border: none;
+
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 2;
+}
+
+#totalCacheModal .delete-modal-content {
+    width: min(92vw, 460px);
+    max-width: 460px;
+
+    padding: 18px;
+    border-radius: 22px;
+
+    background: rgba(18, 18, 18, 0.62);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+
+    border: 1px solid rgba(80, 255, 170, 0.22);
+
+    box-shadow:
+            0 10px 45px rgba(0, 0, 0, 0.42),
+            0 0 24px rgba(57, 217, 138, 0.16);
+
+    color: #39d98a;
+}
+
+
+#totalCacheModal h3 {
+    margin: 0 0 12px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: #54ffae;
+
+    text-shadow:
+            0 0 10px rgba(84, 255, 174, 0.35);
+}
+
+
+#totalCacheStage {
+    text-align: center;
+    font-weight: 600;
+    font-size: 14px;
+    color: #7dffbf;
+
+    margin-bottom: 10px;
+}
+
+
+#totalCachePath {
+    max-width: 100%;
+    max-height: 56px;
+
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+
+    text-align: center;
+
+    font-size: 12px;
+    line-height: 1.35;
+
+    color: rgba(170, 255, 215, 0.82);
+}
+
+
+#totalCacheModal .metadata-progress {
+    margin-top: 16px;
+
+    width: 100%;
+    height: 10px;
+
+    border-radius: 999px;
+    overflow: hidden;
+
+    background: rgba(255, 255, 255, 0.08);
+
+    box-shadow:
+            inset 0 0 8px rgba(0, 0, 0, 0.35);
+}
+
+
+#totalCacheBar {
+    width: 0%;
+    height: 100%;
+
+    border-radius: 999px;
+
+    background:
+            linear-gradient(
+                    90deg,
+                    #1fb86f,
+                    #54ffae
+            );
+
+    box-shadow:
+            0 0 14px rgba(84, 255, 174, 0.45);
+
+    transition: width 0.25s ease;
+}
+
+
+#totalCacheCount {
+    margin-top: 12px;
+
+    text-align: center;
+    font-size: 12px;
+
+    color: rgba(180, 255, 225, 0.9);
+}
+
+
+/* Кнопки как верхняя панель */
+
+#totalCacheModal .modal-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+
+    gap: 10px;
+
+    margin-top: 18px;
+}
+
+
+#totalCacheModal .modal-actions button {
+    min-width: 110px;
+
+    padding: 8px 14px;
+
+    border: 1px solid rgba(80, 255, 170, 0.22);
+    border-radius: 999px;
+
+    background: rgba(255, 255, 255, 0.06);
+
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
+    color: #7dffbf;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+            transform 0.15s ease,
+            background 0.2s ease,
+            box-shadow 0.2s ease;
+}
+
+
+#totalCacheModal .modal-actions button:hover {
+    transform: translateY(-1px);
+
+    background: rgba(84, 255, 174, 0.12);
+
+    box-shadow:
+            0 0 14px rgba(84, 255, 174, 0.22);
+}
+
+
+#totalCacheModal .modal-actions button:active {
+    transform: scale(0.98);
+}
+
+
+#totalCacheModal .modal-actions button:disabled {
+    opacity: 0.45;
+    cursor: default;
+    box-shadow: none;
+}
+
+.loading-gif-overlay {
+    position: fixed;
+    inset: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    pointer-events: none;
+    z-index: 9999;
+
+    background: rgba(0, 0, 0, 0.12);
+
+    backdrop-filter: blur(2px);
+}
+
+.loading-gif-big {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+
+    opacity: 0.92;
+
+    filter:
+            drop-shadow(0 0 18px rgba(80,255,170,0.45));
+}
+.rename-input {
+    width: 100%;
+    box-sizing: border-box;
+
+    margin-top: 12px;
+    margin-bottom: 18px;
+
+    padding: 12px 14px;
+
+    border-radius: 12px;
+    border: 1px solid rgba(120,255,180,0.18);
+
+    background: rgba(20,30,20,0.72);
+
+    color: #d8ffe7;
+
+    font-size: 15px;
+
+    outline: none;
+}
+
+.rename-input:focus {
+    border-color: rgba(120,255,180,0.45);
+
+    box-shadow:
+            0 0 14px rgba(120,255,180,0.16);
+}
+
+#renameModal {
+    z-index: 15000;
+}
+
+.rename-modal-content {
+    position: relative;
+    width: min(460px, 92vw);
+    margin: 120px auto;
+    padding: 26px;
+    border-radius: 22px;
+}
+
+#renameModal .delete-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+}
+
+#renameModal input {
+    width: 100%;
+}
+
+#renameModal button {
+    cursor: pointer;
+}
+.total-cache-style {
+    background:
+            linear-gradient(
+                    180deg,
+                    rgba(18,28,20,0.96),
+                    rgba(10,18,12,0.96)
+            );
+
+    border:
+            1px solid rgba(120,255,180,0.18);
+
+    box-shadow:
+            0 0 30px rgba(0,0,0,0.55),
+            0 0 18px rgba(120,255,180,0.10);
+
+    backdrop-filter: blur(12px);
+
+    color: #d8ffe7;
+}
+
+
+/* ===== Rename modal: как total-cache/topbar ===== */
+
+#renameModal .rename-modal-content {
+    width: min(92vw, 380px);
+    max-width: 380px;
+    margin: 120px auto;
+    padding: 28px 22px 20px;
+    border-radius: 22px;
+
+    background:
+            linear-gradient(
+                    180deg,
+                    rgba(18,28,20,0.92),
+                    rgba(8,16,10,0.92)
+            );
+
+    border: 1px solid rgba(0,255,150,0.28);
+
+    box-shadow:
+            0 0 22px rgba(0,255,150,0.18),
+            0 0 45px rgba(0,0,0,0.55);
+
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+
+    color: #d8ffe7;
+}
+
+#renameModal .modal-header {
+    position: relative;
+    text-align: center;
+    margin-bottom: 14px;
+}
+
+#renameModal .modal-title {
+    color: #d8ffe7;
+    font-size: 15px;
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(0,255,150,0.25);
+}
+
+#closeRenameModalBtn {
+    position: absolute;
+    top: -18px;
+    right: -12px;
+
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
+
+    padding: 0;
+    border-radius: 50%;
+
+    background: rgba(220, 38, 38, 0.95) !important;
+    color: white !important;
+    border: 1px solid rgba(255,255,255,0.25);
+
+    font-size: 14px;
+    line-height: 1;
+}
+
+#renameModal .total-cache-actions,
+#renameModal .delete-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#renameModal button:not(#closeRenameModalBtn) {
+    min-height: 26px;
+    padding: 5px 9px;
+    font-size: 11px;
+    border-radius: 8px;
+
+    background: rgba(0,255,150,0.1) !important;
+    border: 1px solid rgba(0,255,150,0.3);
+    color: #00ffa0;
+}
+
+/* ===== Properties modal final: компактная модалка свойств ===== */
+#propertiesModal {
+    z-index: 14000;
+}
+
+#propertiesModal .delete-modal-backdrop {
+    background: rgba(0, 0, 0, 0.62);
+}
+
+#propertiesModal .properties-content {
+    position: absolute !important;
+    top: 120px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+
+    display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+
+    width: auto !important;
+    min-width: 280px !important;
+    max-width: 360px !important;
+
+    height: fit-content !important;
+    min-height: 0 !important;
+    max-height: 80vh !important;
+
+    margin: 0 !important;
+    padding: 16px 18px !important;
+
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+
+    background: rgba(17, 17, 17, 0.72) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+
+    color: white !important;
+    text-align: left !important;
+
+    border-radius: 18px !important;
+    border: 1px solid rgba(0,255,150,0.25) !important;
+
+    box-shadow:
+            0 0 18px rgba(0,255,150,0.14),
+            0 10px 35px rgba(0,0,0,0.45) !important;
+}
+
+#propertiesModal h3 {
+    margin: 0 0 12px !important;
+    text-align: center !important;
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+    color: white !important;
+}
+
+#propertiesBody {
+    margin: 0 0 12px !important;
+    padding: 0 !important;
+
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+
+    color: white !important;
+}
+
+#propertiesBody div,
+#propertiesBody b {
+    color: white !important;
+}
+
+#propertiesModal .delete-modal-actions,
+#propertiesModal .properties-actions {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+
+    gap: 8px !important;
+    margin: 8px 0 0 !important;
+    padding: 0 !important;
+}
+
+#propertiesModal .delete-modal-actions button,
+#renamePropertiesBtn,
+#movePropertiesBtn,
+#closePropertiesModalBtn {
+    width: auto !important;
+    min-width: 0 !important;
+
+    height: 24px !important;
+    min-height: 24px !important;
+
+    padding: 4px 8px !important;
+
+    font-size: 11px !important;
+    line-height: 1 !important;
+
+    border-radius: 8px !important;
+
+    background: rgba(0,255,150,0.1) !important;
+    border: 1px solid rgba(0,255,150,0.3) !important;
+    color: #00ffa0 !important;
+
+    margin: 0 !important;
+}
+/* ===== GROUPING ===== */
+
+.blue-top-btn {
+    background: rgba(0,120,255,0.12);
+    border: 1px solid rgba(80,160,255,0.35);
+    color: #6fb6ff;
+
+    border-radius: 10px;
+
+    transition: 0.2s;
+}
+
+.blue-top-btn:hover {
+    background: rgba(0,120,255,0.22);
+}
+
+.blue-top-btn.active {
+    background: rgba(0,120,255,0.32);
+    color: white;
+
+    box-shadow:
+            0 0 14px rgba(0,120,255,0.25);
+}
+
+.grouping-content {
+    width: 380px !important;
+
+    background:
+            linear-gradient(
+                    180deg,
+                    rgba(14,18,28,0.96),
+                    rgba(10,12,20,0.96)
+            );
+
+    border: 1px solid rgba(80,160,255,0.22);
+
+    border-radius: 22px;
+
+    padding: 20px;
+
+    color: white;
+
+    box-shadow:
+            0 0 24px rgba(0,120,255,0.16);
+}
+
+.grouping-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    margin-bottom: 18px;
+}
+
+.grouping-title {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.grouping-close-btn {
+    width: 28px;
+    height: 28px;
+
+    border-radius: 50%;
+
+    background: rgba(255,60,60,0.85);
+    color: white;
+
+    border: none;
+}
+
+.grouping-buttons {
+    display: flex;
+    gap: 8px;
+
+    margin-bottom: 18px;
+}
+
+.group-mode-btn {
+    flex: 1;
+
+    height: 34px;
+
+    border-radius: 10px;
+
+    background: rgba(255,255,255,0.06);
+    color: #cfdfff;
+
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.group-mode-btn.active {
+    background: rgba(0,120,255,0.28);
+
+    color: white;
+
+    border-color: rgba(120,180,255,0.45);
+}
+
+.group-period-block {
+    margin-top: 12px;
+}
+
+.period-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    margin-bottom: 12px;
+}
+
+.period-inputs {
+    display: flex;
+    gap: 8px;
+}
+
+.period-inputs input {
+    flex: 1;
+
+    height: 34px;
+
+    border-radius: 10px;
+
+    background: rgba(255,255,255,0.06);
+    color: white;
+
+    border: 1px solid rgba(255,255,255,0.08);
+
+    padding: 0 10px;
+}
+
+.grouping-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+
+    margin-top: 22px;
+}
+/*
+!*   box-sizing: border-box
+   означает, что padding и border входят в общую ширину/высоту элемента.
+   Это сильно упрощает верстку.
+   *!
+* {
+    box-sizing: border-box;
+}
+
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f6f9;
+    color: #222;
+}
+
+.folder-meta {
+    font-weight: 700;
+}
+
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+
+    background: rgba(17, 17, 17, 0.75);
+    backdrop-filter: blur(10px);
+
+    color: white;
+    padding: 14px 16px;
+    border-radius: 14px;
+
+    font-size: 13px;
+    text-align: center;
+
+    opacity: 0;
+    transition: all 0.25s ease;
+
+    z-index: 13000;
+    min-width: 280px;
+}
+
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+
+.toast-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.card.highlight {
+    outline: 2px solid #22c55e;
+}
+
+.toast-actions button {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    background: #1f6feb;
+    color: white;
+}
+
+
+.toast-actions .secondary-btn {
+    background: #e5e7eb;
+    color: #111;
+}
+
+.folder-loading-ring {
+    width: 44px;
+    height: 44px;
+    position: relative;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+
+.folder-loading-ring.hidden {
+    display: none;
+}
+
+
+.folder-loading-ring svg {
+    width: 44px;
+    height: 44px;
+    transform: rotate(-90deg);
+}
+
+
+.ring-bg {
+    fill: none;
+    stroke: #eae5eb;
+    stroke-width: 3;
+}
+
+
+.ring-progress {
+    fill: none;
+    stroke: #25daeb;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dasharray 0.25s ease;
+}
+
+
+.folder-loading-percent {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+
+    color: #22c55e; !* 💚 зелёный *!
+}
+
+
+#folderListModal .modal-content {
+    background: rgba(20, 24, 32, 0.96);
+    color: #fff;
+    border-radius: 18px;
+    padding: 22px;
+    width: min(520px, 92vw);
+    max-height: 80vh;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+#folderListModal .delete-modal-content {
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    color: white;
+
+    width: min(90vw, 420px);
+    margin: 120px auto;
+
+    border-radius: 16px;
+    padding: 20px;
+}
+
+#folderListTreeContainer {
+    margin-top: 14px;
+    max-height: 55vh;
+    overflow-y: auto;
+
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px;
+}
+
+#folderListModal button {
+    border: none;
+    border-radius: 12px;
+    padding: 9px 14px;
+    background: #2563eb;
+    color: white;
+    font-weight: 600;
+}
+
+
+#folderListModal button:hover {
+    filter: brightness(1.1);
+}
+
+
+#folderListModal .danger,
+#folderListModal #cancelFolderListBtn,
+#folderListModal #closeFolderListModalBtn {
+    background: #374151;
+}
+
+#folderListModal .folder-tree-row {
+    padding: 8px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+
+#folderListModal .folder-tree-row:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+
+#folderListModal .folder-tree-row.selected {
+    background: #dbeafe;
+    border: 1px solid #93c5fd;
+    color: #111;
+}
+
+#downloadFormatModal .delete-modal-content {
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+
+    width: fit-content;
+    min-width: 280px;
+    max-width: 360px;
+
+    padding: 22px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+
+
+#downloadFormatModal h3 {
+    margin-top: 0;
+    margin-bottom: 18px;
+}
+
+
+.format-options {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin: 18px 0 28px;
+}
+
+
+#downloadFormatModal button {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    background: #1f6feb;
+    color: white;
+}
+
+
+#downloadFormatModal .format-btn.active {
+    background: #22c55e;
+}
+
+
+#downloadFormatModal .secondary-btn {
+    background: #e5e7eb;
+    color: #111;
+}
+
+
+#downloadFormatModal .delete-modal-actions {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.format-btn {
+    background: #1f6feb;
+    color: white;
+}
+
+
+.format-btn.active {
+    background: #22c55e;
+}
+
+.small-btn {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+
+
+!*
+  Центральный контейнер страницы
+*!
+.container {
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 140px 20px 20px;
+}
+
+
+!* кнопка прогресса *!
+#toggleTransfersBtn {
+    background: #2f80ed;
+    height: 28px;
+    font-size: 12px;
+}
+
+
+!* верхняя панель *!
+
+.topbar button,
+.topbar .upload-label span,
+.topbar #toggleTransfersBtn {
+    background: rgba(0,255,150,0.1) !important;
+    border: 1px solid rgba(0,255,150,0.3);
+
+    color: #00ffa0;
+
+    border-radius: 8px;
+    padding: 6px 10px;
+
+    transition: all 0.2s ease;
+}
+
+#toggleTransfersBtn {
+    color: #ffffff !important;
+}
+
+.transfer-control,
+.transfer-actions .control {
+    border: none;
+    border-radius: 6px;
+    padding: 3px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    position: relative;
+    z-index: 13000;
+}
+
+
+!* крестик *!
+.transfer-remove {
+    line-height: 1;
+}
+
+
+!* play *!
+.control.playing {
+    background: #43d17c;
+    color: white;
+}
+
+
+!* pause *!
+.control.paused {
+    background: #f0c000;
+    color: black;
+}
+
+
+!* кнопки в шапке модалки *!
+.transfer-header-actions {
+    display: flex;
+    gap: 6px;
+}
+
+
+!* фикс кликов *!
+.transfer-actions,
+.transfer-row {
+    position: relative;
+    z-index: 3;
+    pointer-events: auto;
+}
+
+
+!* сами кнопки *!
+.transfer-remove,
+.control {
+    position: relative;
+    z-index: 10;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.item-checkbox {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%; !* 🔥 круг *!
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid #ccc;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+
+.item-checkbox:checked {
+    background: #2f80ed;
+    border-color: #2f80ed;
+}
+
+
+.item-checkbox:checked::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 7px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+
+.meta-row {
+    margin-bottom: 10px;
+}
+
+.select-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; !* 🔥 ключевое *!
+    gap: 10px;
+    cursor: pointer;
+}
+
+@keyframes purpleGlow {
+    0% {
+        box-shadow:
+                0 0 6px rgba(139, 92, 246, 0.2),
+                0 0 12px rgba(139, 92, 246, 0.1);
+    }
+    50% {
+        box-shadow:
+                0 0 14px rgba(139, 92, 246, 0.5),
+                0 0 30px rgba(139, 92, 246, 0.3);
+    }
+    100% {
+        box-shadow:
+                0 0 6px rgba(139, 92, 246, 0.2),
+                0 0 12px rgba(139, 92, 246, 0.1);
+    }
+}
+
+.transfer-remove,
+.control,
+.small-btn,
+#clearTransfersBtn,
+#resumeAllTransfersBtn {
+    position: relative;
+    z-index: 4;
+    pointer-events: auto;
+    font-size: 12px;
+    padding: 3px 6px;
+    min-height: 24px;
+    min-width: 24px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+}
+
+#resumeAllTransfersBtn.resume-all-active {
+    background: #43d17c;
+    color: white;
+}
+
+
+#resumeAllTransfersBtn.resume-all-paused {
+    background: #f0c000;
+    color: black;
+}
+
+
+.transfer-remove {
+    line-height: 1;
+}
+
+
+.transfer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: space-between;
+    position: relative;
+    z-index: 5;
+    pointer-events: auto;
+}
+
+
+.small-btn,
+#clearTransfersBtn,
+#resumeAllTransfersBtn {
+    font-size: 11px;
+    padding: 3px 6px;
+    min-height: 24px;
+}
+
+
+.control.playing {
+    background: #43d17c;
+    color: white;
+}
+
+#previewBuildModal .delete-modal-content {
+    padding: 32px 36px;
+    min-height: 280px;
+}
+
+
+#previewBuildText {
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+
+#previewBuildSize {
+    display: block;
+    margin: 18px 0 22px;
+    line-height: 1.5;
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+    text-align: center;
+    min-height: 30px;
+}
+
+
+#previewBuildTime {
+    margin-top: 18px;
+    margin-bottom: 22px;
+    line-height: 1.5;
+}
+
+.transfer-header-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+
+.control.paused {
+    background: #f0c000;
+    color: black;
+}
+
+
+.transfer-progress-btn {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+
+.transfer-progress-btn.loading .tp-bar {
+    animation: progressPulse 1.5s infinite linear;
+}
+
+
+@keyframes progressPulse {
+    0% {
+        filter: brightness(1);
+    }
+    50% {
+        filter: brightness(1.3);
+    }
+    100% {
+        filter: brightness(1);
+    }
+}
+
+
+.transfer-progress-btn .tp-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(
+            90deg,
+            #43d17c,
+            #5be38f,
+            #43d17c
+    );
+    z-index: 0;
+    transition: width 0.2s linear;
+}
+
+
+.transfer-progress-btn .tp-label {
+    position: relative;
+    z-index: 1;
+}
+
+
+.transfer-panel.collapsed {
+    display: none;
+}
+
+
+.transfer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    background: rgba(0, 0, 0, 0.18);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: white;
+    box-sizing: border-box;
+}
+
+
+.transfer-panel {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    width: min(360px, calc(100vw - 24px));
+    max-height: 50vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 16px;
+    padding: 0;
+    z-index: 13000;
+    box-sizing: border-box;
+}
+
+
+#transferList {
+    overflow-y: auto;
+    max-height: calc(50vh - 58px);
+    padding: 10px 12px 12px;
+    box-sizing: border-box;
+}
+
+
+body.topbar-collapsed .container {
+    padding-top: 90px;
+}
+
+
+!*
+  Верхняя панель
+*!
+
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10000;
+
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    padding: 10px 12px;
+
+    background: rgba(30, 30, 40, 0.7);
+    backdrop-filter: blur(12px);
+
+    margin: 0;
+    border-radius: 0 0 14px 14px;
+
+    border: 1px solid rgba(0, 255, 150, 0.25);
+
+    !* 💚 зелёное свечение *!
+    box-shadow:
+            0 0 8px rgba(0, 255, 150, 0.4),
+            0 0 20px rgba(0, 255, 150, 0.15);
+
+    transition: all 0.3s ease;
+}
+
+.topbar:hover {
+    box-shadow:
+            0 0 12px rgba(0, 255, 150, 0.6),
+            0 0 30px rgba(0, 255, 150, 0.25);
+}
+
+!* Внутренняя ширина панели как у галереи *!
+.topbar-inner {
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 16px;
+}
+
+
+!* Путь *!
+.path-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+#currentPath {
+    flex: 1;
+
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+
+    padding: 8px 10px;
+
+    color: #fff;
+
+    border: 1px solid rgba(0,255,150,0.2);
+
+    box-shadow: inset 0 0 6px rgba(0,255,150,0.15);
+}
+
+
+.topbar button {
+    background: rgba(0,255,150,0.1);
+    border: 1px solid rgba(0,255,150,0.3);
+
+    border-radius: 8px;
+    color: #00ffa0;
+
+    padding: 6px 10px;
+
+    transition: all 0.2s ease;
+}
+
+
+!*.topbar button:hover {
+    background: rgba(0,255,150,0.2);
+    box-shadow: 0 0 10px rgba(0,255,150,0.5);
+}
+*!
+
+.topbar-toggle-btn {
+    flex: 0 0 auto;
+    min-width: 42px;
+    padding: 10px 12px;
+}
+
+
+.topbar.collapsed .actions-row {
+    display: none;
+}
+
+
+.topbar.collapsed .path-row {
+    margin-bottom: 0;
+}
+
+
+.topbar.collapsed {
+    padding-bottom: 8px;
+}
+
+
+.topbar.collapsed + .container,
+body.topbar-collapsed .container {
+    padding-top: 90px;
+}
+
+
+.topbar h1 {
+    margin: 0;
+    font-size: 28px;
+}
+
+
+!*
+  Блок с текущим путем
+*!
+.path-block {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
+!*
+  Блок кнопок действий
+*!
+.actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+
+!* Ряд кнопок *!
+
+.actions-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.topbar-back-btn {
+    white-space: nowrap;
+    padding: 6px 10px;
+}
+
+.toolbar-group + .toolbar-group {
+    margin-left: 4px;
+}
+
+!* Левая и правая зоны *!
+.actions-left,
+.actions-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+
+!* Правая зона прибивается вправо на широких экранах *!
+.actions-right {
+    margin-left: auto;
+}
+
+
+!*
+  Одинаковый базовый стиль для кнопок и псевдокнопки загрузки
+*!
+button,
+.upload-label span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    border: none;
+    padding: 4px 8px;
+    border-radius: 12px;
+
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    min-height: 28px;
+
+    cursor: pointer;
+}
+
+
+!*
+  Небольшой hover-эффект
+*!
+button:hover,
+.upload-label span:hover {
+    opacity: 0.92;
+}
+
+
+.transfer-size {
+    font-size: 11px;
+    opacity: 0.7;
+    white-space: nowrap;
+}
+
+
+!*
+  Галерея на CSS Grid
+  auto-fill + minmax(...) позволяют автоматически
+  распределять карточки по ширине экрана.
+*!
+!* Галерея *!
+!*.gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    overflow: auto;
+    height: 100%;
+}
+*!
+.gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    height: auto;        !* ❗ убираем фикс высоту *!
+    overflow: visible;   !* ❗ убираем внутренний скролл *!
+    !* height: calc(100vh - 160px);
+     overflow-y: auto;
+     overflow-x: hidden;
+     align-content: start;*!
+}
+
+#homeBtn {
+    background: #2ea043; !* зеленая, чтобы отличалась *!
+}
+
+
+#homeBtn:hover {
+    opacity: 0.9;
+}
+
+
+!*
+  Верхняя часть карточки — превью
+*!
+!*.thumb {
+    width: 100%;
+    height: 180px;
+    background: #eef2f7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: pointer;
+}
+*!
+.thumb {
+    width: 100%;
+    height: 180px;
+
+    background: rgba(255,255,255,0.08);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    overflow: hidden;
+    border-radius: 16px 16px 0 0;
+
+    cursor: pointer;
+}
+
+
+.image-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    touch-action: none;
+    cursor: grab;
+}
+
+
+.video-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    touch-action: none;
+}
+
+
+.image-thumb.dragging-thumb {
+    cursor: grabbing;
+}
+
+
+!*
+  Фото и видео в режиме "заполнить превью"
+*!
+.thumb img,
+.thumb video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+
+.folder-thumb {
+    font-size: 56px;
+}
+
+
+.folder-children.hidden {
+    display: none;
+}
+
+
+.file-thumb {
+    font-size: 52px;
+}
+
+
+.card-body {
+    padding: 12px;
+}
+
+
+.file-name {
+    font-weight: bold;
+    word-break: break-word;
+    margin-bottom: 8px;
+    color: white;
+}
+
+
+.meta {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.72);
+    margin-bottom: 10px;
+}
+
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+
+.card-actions button,
+.card-actions a {
+    text-decoration: none;
+    background: #1f6feb;
+    color: white;
+    padding: 8px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    border: none;
+    cursor: pointer;
+}
+
+
+.card-actions .danger {
+    background: #dc2626;
+    color: white;
+}
+
+
+!*
+  Модальное окно занимает весь экран
+*!
+.viewer {
+    position: fixed;
+    inset: 0;
+    !*z-index: 999;*!
+    z-index: 12000;
+}
+
+
+!*
+  Скрытое состояние
+*!
+.viewer.hidden {
+    display: none;
+}
+
+
+!*
+  Затемнение фона
+*!
+.viewer-backdrop {
+    position: absolute;
+    inset: 0;
+    !*background: rgba(0,0,0,0.75);*!
+    background: rgba(0, 0, 0, 0.82);
+}
+
+
+!*
+  Контейнер самого контента окна
+*!
+.viewer-content {
+    position: relative;
+    z-index: 1;
+    width: min(96vw, 1200px);
+    height: calc(100vh - 40px);
+    margin: 20px auto;
+
+    !* 🔥 стиль как у модалок *!
+    background: rgba(17, 17, 17, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+
+    border-radius: 16px;
+    border: 1px solid rgba(0, 255, 150, 0.25);
+
+    !* 💚 свечение как у topbar *!
+    box-shadow:
+            0 0 12px rgba(0, 255, 150, 0.4),
+            0 0 30px rgba(0, 255, 150, 0.15),
+            0 12px 40px rgba(0,0,0,0.5);
+
+
+    padding: 70px 20px 20px;
+    min-height: 80vh;
+    overflow: hidden;
+}
+
+
+!*
+  Центрирование картинки или видео
+*!
+#viewerBody {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    !*min-height: 300px;*!
+    min-height: 0;
+}
+
+
+#viewerBody img,
+#viewerBody video {
+    max-width: 100%;
+    max-height: 75vh;
+    display: block;
+    object-fit: contain;
+}
+
+
+!* Верхние кнопки *!
+.viewer-toolbar {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 12100;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
+.viewer-btn {
+    background: rgba(0,255,150,0.1);
+    border: 1px solid rgba(0,255,150,0.3);
+    color: #00ffa0;
+
+    padding: 8px 12px;
+    border-radius: 10px;
+
+    cursor: pointer;
+    font-size: 13px;
+
+    transition: all 0.2s ease;
+}
+
+
+.viewer-btn:hover {
+    background: rgba(0,255,150,0.2);
+    box-shadow: 0 0 10px rgba(0,255,150,0.5);
+}
+
+
+#viewerBody {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 70vh;
+    position: relative;
+}
+
+
+.close-btn {
+    font-weight: bold;
+}
+
+
+.viewer-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 12100;
+
+    background: rgba(0,255,150,0.15);
+    border: 1px solid rgba(0,255,150,0.3);
+
+    color: #00ffa0;
+
+    backdrop-filter: blur(6px);
+
+    width: 52px;
+    height: 52px;
+
+    border-radius: 50%;
+
+    font-size: 22px;
+    cursor: pointer;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+.viewer-nav-left {
+    left: 12px;
+}
+
+
+.viewer-nav-right {
+    right: 12px;
+}
+
+.viewer-nav:hover {
+    background: rgba(0,255,150,0.25);
+}
+
+!*
+  Обертка миниатюры видео
+*!
+.video-thumb-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+
+#prevViewerBtn,
+#nextViewerBtn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 30;
+
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    font-size: 20px;
+
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+}
+
+
+#prevViewerBtn {
+    left: 10px;
+}
+
+
+#nextViewerBtn {
+    right: 10px;
+}
+
+
+!* Полноэкранный режим *!
+.viewer:fullscreen {
+    background: #000;
+}
+
+
+.viewer:fullscreen .viewer-content {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    padding: 70px 20px 20px;
+}
+
+
+.viewer:fullscreen #viewerBody img,
+.viewer:fullscreen #viewerBody video {
+    max-width: 100vw;
+    max-height: calc(100vh - 110px);
+}
+
+
+.viewer:fullscreen .viewer-toolbar {
+    z-index: 100;
+}
+
+
+.viewer:fullscreen .viewer-nav {
+    z-index: 12100;
+}
+
+
+!* Чтобы кнопка назад не уезжала *!
+#upBtn {
+    order: 1;
+}
+
+.viewer-content:hover {
+    box-shadow:
+            0 0 16px rgba(0, 255, 150, 0.6),
+            0 0 40px rgba(0, 255, 150, 0.25),
+            0 12px 40px rgba(0,0,0,0.6);
+}
+
+
+!*
+  Кнопка play поверх миниатюры
+*!
+.play-badge {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    background: rgba(0, 0, 0, 0.65);
+    color: white;
+    border-radius: 999px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+!*стили модалки дерева*!
+!*стили модалки дерева — в стиле остальных модалок*!
+.move-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 11000;
+}
+
+
+.move-modal.hidden {
+    display: none;
+}
+
+
+.move-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+}
+
+
+.move-modal-content {
+    position: relative;
+    z-index: 1;
+
+    width: fit-content;
+    min-width: 320px;
+    max-width: min(92vw, 520px);
+
+    max-height: 82vh;
+    overflow: hidden;
+
+    margin: 90px auto;
+    padding: 18px;
+
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    color: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+
+
+.move-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+
+.move-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+
+.move-modal-close {
+    background: #e5e7eb;
+    color: #111;
+}
+
+
+.move-modal-target-name {
+    font-weight: 700;
+    margin-bottom: 12px;
+    word-break: break-word;
+    color: white;
+}
+
+
+.selected-move-path {
+    margin-bottom: 14px;
+    padding: 10px 12px;
+
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+
+    color: white;
+    font-size: 13px;
+    word-break: break-word;
+}
+
+
+.folder-tree-container {
+    width: min(82vw, 460px);
+    max-height: 48vh;
+    overflow: auto;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 10px;
+
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+
+.folder-tree-node {
+    margin-left: 14px;
+    margin-top: 5px;
+}
+
+
+.folder-tree-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    padding: 6px 8px;
+    border-radius: 10px;
+
+    cursor: pointer;
+    color: white;
+}
+
+
+.folder-tree-row:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+
+.folder-tree-row.selected {
+    background: rgba(34, 197, 94, 0.28);
+    border: 1px solid rgba(34, 197, 94, 0.75);
+}
+
+
+.folder-toggle {
+    width: 22px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: white;
+    opacity: 0.85;
+}
+
+
+.folder-label {
+    flex: 1;
+    word-break: break-word;
+}
+
+.move-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+
+    margin-top: 16px; !* 👈 вот это и отлепляет *!
+}
+
+.move-modal-actions button,
+.move-modal-header button {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 12px;
+}
+
+
+.move-modal-actions .secondary-btn {
+    background: #e5e7eb;
+    color: #111;
+}
+
+
+.delete-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 13000;
+}
+
+
+.delete-modal.hidden {
+    display: none;
+}
+
+
+.delete-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+}
+
+
+.delete-modal-content {
+    position: relative;
+    z-index: 1;
+    width: min(90vw, 420px);
+    margin: 120px auto;
+    !*background: white;*!
+    background: rgba(17, 17, 17, 0.72);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    color: white;
+}
+
+
+.delete-target-name {
+    margin: 12px 0;
+    font-weight: bold;
+    word-break: break-word;
+}
+
+
+.delete-warning {
+    margin-bottom: 16px;
+    color: #b91c1c;
+    font-size: 14px;
+}
+
+
+.delete-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+
+.danger {
+    background: #dc2626;
+    color: white;
+}
+
+
+.secondary-btn {
+    background: #e5e7eb;
+    color: #111;
+}
+
+
+.modal-text-input {
+    width: 100%;
+    margin: 12px 0 16px;
+    padding: 12px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+
+.transfer-panel.hidden {
+    display: none;
+}
+
+
+!* карточка *!
+
+.transfer-item {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 10px;
+    color: white;
+    box-sizing: border-box;
+    position: relative;
+}
+
+
+.transfer-name {
+    position: relative;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+
+.transfer-name span {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+
+.transfer-name.marquee span {
+    animation: marquee 8s linear infinite;
+    animation-delay: 1s;
+}
+
+
+@keyframes marquee {
+    0% {
+        transform: translateX(0%);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+
+!* прогресс НЕ должен перехватывать клики *!
+
+.progress {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 8px 0 8px;
+    pointer-events: none;
+}
+
+
+.progress-bar {
+    pointer-events: none;
+    height: 100%;
+    width: 0%;
+    background: #43d17c;
+    border-radius: 999px;
+    transition: width 0.2s linear;
+}
+
+
+.transfer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: 4px;
+    position: relative;
+    z-index: 13000;
+    pointer-events: auto;
+}
+
+
+.transfer-actions button {
+    font-size: 12px;
+    padding: 4px 6px;
+}
+
+
+#collapseTransfersBtn {
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    background: #2f80ed; !* синий *!
+    color: white;
+}
+
+
+#collapseTransfersBtn:hover {
+    background: #1c6fe0;
+}
+
+#sortModal .delete-modal-content {
+    width: fit-content;
+    min-width: 220px;
+    max-width: 260px;
+    padding: 14px;
+    border-radius: 16px;
+
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+}
+
+
+#sortModal .delete-modal-actions {
+    margin-top: 32px;
+    display: flex;
+    justify-content: center;
+}
+
+
+.sort-options {
+    display: flex;
+    gap: 12px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+
+#sortModal button {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    background: #1f6feb;
+    color: white;
+}
+
+
+.sort-field-btn.active {
+    background: #22c55e !important;
+}
+
+
+#sortDirectionBtn {
+    width: 100%;
+    margin-top: 8px;
+}
+
+
+#sortDirectionBtn.asc {
+    background: #2563eb !important;
+}
+
+
+#sortDirectionBtn.desc {
+    background: #22c55e !important;
+}
+
+#moveModal #expandMoveTreeBtn,
+#moveModal #collapseMoveTreeBtn {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    background: #1f6feb;
+    color: white;
+    margin-bottom: 14px;
+}
+
+#moveModal #expandMoveTreeBtn {
+    margin-right: 8px;
+}
+
+#moveModal #expandMoveTreeBtn:hover,
+#moveModal #collapseMoveTreeBtn:hover {
+    opacity: 0.92;
+}
+
+#createFolderModal .delete-modal-content {
+    background: rgba(17, 17, 17, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+
+    width: min(90vw, 420px);
+    margin: 120px auto;
+
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+
+
+#createFolderModal h3 {
+    margin-top: 0;
+    color: white;
+}
+
+
+#createFolderModal .modal-text-input {
+    background: rgba(255,255,255,0.9);
+    color: #111;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+
+#createFolderModal .delete-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+
+#createFolderModal button {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 12px;
+}
+
+
+#createFolderModal .secondary-btn,
+#createFolderModal #cancelCreateFolderBtn {
+    background: #e5e7eb;
+    color: #111;
+}
+
+
+.thumb {
+    background: rgba(255,255,255,0.08);
+}
+
+
+.card-actions button:hover,
+.card-actions a:hover {
+    opacity: 0.92;
+}
+
+
+.folder-thumb,
+.file-thumb {
+    color: white;
+}
+
+
+.gallery .card {
+    min-height: 320px;
+}
+
+
+.gallery .thumb {
+    height: 180px;
+    min-height: 180px;
+}
+
+
+.gallery .card-body {
+    display: block;
+    min-height: 120px;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow:
+            0 0 10px rgba(139, 92, 246, 0.5),
+            0 0 25px rgba(139, 92, 246, 0.3),
+            0 8px 20px rgba(0,0,0,0.2);
+}
+
+#gallery {
+    background: transparent;
+}
+
+
+.card {
+    position: relative;
+    overflow: hidden;
+
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+
+    transition: all 0.25s ease;
+
+    box-shadow:
+            0 0 6px rgba(139, 92, 246, 0.25),
+            0 0 14px rgba(139, 92, 246, 0.15);
+}
+
+
+.card.selected {
+    outline: 2px solid rgba(139, 92, 246, 0.9);
+    outline-offset: -2px;
+
+    box-shadow:
+            0 0 12px rgba(139, 92, 246, 0.7),
+            0 0 30px rgba(139, 92, 246, 0.5);
+
+    animation: purpleGlow 2.5s infinite ease-in-out;
+}
+
+
+@media (max-width: 768px) {
+    body {
+        background-attachment: scroll;
+        background-size: 100% 100%;
+        background-position: center;
+    }
+    .card {
+        box-shadow:
+                0 0 4px rgba(139, 92, 246, 0.2);
+    }
+    .card:hover {
+        transform: none; !* убираем дергание *!
+    }
+    .card.selected {
+        animation: none; !* экономим батарею *!
+    }
+    body.topbar-collapsed .container {
+        padding-top: 82px;
+    }
+
+    .container {
+        padding: 150px 20px 20px;
+    }
+
+    .gallery {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        overflow: auto;
+        height: 100%;
+    }
+    .viewer-toolbar {
+        top: 8px;
+        right: 8px;
+        gap: 8px;
+    }
+
+    .viewer-nav-left {
+        left: 8px;
+    }
+
+    .viewer-nav-right {
+        right: 8px;
+    }
+
+    #viewerBody img,
+    #viewerBody video {
+        max-height: calc(100vh - 120px);
+    }
+    .container {
+        padding-top: 180px;
+    }
+
+    .topbar-inner {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .actions-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .toolbar-group {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .actions-left,
+    .actions-right {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .actions-left {
+        justify-content: flex-start;
+    }
+
+    .actions-right {
+        justify-content: flex-start;
+    }
+
+    button,
+    .upload-label span {
+        width: auto;
+        max-width: 100%;
+    }
+
+}
+
 #propertiesModal .delete-modal-content {
     background: rgba(17, 17, 17, 0.72);
     backdrop-filter: blur(10px);
@@ -1944,6 +4622,7 @@ button:hover,
     box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 
+
 #propertiesModal h3,
 #propertiesBody,
 #propertiesBody div,
@@ -1951,11 +4630,13 @@ button:hover,
     color: white;
 }
 
+
 #propertiesBody {
     margin-top: 14px;
     line-height: 1.7;
     font-size: 14px;
 }
+
 
 #propertiesModal #closePropertiesModalBtn {
     background: #1f6feb;
@@ -1963,19 +4644,23 @@ button:hover,
     display: block;
     margin: 18px auto 0;
 }
+
 html, body {
     touch-action: pan-y pan-x;
     overscroll-behavior: contain;
 }
+
 html {
     min-height: 100%;
     background: url("/bg.jpg") center center / cover no-repeat fixed;
 }
 
+
 body {
     min-height: 100%;
     background: transparent;
 }
+
 
 body::before {
     content: "";
@@ -1987,9 +4672,11 @@ body::before {
     filter: blur(20px) brightness(0.7);
     transform: scale(1.1);
 }
+
 .metadata-loading-content {
     color: white;
 }
+
 
 .metadata-progress {
     width: 100%;
@@ -2000,6 +4687,7 @@ body::before {
     overflow: hidden;
 }
 
+
 #metadataLoadingBar {
     height: 100%;
     width: 0%;
@@ -2007,7 +4695,490 @@ body::before {
     transition: width 0.25s ease;
 }
 
+
 #metadataLoadingCount {
     font-size: 13px;
     opacity: 0.85;
 }
+
+.total-cache-content {
+    position: relative;
+}
+
+
+.total-cache-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+
+    border-radius: 50%;
+    border: none;
+
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 2;
+}
+
+#totalCacheModal .delete-modal-content {
+    width: min(92vw, 460px);
+    max-width: 460px;
+
+    padding: 18px;
+    border-radius: 22px;
+
+    background: rgba(18, 18, 18, 0.62);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+
+    border: 1px solid rgba(80, 255, 170, 0.22);
+
+    box-shadow:
+            0 10px 45px rgba(0, 0, 0, 0.42),
+            0 0 24px rgba(57, 217, 138, 0.16);
+
+    color: #39d98a;
+}
+
+
+#totalCacheModal h3 {
+    margin: 0 0 12px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: #54ffae;
+
+    text-shadow:
+            0 0 10px rgba(84, 255, 174, 0.35);
+}
+
+
+#totalCacheStage {
+    text-align: center;
+    font-weight: 600;
+    font-size: 14px;
+    color: #7dffbf;
+
+    margin-bottom: 10px;
+}
+
+
+#totalCachePath {
+    max-width: 100%;
+    max-height: 56px;
+
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+
+    text-align: center;
+
+    font-size: 12px;
+    line-height: 1.35;
+
+    color: rgba(170, 255, 215, 0.82);
+}
+
+
+#totalCacheModal .metadata-progress {
+    margin-top: 16px;
+
+    width: 100%;
+    height: 10px;
+
+    border-radius: 999px;
+    overflow: hidden;
+
+    background: rgba(255, 255, 255, 0.08);
+
+    box-shadow:
+            inset 0 0 8px rgba(0, 0, 0, 0.35);
+}
+
+
+#totalCacheBar {
+    width: 0%;
+    height: 100%;
+
+    border-radius: 999px;
+
+    background:
+            linear-gradient(
+                    90deg,
+                    #1fb86f,
+                    #54ffae
+            );
+
+    box-shadow:
+            0 0 14px rgba(84, 255, 174, 0.45);
+
+    transition: width 0.25s ease;
+}
+
+
+#totalCacheCount {
+    margin-top: 12px;
+
+    text-align: center;
+    font-size: 12px;
+
+    color: rgba(180, 255, 225, 0.9);
+}
+
+
+!* Кнопки как верхняя панель *!
+
+#totalCacheModal .modal-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+
+    gap: 10px;
+
+    margin-top: 18px;
+}
+
+
+#totalCacheModal .modal-actions button {
+    min-width: 110px;
+
+    padding: 8px 14px;
+
+    border: 1px solid rgba(80, 255, 170, 0.22);
+    border-radius: 999px;
+
+    background: rgba(255, 255, 255, 0.06);
+
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
+    color: #7dffbf;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+            transform 0.15s ease,
+            background 0.2s ease,
+            box-shadow 0.2s ease;
+}
+
+
+#totalCacheModal .modal-actions button:hover {
+    transform: translateY(-1px);
+
+    background: rgba(84, 255, 174, 0.12);
+
+    box-shadow:
+            0 0 14px rgba(84, 255, 174, 0.22);
+}
+
+
+#totalCacheModal .modal-actions button:active {
+    transform: scale(0.98);
+}
+
+
+#totalCacheModal .modal-actions button:disabled {
+    opacity: 0.45;
+    cursor: default;
+    box-shadow: none;
+}
+
+.loading-gif-overlay {
+    position: fixed;
+    inset: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    pointer-events: none;
+    z-index: 9999;
+
+    background: rgba(0, 0, 0, 0.12);
+
+    backdrop-filter: blur(2px);
+}
+
+.loading-gif-big {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+
+    opacity: 0.92;
+
+    filter:
+            drop-shadow(0 0 18px rgba(80,255,170,0.45));
+}
+.rename-input {
+    width: 100%;
+    box-sizing: border-box;
+
+    margin-top: 12px;
+    margin-bottom: 18px;
+
+    padding: 12px 14px;
+
+    border-radius: 12px;
+    border: 1px solid rgba(120,255,180,0.18);
+
+    background: rgba(20,30,20,0.72);
+
+    color: #d8ffe7;
+
+    font-size: 15px;
+
+    outline: none;
+}
+
+.rename-input:focus {
+    border-color: rgba(120,255,180,0.45);
+
+    box-shadow:
+            0 0 14px rgba(120,255,180,0.16);
+}
+.properties-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+#renameModal {
+    z-index: 15000;
+}
+
+.rename-modal-content {
+    position: relative;
+    width: min(460px, 92vw);
+    margin: 120px auto;
+    padding: 26px;
+    border-radius: 22px;
+}
+
+#renameModal .delete-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+}
+
+#renameModal input {
+    width: 100%;
+}
+
+#renameModal button {
+    cursor: pointer;
+}
+.total-cache-style {
+    background:
+            linear-gradient(
+                    180deg,
+                    rgba(18,28,20,0.96),
+                    rgba(10,18,12,0.96)
+            );
+
+    border:
+            1px solid rgba(120,255,180,0.18);
+
+    box-shadow:
+            0 0 30px rgba(0,0,0,0.55),
+            0 0 18px rgba(120,255,180,0.10);
+
+    backdrop-filter: blur(12px);
+
+    color: #d8ffe7;
+}
+!* ===== Properties modal: компактнее ===== *!
+
+#propertiesModal .delete-modal-content {
+    width: min(92vw, 360px);
+    max-width: 360px;
+    margin: 120px auto;
+    padding: 18px 20px;
+    border-radius: 18px;
+
+    border: 1px solid rgba(0,255,150,0.22);
+    box-shadow:
+            0 0 18px rgba(0,255,150,0.12),
+            0 10px 35px rgba(0,0,0,0.45);
+}
+
+#propertiesModal h3 {
+    font-size: 16px;
+    margin: 0 0 14px;
+    text-align: center;
+}
+
+#propertiesBody {
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+#propertiesModal .properties-actions {
+    justify-content: center;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+#propertiesModal .properties-actions button {
+    min-height: 26px;
+    padding: 5px 9px;
+    font-size: 11px;
+    border-radius: 8px;
+
+    background: rgba(0,255,150,0.1) !important;
+    border: 1px solid rgba(0,255,150,0.3);
+    color: #00ffa0;
+}
+
+#propertiesModal #closePropertiesModalBtn {
+    margin: 0;
+}
+
+
+!* ===== Rename modal: как total-cache/topbar ===== *!
+
+#renameModal .rename-modal-content {
+    width: min(92vw, 380px);
+    max-width: 380px;
+    margin: 120px auto;
+    padding: 28px 22px 20px;
+    border-radius: 22px;
+
+    background:
+            linear-gradient(
+                    180deg,
+                    rgba(18,28,20,0.92),
+                    rgba(8,16,10,0.92)
+            );
+
+    border: 1px solid rgba(0,255,150,0.28);
+
+    box-shadow:
+            0 0 22px rgba(0,255,150,0.18),
+            0 0 45px rgba(0,0,0,0.55);
+
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+
+    color: #d8ffe7;
+}
+
+#renameModal .modal-header {
+    position: relative;
+    text-align: center;
+    margin-bottom: 14px;
+}
+
+#renameModal .modal-title {
+    color: #d8ffe7;
+    font-size: 15px;
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(0,255,150,0.25);
+}
+
+#closeRenameModalBtn {
+    position: absolute;
+    top: -18px;
+    right: -12px;
+
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
+
+    padding: 0;
+    border-radius: 50%;
+
+    background: rgba(220, 38, 38, 0.95) !important;
+    color: white !important;
+    border: 1px solid rgba(255,255,255,0.25);
+
+    font-size: 14px;
+    line-height: 1;
+}
+
+#renameModal .total-cache-actions,
+#renameModal .delete-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#renameModal button:not(#closeRenameModalBtn) {
+    min-height: 26px;
+    padding: 5px 9px;
+    font-size: 11px;
+    border-radius: 8px;
+
+    background: rgba(0,255,150,0.1) !important;
+    border: 1px solid rgba(0,255,150,0.3);
+    color: #00ffa0;
+}
+!* Жёстко уменьшаем модалку свойств *!
+#propertiesModal .properties-content {
+    width: 320px !important;
+    max-width: 320px !important;
+    min-height: auto !important;
+    max-height: none !important;
+
+    padding: 16px 18px !important;
+    margin: 120px auto !important;
+
+    border-radius: 18px !important;
+}
+
+!* Убираем лишнее растягивание тела *!
+#propertiesBody {
+    margin-top: 10px !important;
+    margin-bottom: 10px !important;
+    line-height: 1.45 !important;
+    font-size: 12px !important;
+}
+
+!* Кнопки в свойствах — маленькие, как верхняя панель *!
+#propertiesModal .delete-modal-actions button,
+#propertiesModal .properties-actions button,
+#renamePropertiesBtn,
+#movePropertiesBtn,
+#closePropertiesModalBtn {
+    min-height: 24px !important;
+    height: 24px !important;
+
+    padding: 4px 8px !important;
+
+    font-size: 11px !important;
+    line-height: 1 !important;
+
+    border-radius: 8px !important;
+
+    background: rgba(0,255,150,0.1) !important;
+    border: 1px solid rgba(0,255,150,0.3) !important;
+    color: #00ffa0 !important;
+
+    margin: 0 !important;
+}
+
+!* Контейнер кнопок *!
+#propertiesModal .delete-modal-actions,
+#propertiesModal .properties-actions {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+
+    gap: 8px !important;
+    margin-top: 12px !important;
+
+    flex-wrap: wrap !important;
+}*/

@@ -45,7 +45,8 @@ public class FileService {
             ".thumbnails",
             ".upload_tmp",
             ".preview_journal",
-            ".metadata_cache"
+            ".metadata_cache",
+            ".folder_cache"
     );
     public long countItems(String relativePath) throws IOException {
         Path current = resolveSafe(relativePath);
@@ -188,7 +189,60 @@ public class FileService {
     private FolderNodeDto buildFolderTree() throws IOException {
         return buildFolderNode(rootPath);
     }
+    public List<Path> getCachedFolderPaths() {
+        FolderNodeDto tree = cachedFolderTree;
 
+        if (tree == null) {
+            try {
+                rebuildFolderTreeCache();
+                tree = cachedFolderTree;
+            } catch (Exception e) {
+                return List.of(rootPath);
+            }
+        }
+
+        List<Path> result = new ArrayList<>();
+        collectFolderPaths(tree, result);
+
+        return result;
+    }
+    public void rename(String relativePath, String newName) throws IOException {
+        if (!StringUtils.hasText(newName)) {
+            throw new IllegalArgumentException("New name is empty");
+        }
+
+        if (newName.contains("/") || newName.contains("\\") || newName.contains("..")) {
+            throw new IllegalArgumentException("Invalid file name");
+        }
+
+        Path source = resolveSafe(relativePath);
+
+        if (source.getFileName().toString().equalsIgnoreCase(newName)) {
+            return;
+        }
+
+        Path target = source.resolveSibling(newName).normalize();
+        ensureInsideRoot(target);
+
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+    private void collectFolderPaths(FolderNodeDto node, List<Path> result) {
+        String relativePath = node.relativePath();
+
+        Path path = relativePath == null || relativePath.isBlank()
+                ? rootPath
+                : rootPath.resolve(relativePath).normalize();
+
+        result.add(path);
+
+        if (node.children() == null) {
+            return;
+        }
+
+        for (FolderNodeDto child : node.children()) {
+            collectFolderPaths(child, result);
+        }
+    }
     private long[] countDirectFolderChildren(Path folder) {
         long files = 0;
         long folders = 0;
@@ -528,15 +582,23 @@ public class FileService {
         int index = filename.lastIndexOf('.');
         return index >= 0 ? filename.substring(index + 1) : "";
     }
-
     @PostConstruct
+    public void initFolderTreeCache() {
+        try {
+            rebuildFolderTreeCache();
+            System.out.println("Folder tree cache built on startup");
+        } catch (Exception e) {
+            System.out.println("Failed to build folder tree cache on startup: " + e.getMessage());
+        }
+    }
+    /*@PostConstruct
     public void initFolderTreeCache() {
         try {
             rebuildFolderTreeCache();
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
+    }*/
 
     public FolderNodeDto getFolderTreeCached() throws IOException {
         if (cachedFolderTree == null) {

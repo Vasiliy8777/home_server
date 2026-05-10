@@ -9,10 +9,7 @@ import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.*;
-import ru.homeserver.photoshare.homeserver.service.FileService;
-import ru.homeserver.photoshare.homeserver.service.FolderPrepareService;
-import ru.homeserver.photoshare.homeserver.service.MetadataService;
-import ru.homeserver.photoshare.homeserver.service.ThumbnailService;
+import ru.homeserver.photoshare.homeserver.service.*;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.*;
@@ -54,6 +51,8 @@ public class FileController {
     @Autowired
     private FolderPrepareService folderPrepareService;
 
+    private final TotalCacheService totalCacheService;
+
     private final String ffmpegPath;
     private final String ffprobePath;
     private final AppProperties appProperties;
@@ -67,7 +66,8 @@ public class FileController {
             AppProperties appProperties,
             @Value("${app.ffmpeg-path:ffmpeg}") String ffmpegPath,
             @Value("${app.ffprobe-path:ffprobe}") String ffprobePath,
-            MetadataService metadataService
+            MetadataService metadataService,
+            TotalCacheService totalCacheService
     ) {
         this.fileService = fileService;
         this.thumbnailService = thumbnailService;
@@ -75,9 +75,61 @@ public class FileController {
         this.ffmpegPath = ffmpegPath;
         this.ffprobePath = ffprobePath;
         this.metadataService = metadataService;
+        this.totalCacheService = totalCacheService;
+    }
+    @PostMapping("/total-cache/start")
+    public ResponseEntity<?> startTotalCache() {
+        totalCacheService.start();
+        return ResponseEntity.ok(totalCacheService.getStatus());
+    }
+
+    @PostMapping("/total-cache/pause")
+    public ResponseEntity<?> pauseTotalCache() {
+        totalCacheService.pause();
+        return ResponseEntity.ok(totalCacheService.getStatus());
+    }
+    @PostMapping("/total-cache/cancel")
+    public ResponseEntity<?> cancelTotalCache() {
+        totalCacheService.cancel();
+        return ResponseEntity.ok(totalCacheService.getStatus());
+    }
+    @PostMapping("/total-cache/abort")
+    public ResponseEntity<?> abortTotalCache() {
+        totalCacheService.abortAll();
+        return ResponseEntity.ok(totalCacheService.getStatus());
+    }
+    @PostMapping("/total-cache/resume")
+    public ResponseEntity<?> resumeTotalCache() {
+        totalCacheService.resume();
+        return ResponseEntity.ok(totalCacheService.getStatus());
+    }
+    @GetMapping("/total-cache/raw-status")
+    public ResponseEntity<?> totalCacheRawStatus() {
+        return ResponseEntity.ok(totalCacheService.getStatus());
+    }
+    @PostMapping("/total-cache/status-stop")
+    public ResponseEntity<?> stopTotalCacheStatus() {
+
+        totalCacheService.stopStatusScan();
+
+        return ResponseEntity.ok().build();
+    }
+    @PostMapping("/total-cache/status-start")
+    public ResponseEntity<?> startTotalCacheStatus() {
+
+        totalCacheService.startStatusScan();
+
+        return ResponseEntity.ok().build();
+    }
+    @GetMapping("/total-cache/status")
+    public ResponseEntity<?> totalCacheStatus() {
+        return ResponseEntity.ok(totalCacheService.rebuildActualStatus());
     }
     private Path getUploadTempDir() throws IOException {
-        Path dir = Path.of(appProperties.getPreviewCacheDir()).resolve("upload_tmp");
+        /*Path dir = fileService.getRootPath().resolve(".upload_tmp");
+        Files.createDirectories(dir);
+        return dir;*/
+        Path dir = Path.of(appProperties.getUploadTempDir());
         Files.createDirectories(dir);
         return dir;
     }
@@ -184,7 +236,7 @@ public class FileController {
 
         // восстанавливаем оригинальное имя (убираем .preview.mp4)
         String fileName = renamed.getFileName().toString();
-        /*String originalName = fileName.replaceAll("\\.preview\\.mp4$", ".insv");*/ // или .lrv при необходимости
+
         String originalName = Path.of(session.getOriginalPath()).getFileName().toString();
 
         return ResponseEntity.ok()
@@ -193,7 +245,29 @@ public class FileController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(new FileSystemResource(renamed));
     }
-   @PostMapping("/prepare-folder")
+    @PostMapping("/prepare-folder")
+    public Map<String, String> prepareFolder(
+            @RequestParam String path,
+            @RequestParam(defaultValue = "name") String sortField,
+            @RequestParam(defaultValue = "asc") String sortDirection,
+            @RequestParam(defaultValue = "all") String groupMode,
+            @RequestParam(defaultValue = "false") boolean periodEnabled,
+            @RequestParam(required = false) String periodFrom,
+            @RequestParam(required = false) String periodTo
+    ) {
+        String jobId = folderPrepareService.start(
+                path,
+                sortField,
+                sortDirection,
+                groupMode,
+                periodEnabled,
+                periodFrom,
+                periodTo
+        );
+
+        return Map.of("jobId", jobId);
+    }
+   /*@PostMapping("/prepare-folder")
    public Map<String, String> prepareFolder(
            @RequestParam String path,
            @RequestParam(defaultValue = "name") String sortField,
@@ -201,7 +275,7 @@ public class FileController {
    ) {
        String jobId = folderPrepareService.start(path, sortField, sortDirection);
        return Map.of("jobId", jobId);
-   }
+   }*/
     @GetMapping("/prepare-status")
     public Map<String, Object> prepareStatus(@RequestParam String jobId) {
         FolderPrepareJob job = folderPrepareService.get(jobId);
@@ -482,7 +556,7 @@ public class FileController {
          * - телом ответа
          */
         fileService.upload(path, files);
-
+        totalCacheService.rebuildStorageScanCacheAsync();
         return ResponseEntity.ok(Map.of("message", "Uploaded"));
     }
 
@@ -499,6 +573,7 @@ public class FileController {
         fileService.createFolder(path, name);
         fileService.rebuildFolderTreeCache();
         /*metadataService.clearFolderCache();*/
+        totalCacheService.rebuildStorageScanCacheAsync();
         return ResponseEntity.ok(Map.of("message", "Folder created"));
     }
 
@@ -512,8 +587,23 @@ public class FileController {
         fileService.delete(path);
         fileService.rebuildFolderTreeCache();
         /*metadataService.clearFolderCache();*/
+        totalCacheService.rebuildStorageScanCacheAsync();
         return ResponseEntity.ok(Map.of("message", "Deleted"));
     }
+    @PostMapping("/rename")
+    public ResponseEntity<?> rename(
+            @RequestParam String path,
+            @RequestParam String newName
+    ) throws IOException {
+        fileService.rename(path, newName);
+
+        fileService.rebuildFolderTreeCache();
+        totalCacheService.rebuildStorageScanCacheAsync();
+
+        return ResponseEntity.ok().build();
+    }
+
+
     @GetMapping("/image-thumbnail")
     public ResponseEntity<Resource> imageThumbnail(@RequestParam String path) throws IOException {
         Path file = fileService.resolveSafe(path);
@@ -712,6 +802,12 @@ public class FileController {
 
         return ResponseEntity.ok(Map.of("previewId", previewId));
     }
+
+    @PostMapping("/total-cache/reset")
+    public ResponseEntity<?> resetTotalCache() {
+        totalCacheService.resetStatus();
+        return ResponseEntity.ok(totalCacheService.getStatus());
+    }
     @GetMapping("/download/mp4-file")
     public ResponseEntity<Resource> downloadMp4File(@RequestParam String previewId) throws IOException {
         Path file = previewFiles.get(previewId);
@@ -770,6 +866,7 @@ public class FileController {
     ) throws IOException {
         fileService.move(sourcePath, targetPath);
         fileService.rebuildFolderTreeCache();
+        totalCacheService.rebuildStorageScanCacheAsync();
         return ResponseEntity.ok(Map.of("message", "Moved"));
     }
     @GetMapping("/properties")
@@ -891,7 +988,7 @@ public class FileController {
         Files.deleteIfExists(getMetaFile(uploadId));
 
         uploadLocks.remove(uploadId);
-
+        totalCacheService.rebuildStorageScanCacheAsync();
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
     @GetMapping("/download-selected")

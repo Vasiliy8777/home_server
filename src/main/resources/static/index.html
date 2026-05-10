@@ -53,6 +53,7 @@
                     <!--<button id="upBtn">Назад</button>-->
                     <button id="folderListBtn">Список папок</button>
                     <button id="sortBtn">Сортировка</button>
+                    <button id="groupingBtn" class="blue-top-btn">Группировка</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -65,16 +66,15 @@
 
                 <div class="toolbar-group">
                     <button id="newFolderBtn">Создать папку</button>
-
                     <label class="upload-label">
                         <input id="fileInput" type="file" multiple hidden>
                         <span>Загрузить файлы</span>
                     </label>
-
                     <button id="toggleTransfersBtn" class="transfer-progress-btn">
                         <span id="topProgressBar" class="tp-bar"></span>
                         <span class="tp-label">Загрузки</span>
                     </button>
+                    <button id="totalCacheBtn">Кешировать всё</button>
                 </div>
 
             </div>
@@ -145,7 +145,7 @@
             ↑ От меньшего к большему
         </button>
 
-        <div class="delete-modal-actions">
+        <div class="delete-modal-actions properties-actions">
             <button id="closeSortModalBtn">Готово</button>
         </div>
     </div>
@@ -173,7 +173,7 @@
         </div>
     </div>
 </div>
-<div id="propertiesModal" class="delete-modal hidden">
+<div id="propertiesModal" class="delete-modal hidden properties-actions">
     <div class="delete-modal-backdrop"></div>
 
     <div class="delete-modal-content properties-content">
@@ -184,6 +184,12 @@
         </div>
 
         <div class="delete-modal-actions">
+            <button id="renamePropertiesBtn" class="topbar-btn">
+                Переименовать
+            </button>
+            <button id="movePropertiesBtn" class="topbar-btn">
+                Переместить
+            </button>
             <button id="closePropertiesModalBtn">Закрыть</button>
         </div>
     </div>
@@ -334,6 +340,150 @@
 
         <div id="metadataLoadingCount">0 из 0 файлов</div>
     </div>
+</div>
+<div id="totalCacheModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content metadata-loading-content total-cache-content">
+        <button id="abortTotalCacheBtn" class="total-cache-close-btn">✕</button>
+
+        <h3>Тотальное кеширование</h3>
+
+        <p id="totalCacheStage">Ожидание</p>
+        <p id="totalCachePath"></p>
+
+        <div class="metadata-progress">
+            <div id="totalCacheBar"></div>
+        </div>
+
+        <div id="totalCacheCount">0%</div>
+
+        <div class="modal-actions">
+            <button id="statusTotalCacheBtn">Статус</button>
+            <button id="resumeTotalCacheBtn">Пуск</button>
+            <button id="pauseTotalCacheBtn">Пауза</button>
+            <button id="closeTotalCacheModalBtn">Скрыть</button>
+        </div>
+    </div>
+</div>
+<div id="renameModal" class="delete-modal hidden">
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content total-cache-style rename-modal-content">
+
+        <div class="modal-header">
+            <div class="modal-title">Переименование</div>
+
+            <button id="closeRenameModalBtn"
+                    class="topbar-btn danger-btn">
+                ✕
+            </button>
+        </div>
+
+        <div class="total-cache-content">
+            <div id="renameTargetText"
+                 class="total-cache-path">
+            </div>
+
+            <input
+                    id="renameInput"
+                    class="rename-input"
+                    type="text"
+                    placeholder="Новое имя">
+
+            <div class="total-cache-actions">
+                <button id="confirmRenameBtn"
+                        class="topbar-btn">
+                    Переименовать
+                </button>
+
+                <button id="cancelRenameBtn"
+                        class="topbar-btn">
+                    Отмена
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="groupingModal" class="delete-modal hidden">
+
+    <div class="delete-modal-backdrop"></div>
+
+    <div class="delete-modal-content grouping-content">
+
+        <div class="grouping-header">
+
+            <div class="grouping-title">
+                Группировка
+            </div>
+
+            <button id="closeGroupingBtn"
+                    class="grouping-close-btn">
+                ✕
+            </button>
+        </div>
+
+        <div class="grouping-buttons">
+
+            <button class="group-mode-btn active"
+                    data-mode="all">
+                Все
+            </button>
+
+            <button class="group-mode-btn"
+                    data-mode="photo">
+                Фото
+            </button>
+
+            <button class="group-mode-btn"
+                    data-mode="video">
+                Видео
+            </button>
+        </div>
+
+        <div class="group-period-block">
+
+            <label class="period-checkbox-row">
+
+                <input type="checkbox"
+                       id="enablePeriodFilter">
+
+                <span>
+                    Фильтр по периоду
+                </span>
+
+            </label>
+
+            <div class="period-inputs">
+
+                <input type="date"
+                       id="periodFrom">
+
+                <input type="date"
+                       id="periodTo">
+
+            </div>
+
+        </div>
+
+        <div class="grouping-actions">
+
+            <button id="applyGroupingBtn"
+                    class="blue-top-btn">
+                Применить
+            </button>
+
+            <button id="resetGroupingBtn"
+                    class="topbar-btn">
+                Сброс
+            </button>
+
+        </div>
+
+    </div>
+</div>
+<div id="loadingGifOverlay" class="loading-gif-overlay hidden">
+    <img src="/img/loading1.gif" class="loading-gif-big" alt="Loading">
 </div>
 <script src="/app.js"></script>
 <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>

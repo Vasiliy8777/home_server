@@ -1,6 +1,6 @@
 package ru.homeserver.photoshare.homeserver.service;
 
-import org.springframework.beans.factory.annotation.Value;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 
@@ -18,9 +18,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 
 @Service
@@ -33,6 +32,7 @@ public class ThumbnailService {
 
     private final String magickPath;
     private final Path thumbnailsRoot;
+    private final Set<String> existingThumbnails = ConcurrentHashMap.newKeySet();
     public ThumbnailService(AppProperties appProperties) throws IOException {
         this.ffmpegPath = appProperties.getFfmpegPath() != null
                 ? appProperties.getFfmpegPath()
@@ -45,34 +45,77 @@ public class ThumbnailService {
         this.thumbnailsRoot = Path.of(appProperties.getThumbnailCacheDir());
         Files.createDirectories(this.thumbnailsRoot);
     }
-    private String formatFileTime(long millis) {
-        return java.time.Instant.ofEpochMilli(millis)
-                .atZone(ZoneId.systemDefault())
-                .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
+    @PostConstruct
+    public void loadExistingThumbnailsIndex() {
+        existingThumbnails.clear();
+
+        try {
+            if (!Files.exists(thumbnailsRoot)) return;
+
+            try (var stream = Files.walk(thumbnailsRoot)) {
+                stream
+                        .filter(Files::isRegularFile)
+                        .filter(path -> {
+                            String name = path.getFileName().toString().toLowerCase();
+                            return name.endsWith(".jpg")
+                                    || name.endsWith(".jpeg")
+                                    || name.endsWith(".png");
+                        })
+                        .forEach(path -> existingThumbnails.add(path.toAbsolutePath().normalize().toString()));
+            }
+
+            System.out.println("Loaded thumbnails index: " + existingThumbnails.size());
+
+        } catch (Exception e) {
+            System.out.println("Failed to load thumbnails index");
+        }
     }
+    private boolean thumbnailExistsFast(Path thumbnail) {
+        String key = thumbnail.toAbsolutePath().normalize().toString();
 
-
-    private String formatDuration(double seconds) {
-        long total = Math.round(seconds);
-        long h = total / 3600;
-        long m = (total % 3600) / 60;
-        long s = total % 60;
-
-        if (h > 0) {
-            return String.format("%d:%02d:%02d", h, m, s);
+        if (existingThumbnails.contains(key)) {
+            return true;
         }
 
-        return String.format("%d:%02d", m, s);
+        try {
+            if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+                existingThumbnails.add(key);
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+
+        return false;
+    }
+
+    private void rememberThumbnail(Path thumbnail) {
+        if (thumbnail == null) return;
+        existingThumbnails.add(thumbnail.toAbsolutePath().normalize().toString());
+    }
+    private Path thumbnailDirFor(Path file) throws IOException {
+        Path folder = file.toAbsolutePath().normalize().getParent();
+
+        String folderHash = sha256(folder.toString());
+
+        Path dir = thumbnailsRoot.resolve(folderHash);
+        Files.createDirectories(dir);
+
+        return dir;
+    }
+
+    private Path thumbnailFileFor(Path file, String suffix) throws IOException {
+        String fileHash = sha256(file.toAbsolutePath().normalize().toString());
+
+        return thumbnailDirFor(file).resolve(fileHash + suffix);
     }
     public Path getOrCreateVideoThumbnail(Path videoPath) throws IOException, InterruptedException {
         String ext = getExtension(videoPath.getFileName().toString()).toLowerCase(Locale.ROOT);
 
         if ("insv".equals(ext) || "lrv".equals(ext)) {
 
-            String hash = sha256(videoPath.toAbsolutePath().normalize().toString());
-            Path thumbnail = thumbnailsRoot.resolve(hash + ".jpg");
-
+            Path thumbnail = thumbnailFileFor(videoPath, ".jpg");
             if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+                rememberThumbnail(thumbnail);
                 return thumbnail;
             }
 
@@ -83,6 +126,7 @@ public class ThumbnailService {
                 acquired = true;
 
                 if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+                    rememberThumbnail(thumbnail);
                     return thumbnail;
                 }
 
@@ -132,10 +176,9 @@ public class ThumbnailService {
             return null;
         }
 
-        String hash = sha256(videoPath.toAbsolutePath().normalize().toString());
-        Path output = thumbnailsRoot.resolve(hash + ".jpg");
-
+        Path output = thumbnailFileFor(videoPath, ".jpg");
         if (Files.exists(output) && Files.size(output) > 0) {
+            rememberThumbnail(output);
             return output;
         }
 
@@ -146,6 +189,7 @@ public class ThumbnailService {
             acquired = true;
 
             if (Files.exists(output) && Files.size(output) > 0) {
+                rememberThumbnail(output);
                 return output;
             }
             try {
@@ -158,6 +202,7 @@ public class ThumbnailService {
             }
 
             if (Files.exists(output) && Files.size(output) > 0) {
+                rememberThumbnail(output);
                 return output;
             }
 
@@ -176,10 +221,10 @@ public class ThumbnailService {
         }
     }
     public Path getOrCreateHeicThumbnail(Path file) throws IOException {
-        String hash = sha256(file.toAbsolutePath().normalize().toString());
-        Path thumbnail = thumbnailsRoot.resolve(hash + ".heic.jpg");
 
+        Path thumbnail = thumbnailFileFor(file, ".heic.jpg");
         if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
+            rememberThumbnail(thumbnail);
             return thumbnail;
         }
 
@@ -220,6 +265,7 @@ public class ThumbnailService {
 
                 return null;
             }
+            rememberThumbnail(thumbnail);
             return thumbnail;
 
         } catch (Exception e) {
@@ -242,11 +288,9 @@ public class ThumbnailService {
         if (!isImageExtension(ext)) {
             return null;
         }
-
-        String hash = sha256(imagePath.toAbsolutePath().normalize().toString());
-        Path output = thumbnailsRoot.resolve(hash + ".jpg");
-
+        Path output = thumbnailFileFor(imagePath, ".jpg");
         if (Files.exists(output) && Files.size(output) > 0) {
+            rememberThumbnail(output);
             return output;
         }
 
@@ -257,12 +301,14 @@ public class ThumbnailService {
             acquired = true;
 
             if (Files.exists(output) && Files.size(output) > 0) {
+                rememberThumbnail(output);
                 return output;
             }
 
             generateImageThumbnail(imagePath, output, 400, 300, 0.82f);
 
             if (Files.exists(output) && Files.size(output) > 0) {
+                rememberThumbnail(output);
                 return output;
             }
 
@@ -407,6 +453,25 @@ public class ThumbnailService {
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
+        }
+    }
+    public boolean hasImageThumbnail(Path imagePath) {
+        try {
+            Path output = thumbnailFileFor(imagePath, ".jpg");
+
+            return thumbnailExistsFast(output);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public boolean hasVideoThumbnail(Path videoPath) {
+        try {
+            Path output = thumbnailFileFor(videoPath, ".jpg");
+
+            return thumbnailExistsFast(output);
+        } catch (Exception e) {
+            return false;
         }
     }
 }

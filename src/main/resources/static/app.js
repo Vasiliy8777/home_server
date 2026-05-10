@@ -5,6 +5,12 @@ let currentPlayer = null;
 let deleteTargetPath = null;
 let deleteTargetName = null;
 
+let renameTargetPath = null;
+let renameTargetName = null;
+
+let currentPropertiesPath = null;
+let currentPropertiesName = null;
+
 let currentItems = [];
 let virtualStart = -1;
 let virtualEnd = -1;
@@ -12,7 +18,10 @@ let virtualTotalCount = -1;
 let currentPreparedJobId = null;
 let preparedAllLoaded = false;
 
-
+let groupingMode = localStorage.getItem("groupingMode") || "all";
+let periodFilterEnabled = localStorage.getItem("periodFilterEnabled") === "true";
+let periodFromValue = localStorage.getItem("periodFromValue") || "";
+let periodToValue = localStorage.getItem("periodToValue") || "";
 let bulkMoveMode = false;
 const selectedItems = new Map();
 
@@ -37,6 +46,30 @@ let estimatedTotalItems = 0;
 let loading = false;
 let allLoaded = false;
 
+const groupingBtn =
+    document.getElementById("groupingBtn");
+
+const groupingModal =
+    document.getElementById("groupingModal");
+
+const closeGroupingBtn =
+    document.getElementById("closeGroupingBtn");
+
+const applyGroupingBtn =
+    document.getElementById("applyGroupingBtn");
+
+const resetGroupingBtn =
+    document.getElementById("resetGroupingBtn");
+
+const enablePeriodFilter =
+    document.getElementById("enablePeriodFilter");
+
+const periodFrom =
+    document.getElementById("periodFrom");
+
+const periodTo =
+    document.getElementById("periodTo");
+
 const sortBtn = document.getElementById("sortBtn");
 const sortModal = document.getElementById("sortModal");
 const closeSortModalBtn = document.getElementById("closeSortModalBtn");
@@ -45,6 +78,17 @@ const sortDirectionBtn = document.getElementById("sortDirectionBtn");
 const propertiesModal = document.getElementById("propertiesModal");
 const propertiesBody = document.getElementById("propertiesBody");
 const closePropertiesModalBtn = document.getElementById("closePropertiesModalBtn");
+
+const renameModal = document.getElementById("renameModal");
+const renameInput = document.getElementById("renameInput");
+const renameTargetText = document.getElementById("renameTargetText");
+
+const confirmRenameBtn = document.getElementById("confirmRenameBtn");
+const cancelRenameBtn = document.getElementById("cancelRenameBtn");
+const closeRenameModalBtn = document.getElementById("closeRenameModalBtn");
+
+const renamePropertiesBtn = document.getElementById("renamePropertiesBtn");
+const movePropertiesBtn = document.getElementById("movePropertiesBtn");
 
 const previewBuildModal = document.getElementById("previewBuildModal");
 const previewBuildBar = document.getElementById("previewBuildBar");
@@ -77,7 +121,35 @@ const confirmDownloadFormatBtn = document.getElementById("confirmDownloadFormatB
 const cancelDownloadFormatBtn = document.getElementById("cancelDownloadFormatBtn");
 
 const metadataLoadingTitle = document.getElementById("metadataLoadingTitle");
+const thumbLoadingModal = document.getElementById("thumbLoadingModal");
+const thumbLoadingTitle = document.getElementById("thumbLoadingTitle");
+const thumbLoadingText = document.getElementById("thumbLoadingText");
+const thumbLoadingBar = document.getElementById("thumbLoadingBar");
+const thumbLoadingCount = document.getElementById("thumbLoadingCount");
 
+const totalCacheBtn = document.getElementById("totalCacheBtn");
+const totalCacheModal = document.getElementById("totalCacheModal");
+const totalCacheStage = document.getElementById("totalCacheStage");
+const totalCachePath = document.getElementById("totalCachePath");
+const totalCacheBar = document.getElementById("totalCacheBar");
+const totalCacheCount = document.getElementById("totalCacheCount");
+const pauseTotalCacheBtn = document.getElementById("pauseTotalCacheBtn");
+const resumeTotalCacheBtn = document.getElementById("resumeTotalCacheBtn");
+const closeTotalCacheModalBtn = document.getElementById("closeTotalCacheModalBtn");
+
+const statusTotalCacheBtn = document.getElementById("statusTotalCacheBtn");
+const abortTotalCacheBtn = document.getElementById("abortTotalCacheBtn");
+
+const loadingGifOverlay = document.getElementById("loadingGifOverlay");
+
+let totalCacheTimer = null;
+
+let thumbLoadingTotal = 0;
+let thumbLoadingDone = 0;
+let thumbLoadingSession = 0;
+let thumbLoadingHideTimer = null;
+let thumbSession = 0;
+let folderRingHideTimer = null;
 
 const metadataCache = new Map();
 
@@ -93,72 +165,124 @@ const MAX_METADATA_REQUESTS = window.innerWidth <= 768 ? 2 : 4; // 🔥 для �
 const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20: 80;
 let currentPreparedTotal = 0;
 const PAGE_LIMIT = 1000;
-async function loadFilesPrepared(path = "") {
-    const sessionId = ++folderLoadSession;
-    const pathForLoading = path || "";
+function closePropertiesModal() {
+    if (!propertiesModal) return;
+
+    propertiesModal.classList.add("hidden");
+}
+/*async function loadFilesPrepared(path = "") {*/
+async function loadFilesPrepared(path = "", options = {}) {
+    showLoadingGif();
+    try {
+        const showPrepareModal = options.showPrepareModal !== false;
+        thumbSession++; // 🔥 убиваем старые загрузки
+
+// остановка метаданных
+        METADATA_QUEUE.length = 0;
+        metadataRunning = 0;
+
+// сброс модалок
+        hideThumbLoadingModal();
+        const sessionId = ++folderLoadSession;
+        const pathForLoading = path || "";
 
 
-    currentPath = pathForLoading;
-    activeFolderPath = pathForLoading;
-    parentPath = getParentPath(pathForLoading);
+        currentPath = pathForLoading;
+        activeFolderPath = pathForLoading;
+        parentPath = getParentPath(pathForLoading);
 
-    currentPreparedJobId = null;
-    preparedAllLoaded = false;
-    loading = false;
+        currentPreparedJobId = null;
+        preparedAllLoaded = false;
+        loading = false;
 
-    offset = 0;
-    lastLoadTime = 0;
-    currentItems = [];
-    viewerItems = [];
-    metadataLoaded = new Set();
+        offset = 0;
+        lastLoadTime = 0;
+        currentItems = [];
+        viewerItems = [];
+        metadataLoaded = new Set();
 
-    virtualStart = -1;
-    virtualEnd = -1;
-    virtualTotalCount = -1;
+        virtualStart = -1;
+        virtualEnd = -1;
+        virtualTotalCount = -1;
 
-    gallery.innerHTML = "";
-    gallery.scrollTop = 0;
+        gallery.innerHTML = "";
+        gallery.scrollTop = 0;
 
-    currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
+        currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
 
-    showFolderLoadingRing(0);
-    showMetadataLoadingModal();
+        /*showFolderLoadingRing(0);
+        showMetadataLoadingModal();*/
+        showFolderLoadingRing(0);
 
-    const res = await fetch(
-        `/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}`,
-        { method: "POST" }
-    );
-
-    const { jobId } = await res.json();
-
-    if (sessionId !== folderLoadSession) return;
-    let ready = false;
-
-    while (!ready) {
-        const statusRes = await fetch(`/api/files/prepare-status?jobId=${encodeURIComponent(jobId)}`);
-        const status = await statusRes.json();
-        currentPreparedTotal = status.total || 0;
-        ready = status.ready;
-        updateMetadataLoadingModal(
-            status.progress || 0,
-            status.processed || 0,
-            status.total || 0,
-            status.stage || "Подготовка папки"
-        );
-        updateFolderLoadingRing(status.progress || 0);
-
-        if (!ready) {
-            await new Promise(r => setTimeout(r, 300));
+        if (showPrepareModal) {
+            showMetadataLoadingModal();
         }
+
+        const res = await fetch(
+            /*`/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}`,*/
+            `/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}&groupMode=${encodeURIComponent(groupingMode)}&periodEnabled=${periodFilterEnabled}&periodFrom=${encodeURIComponent(periodFromValue)}&periodTo=${encodeURIComponent(periodToValue)}`,
+            {method: "POST"}
+        );
+
+        const {jobId} = await res.json();
+
+        if (sessionId !== folderLoadSession) {
+            hideLoadingGif();
+            return;
+        }
+        let ready = false;
+
+        while (!ready) {
+            const statusRes = await fetch(`/api/files/prepare-status?jobId=${encodeURIComponent(jobId)}`);
+            const status = await statusRes.json();
+            if (sessionId !== folderLoadSession) {
+                hideMetadataLoadingModal();
+                hideLoadingGif();
+                return;
+            }
+            currentPreparedTotal = status.total || 0;
+            ready = status.ready;
+            updateMetadataLoadingModal(
+                status.progress || 0,
+                status.processed || 0,
+                status.total || 0,
+                status.stage || "Подготовка папки"
+            );
+            updateFolderLoadingRing(status.progress || 0);
+
+            if (!ready) {
+                await new Promise(r => setTimeout(r, 300));
+            }
+        }
+        if (sessionId !== folderLoadSession) {
+            hideMetadataLoadingModal();
+
+            return;
+        }
+        hideMetadataLoadingModal();
+
+        currentPreparedJobId = jobId;
+
+        await loadPreparedPage(jobId);
+
+
+        updateNavButtons();
+    } finally {
+        hideLoadingGif();
     }
+}
+function showLoadingGif() {
+    if (!loadingGifOverlay) return;
 
-    hideMetadataLoadingModal();
-    currentPreparedJobId = jobId;
+    loadingGifOverlay.style.display = "flex";
+    loadingGifOverlay.classList.remove("hidden");
+}
 
-    await loadPreparedPage(jobId);
+function hideLoadingGif() {
+    if (!loadingGifOverlay) return;
 
-
-    updateNavButtons();
+    loadingGifOverlay.classList.add("hidden");
+    loadingGifOverlay.style.display = "none";
 }
 async function loadPreparedPage(jobId) {
     if (preparedAllLoaded || loading) return;
@@ -171,7 +295,10 @@ async function loadPreparedPage(jobId) {
             `/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${PAGE_LIMIT}`
         );
 
-        if (!res.ok) return;
+        if (!res.ok) {
+            hideLoadingGif();
+            return;
+        }
 
         const data = await res.json();
         const items = data.items || [];
@@ -180,6 +307,7 @@ async function loadPreparedPage(jobId) {
 
         if (items.length === 0) {
             setTimeout(() => maybeLoadMorePrepared(), 500);
+
             return;
         }
 
@@ -199,10 +327,138 @@ async function loadPreparedPage(jobId) {
         }
     } finally {
         loading = false;
+        if (estimatedTotalItems > 0 && offset >= estimatedTotalItems) {
+            hideLoadingGif();
+        }
     }
 }
-async function loadFiles(path = "") {
-    return loadFilesPrepared(path);
+async function openTotalCacheModal() {
+
+    totalCacheModal.classList.remove("hidden");
+
+    if (totalCacheTimer) {
+        clearInterval(totalCacheTimer);
+    }
+
+    // просто читаем текущий status
+    const response = await fetch("/api/files/total-cache/raw-status");
+
+    if (!response.ok) return;
+
+    const status = await response.json();
+
+    renderTotalCacheStatus(status);
+
+    // polling только если процесс уже идёт
+    if (status.running || status.stage?.includes("Анализ")) {
+        totalCacheTimer = setInterval(updateTotalCacheStatus, 1000);
+    }
+}
+
+async function showTotalCacheStatus() {
+
+    await fetch("/api/files/total-cache/status-start", {
+        method: "POST"
+    });
+
+    await fetch("/api/files/total-cache/status");
+
+    if (totalCacheTimer) {
+        clearInterval(totalCacheTimer);
+    }
+
+    totalCacheTimer = setInterval(updateTotalCacheStatus, 1000);
+}
+
+async function pauseTotalCache() {
+    await fetch("/api/files/total-cache/pause", {
+        method: "POST"
+    });
+
+    await updateTotalCacheStatus();
+}
+async function cancelTotalCache() {
+    if (totalCacheTimer) {
+        clearInterval(totalCacheTimer);
+        totalCacheTimer = null;
+    }
+
+    await fetch("/api/files/total-cache/cancel", { method: "POST" });
+    await fetch("/api/files/total-cache/reset", { method: "POST" });
+
+    totalCacheModal.classList.add("hidden");
+}
+async function resumeTotalCache() {
+    totalCacheModal.classList.remove("hidden");
+
+    await fetch("/api/files/total-cache/start", {
+        method: "POST"
+    });
+
+    startTotalCachePolling();
+}
+
+function startTotalCachePolling() {
+    if (totalCacheTimer) {
+        clearInterval(totalCacheTimer);
+    }
+
+    updateTotalCacheStatus();
+
+    totalCacheTimer = setInterval(updateTotalCacheStatus, 1000);
+}
+function renderTotalCacheStatus(status) {
+
+    totalCacheStage.textContent = status.stage || "Ожидание";
+    totalCachePath.textContent = status.currentPath || "";
+
+    const progress = status.progress || 0;
+
+    totalCacheBar.style.width = `${progress}%`;
+
+    const foldersDone = Math.min(
+        status.processedFolders || 0,
+        status.totalFolders || 0
+    );
+
+    const filesDone = Math.min(
+        status.processedFiles || 0,
+        status.totalFiles || 0
+    );
+
+    const thumbsDone = Math.min(
+        status.processedThumbnails || 0,
+        status.totalThumbnails || 0
+    );
+
+    totalCacheCount.textContent =
+        `${progress}% · папки ${foldersDone}/${status.totalFolders || 0}, файлы ${filesDone}/${status.totalFiles || 0}, постеры ${thumbsDone}/${status.totalThumbnails || 0}`;
+
+    pauseTotalCacheBtn.disabled = !status.running;
+    resumeTotalCacheBtn.disabled = !!status.running;
+}
+async function updateTotalCacheStatus() {
+
+    const response = await fetch("/api/files/total-cache/raw-status");
+
+    if (!response.ok) return;
+
+    const status = await response.json();
+
+    renderTotalCacheStatus(status);
+
+    // остановить polling если всё завершилось
+    if (
+        !status.running
+        && !status.stage?.includes("Анализ")
+    ) {
+        clearInterval(totalCacheTimer);
+        totalCacheTimer = null;
+    }
+}
+
+async function loadFiles(path = "", options = {}) {
+    return loadFilesPrepared(path, options);
 }
 async function maybeLoadMorePrepared(jobId = currentPreparedJobId) {
     if (!jobId || jobId !== currentPreparedJobId) return;
@@ -222,6 +478,73 @@ async function maybeLoadMorePrepared(jobId = currentPreparedJobId) {
         await loadPreparedPage(jobId);
     }
 }
+function openRenameModal(path, name) {
+    renameTargetPath = path;
+    renameTargetName = name;
+
+    renameTargetText.textContent = `Переименование: ${name}`;
+    renameInput.value = name;
+
+    renameModal.classList.remove("hidden");
+
+    setTimeout(() => {
+        renameInput.focus();
+        renameInput.select();
+    }, 40);
+}
+function closeRenameModal() {
+    renameModal.classList.add("hidden");
+
+    renameTargetPath = null;
+    renameTargetName = null;
+
+    renameInput.value = "";
+}
+groupingBtn.onclick = () => {
+    groupingModal.classList.remove("hidden");
+};
+
+closeGroupingBtn.onclick = () => {
+    groupingModal.classList.add("hidden");
+};
+applyGroupingBtn.onclick = () => {
+    periodFilterEnabled = enablePeriodFilter.checked;
+    periodFromValue = periodFrom.value || "";
+    periodToValue = periodTo.value || "";
+
+    localStorage.setItem("groupingMode", groupingMode);
+    localStorage.setItem("periodFilterEnabled", periodFilterEnabled);
+    localStorage.setItem("periodFromValue", periodFromValue);
+    localStorage.setItem("periodToValue", periodToValue);
+
+    groupingBtn.classList.toggle(
+        "active",
+        groupingMode !== "all" || periodFilterEnabled
+    );
+
+    groupingModal.classList.add("hidden");
+
+    loadFiles(currentPath);
+};
+resetGroupingBtn.onclick = () => {
+    groupingMode = "all";
+    periodFilterEnabled = false;
+    periodFromValue = "";
+    periodToValue = "";
+
+    localStorage.removeItem("groupingMode");
+    localStorage.removeItem("periodFilterEnabled");
+    localStorage.removeItem("periodFromValue");
+    localStorage.removeItem("periodToValue");
+
+    groupingBtn.classList.remove("active");
+
+    groupingModal.classList.add("hidden");
+
+    loadFiles(currentPath);
+};
+cancelRenameBtn.onclick = closeRenameModal;
+closeRenameModalBtn.onclick = closeRenameModal;
 function showToast(message) {
     const toast = document.getElementById("toast");
 
@@ -317,12 +640,14 @@ async function fetchMetadataBulk(paths) {
         if (meta.directory) {
             if (meta.fileCount == null && meta.folderCount == null) return;
             const hasContent = (meta.fileCount || 0) > 0 || (meta.folderCount || 0) > 0;
-
-            if (metaEl.childNodes[0]) {
+            metaEl.innerHTML = hasContent
+                ? "Папка с файлами"
+                : "Пустая папка";
+            /*if (metaEl.childNodes[0]) {
                 metaEl.childNodes[0].textContent = hasContent
                     ? "Папка с файлами"
                     : "Пустая папка";
-            }
+            }*/
         } else if (dateEl && meta.createdAt) {
             dateEl.textContent = " · " + formatDateTime(meta.createdAt);
             dateEl.dataset.createdAt = meta.createdAt;
@@ -336,23 +661,18 @@ function applyCardMetadata(path, meta) {
 
     const metaEl = card.querySelector(".meta");
     const dateEl = card.querySelector(".card-created-date");
-
     if (meta.directory) {
-        if (meta.directory) {
-            if (!metaEl) return;
-            if (meta.fileCount == null && meta.folderCount == null) {
-                return;
-            }
+        if (!metaEl) return;
 
-            const hasContent = (meta.fileCount || 0) > 0 || (meta.folderCount || 0) > 0;
+        if (meta.fileCount == null && meta.folderCount == null) return;
 
-            // 🔥 полностью перезаписываем текст
-            metaEl.innerHTML = hasContent
-                ? "Папка с файлами"
-                : "Пустая папка";
+        const hasContent = (meta.fileCount || 0) > 0 || (meta.folderCount || 0) > 0;
 
-            return;
-        }
+        metaEl.innerHTML = hasContent
+            ? "Папка с файлами"
+            : "Пустая папка";
+
+        return;
     }
     if (metaEl && meta.createdAt) {
         let dateEl = metaEl.querySelector(".card-created-date");
@@ -388,21 +708,12 @@ async function processMetadataQueue() {
                 metadataCache.set(path, meta);
                 applyCardMetadata(path, meta);
             });
-            /*metadataProcessed += Object.keys(data).length;*/
+
             metadataProcessed += batch.length;
 
-            const percent = metadataTotal > 0
-                ? Math.round(metadataProcessed * 100 / metadataTotal)
-                : 100;
-
-            updateMetadataLoadingModal(percent, metadataProcessed, metadataTotal);
-
             if (metadataProcessed >= metadataTotal && METADATA_QUEUE.length === 0) {
-                setTimeout(() => {
-                    hideMetadataLoadingModal();
-                    metadataTotal = 0;
-                    metadataProcessed = 0;
-                }, 500);
+                metadataTotal = 0;
+                metadataProcessed = 0;
             }
         }
 
@@ -430,13 +741,7 @@ function enqueueMetadata(paths) {
     }
 
     metadataTotal += newPaths.length;
-    showMetadataLoadingModal();
 
-    updateMetadataLoadingModal(
-        metadataTotal > 0 ? Math.round(metadataProcessed * 100 / metadataTotal) : 0,
-        metadataProcessed,
-        metadataTotal
-    );
     for (const path of newPaths) {
         if (!path) continue;
 
@@ -554,6 +859,41 @@ function updateSortButtonsState() {
             ? "↑ От меньшего к большему"
             : "↓ От большего к меньшему";
 }
+groupingBtn.onclick = () => {
+    enablePeriodFilter.checked = periodFilterEnabled;
+    periodFrom.value = periodFromValue;
+    periodTo.value = periodToValue;
+
+    document.querySelectorAll(".group-mode-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.mode === groupingMode);
+    });
+
+    groupingModal.classList.remove("hidden");
+};
+document.querySelectorAll(".group-mode-btn").forEach(btn => {
+    btn.onclick = () => {
+        document.querySelectorAll(".group-mode-btn")
+            .forEach(b => b.classList.remove("active"));
+
+        btn.classList.add("active");
+        groupingMode = btn.dataset.mode;
+    };
+});
+
+document.querySelectorAll(".group-mode-btn")
+    .forEach(btn => {
+
+        btn.onclick = () => {
+
+            document
+                .querySelectorAll(".group-mode-btn")
+                .forEach(b => b.classList.remove("active"));
+
+            btn.classList.add("active");
+
+            groupingMode = btn.dataset.mode;
+        };
+    });
 document.querySelectorAll(".sort-field-btn").forEach(btn => {
     btn.onclick = () => {
         sortField = btn.dataset.field;
@@ -827,6 +1167,84 @@ transferList.addEventListener("click", (e) => {
         }
     }
 });
+totalCacheBtn.onclick = openTotalCacheModal;
+
+statusTotalCacheBtn.onclick = showTotalCacheStatus;
+pauseTotalCacheBtn.onclick = pauseTotalCache;
+resumeTotalCacheBtn.onclick = resumeTotalCache;
+
+// СКРЫТЬ — только закрывает модалку, процессы продолжаются
+closeTotalCacheModalBtn.onclick = () => {
+    if (totalCacheTimer) {
+        clearInterval(totalCacheTimer);
+        totalCacheTimer = null;
+    }
+
+    totalCacheModal.classList.add("hidden");
+};
+
+// ✕ — аварийно останавливает кеширование + анализ и закрывает модалку
+abortTotalCacheBtn.onclick = () => {
+    if (totalCacheTimer) {
+        clearInterval(totalCacheTimer);
+        totalCacheTimer = null;
+    }
+
+    totalCacheModal.classList.add("hidden");
+
+    fetch("/api/files/total-cache/abort", {
+        method: "POST"
+    }).catch(console.error);
+};
+confirmRenameBtn.onclick = async () => {
+
+    if (!renameTargetPath) return;
+
+    const newName = renameInput.value.trim();
+
+    if (!newName) return;
+
+    const form = new URLSearchParams();
+
+    form.append("path", renameTargetPath);
+    form.append("newName", newName);
+
+    const response = await fetch("/api/files/rename", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+
+        alert("Ошибка переименования:\n" + text);
+        return;
+    }
+
+    closeRenameModal();
+
+    await loadFiles(currentPath);
+};
+renamePropertiesBtn.onclick = () => {
+    closePropertiesModal();
+
+    openRenameModal(
+        currentPropertiesPath,
+        currentPropertiesName
+    );
+};
+
+movePropertiesBtn.onclick = () => {
+    closePropertiesModal();
+
+    openMoveModal(
+        currentPropertiesPath,
+        currentPropertiesName
+    );
+};
 resumeAllTransfersBtn.onclick = () => {
     allTransfersPaused = !allTransfersPaused;
 
@@ -876,6 +1294,7 @@ const uploadQueue = [];
 const downloadQueue = [];
 const transferTasks = new Map();
 const TRANSFERS_STORAGE_KEY = "gallery_transfer_tasks_v1";
+
 
 let activeUploads = 0;
 let activeDownloads = 0;
@@ -935,7 +1354,7 @@ async function handleLoadMoreScroll() {
 }
 
 window.addEventListener("scroll", handleLoadMoreScroll);
-//gallery.addEventListener("scroll", handleLoadMoreScroll);
+gallery.addEventListener("scroll", handleLoadMoreScroll);
 const currentPathEl = document.getElementById("currentPath");
 const upBtn = document.getElementById("upBtn");
 const fileInput = document.getElementById("fileInput");
@@ -1184,6 +1603,9 @@ async function uploadFileResumableManaged(task, isPaused) {
     const file = task.file;
     const targetPath = task.targetPath;
     const CHUNK_SIZE = 1024 * 1024;
+    /*const CHUNK_SIZE = window.innerWidth <= 768
+        ? 256 * 1024
+        : 1024 * 1024;*/
 
     const initData = await initUploadSession(file, targetPath, CHUNK_SIZE);
 
@@ -1463,7 +1885,20 @@ function restoreTransferTasks() {
 
     renderTransferList();
 }
+/*async function downloadResumableManaged(task) {
+    const item = task.item;
 
+    task.progress = 100;
+    task.status = "done";
+    saveTransferTasks();
+    renderTransferList();
+    updateTopProgress();
+
+    const key = "download_" + item.name;
+    localStorage.removeItem(key);
+
+    window.location.href = item.downloadUrl;
+}*/
 async function downloadResumableManaged(task) {
     const item = task.item;
     const key = "download_" + item.name;
@@ -1737,6 +2172,12 @@ function closeFolderListModal() {
 }
 
 async function goToSelectedFolder() {
+    thumbSession++;
+    folderLoadSession++;
+
+    hideMetadataLoadingModal();
+    hideThumbLoadingModal();
+    hideFolderLoadingRing();
     const targetPath = selectedFolderListPath || "";
     console.log("Переходим в:", targetPath);
 
@@ -1853,6 +2294,7 @@ function enablePreviewPan(img) {
     });
 }
 function appendItems(items) {
+    if (activeFolderPath !== currentPath) return;
     if (!items || items.length === 0) return;
 
     currentItems.push(...items);
@@ -1914,6 +2356,53 @@ function hideMetadataLoadingModal() {
     if (!metadataLoadingModal) return;
     metadataLoadingModal.classList.add("hidden");
 }
+function showThumbLoadingModal(total) {
+    if (!thumbLoadingModal || !thumbLoadingBar || !thumbLoadingCount) {
+        console.warn("Thumb loading modal not found");
+        return;
+    }
+
+    clearTimeout(thumbLoadingHideTimer);
+
+    thumbLoadingTotal = total || 0;
+    thumbLoadingDone = 0;
+
+    if (thumbLoadingTitle) {
+        thumbLoadingTitle.textContent = "Загрузка миниатюр";
+    }
+
+    if (thumbLoadingText) {
+        thumbLoadingText.textContent = "Загружаем постеры карточек...";
+    }
+
+    thumbLoadingBar.style.width = "0%";
+    thumbLoadingCount.textContent = `0 из ${thumbLoadingTotal} постеров`;
+
+    thumbLoadingModal.classList.remove("hidden");
+}
+
+function updateThumbLoadingModal(done, total) {
+    if (!thumbLoadingModal || !thumbLoadingBar || !thumbLoadingCount) return;
+
+    const safeTotal = total || 0;
+    const safeDone = Math.min(done || 0, safeTotal);
+
+    const percent = safeTotal > 0
+        ? Math.round((safeDone * 100) / safeTotal)
+        : 100;
+
+    thumbLoadingBar.style.width = `${percent}%`;
+    thumbLoadingCount.textContent = `${safeDone} из ${safeTotal} постеров`;
+
+    if (thumbLoadingText) {
+        thumbLoadingText.textContent = `Загружено: ${percent}%`;
+    }
+}
+
+function hideThumbLoadingModal() {
+    if (!thumbLoadingModal) return;
+    thumbLoadingModal.classList.add("hidden");
+}
 function getGalleryColumns() {
     const grid = getComputedStyle(gallery);
     const columns = grid.gridTemplateColumns.split(" ").filter(Boolean).length;
@@ -1928,14 +2417,22 @@ function updateGalleryScrollMode() {
     gallery.classList.toggle("gallery-scroll", needScroll);
 }
 
-function showFolderLoadingRing(percent = 0) {
+/*function showFolderLoadingRing(percent = 0) {
     const ring = document.getElementById("folderLoadingRing");
     if (!ring) return;
 
     ring.classList.remove("hidden");
     updateFolderLoadingRing(percent);
-}
+}*/
+function showFolderLoadingRing(percent = 0) {
+    const ring = document.getElementById("folderLoadingRing");
+    if (!ring) return;
 
+    clearTimeout(folderRingHideTimer);
+
+    ring.classList.remove("hidden");
+    updateFolderLoadingRing(percent);
+}
 function updateFolderLoadingRing(percent) {
     const progress = document.getElementById("folderLoadingRingProgress");
     const text = document.getElementById("folderLoadingPercent");
@@ -1948,11 +2445,21 @@ function updateFolderLoadingRing(percent) {
     text.textContent = `${safePercent}%`;
 }
 
-function hideFolderLoadingRing() {
+/*function hideFolderLoadingRing() {
     const ring = document.getElementById("folderLoadingRing");
     if (!ring) return;
 
     setTimeout(() => {
+        ring.classList.add("hidden");
+    }, 400);
+}*/
+function hideFolderLoadingRing() {
+    const ring = document.getElementById("folderLoadingRing");
+    if (!ring) return;
+
+    clearTimeout(folderRingHideTimer);
+
+    folderRingHideTimer = setTimeout(() => {
         ring.classList.add("hidden");
     }, 400);
 }
@@ -2070,7 +2577,7 @@ function createCard(item) {
     } else if (item.type === "image") {
         thumb.innerHTML = `
     <img
-        src="/image-placeholder.png"   // 👈 сразу показываем
+        src="/image-placeholder.png"
         loading="lazy"
         data-src="${buildImageThumbnailUrl(item.relativePath)}"
         alt="${escapeHtml(item.name)}"
@@ -2082,7 +2589,7 @@ function createCard(item) {
         thumb.innerHTML = `
     <div class="video-thumb-wrap">
         <img
-            src="/video-placeholder.png"  // 👈 сразу показываем
+            src="/video-placeholder.png" 
             loading="lazy"
             data-src="${buildVideoThumbnailUrl(item.relativePath)}"
             alt="${escapeHtml(item.name)}"
@@ -2099,13 +2606,32 @@ function createCard(item) {
     const body = document.createElement("div");
     body.className = "card-body";
 
-    let sizeText; if (item.directory) {
+    /*let sizeText;
+    if (item.directory) {
         sizeText = "Папка";
-    }else {
+    }*/
+    let sizeText;
+
+    if (item.directory) {
+        const fileCount = item.fileCount ?? 0;
+        const folderCount = item.folderCount ?? 0;
+
+        const hasCounts = item.fileCount !== null && item.fileCount !== undefined
+            || item.folderCount !== null && item.folderCount !== undefined;
+
+        if (hasCounts) {
+            sizeText = (fileCount > 0 || folderCount > 0)
+                ? "Папка с файлами"
+                : "Пустая папка";
+        } else {
+            sizeText = "Папка";
+        }
+    } else {
         sizeText = formatBytes(item.size);
     }
     /*const dateText = "";*/
-    const dateText = item.createdAt
+    /*const dateText = item.createdAt*/
+    const dateText = !item.directory && item.createdAt
         ? " · " + formatDateTime(item.createdAt)
         : "";
     body.innerHTML = `
@@ -2171,10 +2697,10 @@ function createCard(item) {
             actions.appendChild(downloadLink);
         }
     }
-    const moveBtn = document.createElement("button");
+    /*const moveBtn = document.createElement("button");
     moveBtn.textContent = "Переместить";
     moveBtn.onclick = () => openMoveModal(item.relativePath, item.name);
-    actions.appendChild(moveBtn);
+    actions.appendChild(moveBtn);*/
 
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "danger";
@@ -2185,7 +2711,14 @@ function createCard(item) {
 
     const propertiesBtn = document.createElement("button");
     propertiesBtn.textContent = "Свойства";
-    propertiesBtn.onclick = () => openPropertiesModal(item.relativePath);
+    /*propertiesBtn.onclick = () => openPropertiesModal(item.relativePath);*/
+    propertiesBtn.onclick = async () => {
+
+        currentPropertiesPath = item.relativePath;
+        currentPropertiesName = item.name;
+
+        await openPropertiesModal(item.relativePath);
+    };
     actions.appendChild(propertiesBtn);
 
     body.appendChild(actions);
@@ -2245,7 +2778,8 @@ async function openPropertiesModal(path) {
     }
 
     const data = await response.json();
-
+    /*currentPropertiesPath = item.relativePath;
+    currentPropertiesName = item.name;*/
     propertiesBody.innerHTML = renderFullProperties(data);
 
     if (data.type === "folder") {
@@ -2331,9 +2865,34 @@ function propRow(label, value) {
 
     return `<div><b>${label}:</b> ${escapeHtml(String(value))}</div>`;
 }
-
 function initLazyThumbs() {
     const images = document.querySelectorAll("img.lazy-thumb[data-src]");
+    if (!images.length) return;
+
+    const session = ++thumbSession;
+
+    let loadedThumbs = 0;
+    let loadingThumbs = 0;
+    function onThumbLoaded() {
+        if (session !== thumbSession) return;
+
+        loadedThumbs++;
+
+        if (loadingThumbs >= 3) {
+            updateFolderLoadingRing(Math.round(loadedThumbs * 100 / loadingThumbs));
+        }
+
+        if (loadedThumbs >= loadingThumbs) {
+            hideFolderLoadingRing();
+        }
+    }
+    // 🔥 если много — показываем кольцо
+    /*if (total > 50) {
+        showFolderLoadingRing(0);
+    }*/
+    if (window.thumbObserver) {
+        window.thumbObserver.disconnect();
+    }
 
     const observer = new IntersectionObserver((entries, obs) => {
         for (const entry of entries) {
@@ -2342,32 +2901,50 @@ function initLazyThumbs() {
             const img = entry.target;
             const src = img.getAttribute("data-src");
 
-            if (src) {
-                img.onerror = () => {
-                    img.onerror = null;
+            if (!src) {
+                obs.unobserve(img);
+                continue;
+            }
+            img.onload = () => {
+                img.onload = null;
+                img.onerror = null;
+                onThumbLoaded();
+            };
 
-                    if (img.classList.contains("video-thumb-img")) {
-                        img.src = "/video-placeholder.png";
-                    } else {
-                        img.src = "/image-placeholder.png";
-                    }
+            img.onerror = () => {
+                img.onload = null;
+                img.onerror = null;
 
-                    img.removeAttribute("data-src");
-                };
+                img.src = img.classList.contains("video-thumb-img")
+                    ? "/video-placeholder.png"
+                    : "/image-placeholder.png";
 
-                img.src = src;
                 img.removeAttribute("data-src");
+
+                onThumbLoaded();
+            };
+            loadingThumbs++;
+
+            if (loadingThumbs === 3) {
+                showFolderLoadingRing(0);
+            }
+            img.src = src;
+            img.removeAttribute("data-src");
+            if (session !== thumbSession) {
+                obs.unobserve(img);
+                return;
             }
 
             obs.unobserve(img);
         }
     }, {
-        rootMargin: "400px"
+        root: gallery,
+        rootMargin: "500px"
     });
 
+    window.thumbObserver = observer;
     images.forEach(img => observer.observe(img));
 }
-
 async function removeItem(path, name) {
     if (!confirm(`Удалить "${name}"?`)) return;
 
@@ -2414,8 +2991,25 @@ fileInput.addEventListener("change", () => {
 });
 newFolderBtn.addEventListener("click", openCreateFolderModal);
 
-upBtn.addEventListener("click", () => loadFiles(parentPath || ""));
+/*upBtn.addEventListener("click", () => loadFiles(parentPath || ""));*/
+upBtn.addEventListener("click", async () => {
+    const targetPath = parentPath || "";
 
+    thumbSession++;
+    folderLoadSession++;
+
+    if (window.thumbObserver) window.thumbObserver.disconnect();
+    if (window.metadataObserver) window.metadataObserver.disconnect();
+
+    METADATA_QUEUE.length = 0;
+    metadataRunning = 0;
+
+    hideMetadataLoadingModal();
+    hideThumbLoadingModal();
+    hideFolderLoadingRing();
+
+    await loadFiles(targetPath, { showPrepareModal: false });
+});
 function openCreateFolderModal() {
     createFolderInput.value = "";
     createFolderModal.classList.remove("hidden");
@@ -2566,9 +3160,10 @@ document.querySelectorAll(".sort-field-btn").forEach(btn => {
         await loadFiles(currentPath);
     });
 });
-closePropertiesModalBtn.onclick = () => {
+/*closePropertiesModalBtn.onclick = () => {
     propertiesModal.classList.add("hidden");
-};
+};*/
+closePropertiesModalBtn.onclick = closePropertiesModal;
 downloadOriginalFormatBtn.onclick = () => {
     selectedDownloadFormat = "original";
     updateDownloadFormatButtons();
@@ -2883,7 +3478,11 @@ viewer.addEventListener("click", (e) => {
         closeViewerModal();
     }
 });
-
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+        closeRenameModal();
+    }
+});
 document.addEventListener("keydown", (e) => {
     if (viewer.classList.contains("hidden")) return;
 
@@ -2891,7 +3490,14 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowLeft") showPrevItem();
     if (e.key === "ArrowRight") showNextItem();
 });
+document.addEventListener("keydown", e => {
 
+    if (e.key === "Escape") {
+
+        closePropertiesModal();
+        closeRenameModal();
+    }
+});
 function updateNavButtons() {
     if (!currentPath) {
         upBtn.style.display = "none";

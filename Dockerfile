@@ -22,7 +22,13 @@ RUN apt-get update \
 
 COPY --from=build /app/build/libs/*.jar app.jar
 
-RUN mkdir -p /data /cache/metadata /cache/thumbnails /cache/previews
+RUN mkdir -p \
+    /data \
+    /cache/metadata \
+    /cache/thumbnails \
+    /cache/previews \
+    /cache/folders \
+    /cache/upload_tmp
 
 EXPOSE 8080
 

@@ -8,10 +8,11 @@ services:
       - "8080:8080"
     environment:
       APP_STORAGE_ROOT: /data
+      APP_UPLOAD_TEMP_DIR: /cache/upload_tmp
       APP_METADATA_CACHE_DIR: /cache/metadata
       APP_THUMBNAIL_CACHE_DIR: /cache/thumbnails
       APP_PREVIEW_CACHE_DIR: /cache/previews
-
+      APP_FOLDER_CACHE_DIR: /cache/folders
       APP_FFMPEG_PATH: ffmpeg
       APP_FFPROBE_PATH: ffprobe
       APP_MAGICK_PATH: convert
@@ -23,5 +24,6 @@ services:
       - "G:/arc_Y_disc:/data"
       - home_gallery_cache:/cache
     restart: unless-stopped
+
 volumes:
-    home_gallery_cache:
+  home_gallery_cache:

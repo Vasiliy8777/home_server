@@ -16,6 +16,10 @@ public class AppProperties {
     private String ffprobePath;
     private String magickPath;
 
+    private String uploadTempDir;
+
+    private String folderCacheDir;
+
     private Security security = new Security();
 
     public static class Security {
@@ -29,6 +33,20 @@ public class AppProperties {
         public void setPassword(String password) { this.password = password; }
     }
 
+    public String getFolderCacheDir() {
+        return folderCacheDir;
+    }
+
+    public void setFolderCacheDir(String folderCacheDir) {
+        this.folderCacheDir = folderCacheDir;
+    }
+    public String getUploadTempDir() {
+        return uploadTempDir;
+    }
+
+    public void setUploadTempDir(String uploadTempDir) {
+        this.uploadTempDir = uploadTempDir;
+    }
     public String getStorageRoot() { return storageRoot; }
     public void setStorageRoot(String storageRoot) { this.storageRoot = storageRoot; }
 

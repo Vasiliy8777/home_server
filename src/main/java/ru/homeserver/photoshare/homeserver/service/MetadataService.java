@@ -143,6 +143,17 @@ public class MetadataService {
         } catch (Exception ignored) {
         }
     }
+    public boolean propertiesCacheExists(Path file) {
+        try {
+            Path cache = filePropertiesCacheFile(file);
+
+            return Files.exists(cache)
+                    && Files.size(cache) > 0;
+
+        } catch (Exception e) {
+            return false;
+        }
+    }
     public Map<String, Object> readFileProperties(Path path) throws IOException {
         Path key = path.toAbsolutePath().normalize();
 
@@ -191,7 +202,7 @@ public class MetadataService {
             return 0L;
         }
     }
-    /*public Map<String, Object> readFileProperties(Path path) throws IOException {*/
+
     private Map<String, Object> readFilePropertiesUncached(Path path) throws IOException {
         if (Files.isDirectory(path)) {
             return readFolderProperties(path);
