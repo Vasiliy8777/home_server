@@ -223,6 +223,7 @@ public class ThumbnailService {
     public Path getOrCreateHeicThumbnail(Path file) throws IOException {
 
         Path thumbnail = thumbnailFileFor(file, ".heic.jpg");
+
         if (Files.exists(thumbnail) && Files.size(thumbnail) > 0) {
             rememberThumbnail(thumbnail);
             return thumbnail;
@@ -230,51 +231,99 @@ public class ThumbnailService {
 
         ProcessBuilder pb = new ProcessBuilder(
                 magickPath,
-                file.toAbsolutePath().toString(),
+                file.toAbsolutePath().toString() + "[0]",
                 "-auto-orient",
                 "-thumbnail",
-                "1200x1200",
+                "1200x1200>",
                 "-quality",
                 "85",
                 thumbnail.toAbsolutePath().toString()
         );
 
         pb.redirectErrorStream(true);
+
         try {
-        Process process = pb.start();
+            Process process = pb.start();
 
-        StringBuilder log = new StringBuilder();
+            StringBuilder log = new StringBuilder();
 
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
 
-            String line;
-            while ((line = reader.readLine()) != null) {
-                log.append(line).append(System.lineSeparator());
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.append(line).append(System.lineSeparator());
+                }
             }
-        }
-
 
             int exitCode = process.waitFor();
+
             if (exitCode != 0 || !Files.exists(thumbnail) || Files.size(thumbnail) == 0) {
                 Files.deleteIfExists(thumbnail);
 
-                System.out.println("⚠️ HEIC thumbnail skipped for: " + file);
-                System.out.println("Reason: ImageMagick failed (too short/corrupted/unsupported)");
+                System.out.println("⚠️ HEIC ImageMagick failed for: " + file);
+                System.out.println("Command: " + magickPath + " " + file.toAbsolutePath() + "[0]");
                 System.out.println("Exit code: " + exitCode);
+                System.out.println(log);
 
-                return null;
+                /*return null;*/
+                return createHeicThumbnailWithPython(file, thumbnail);
             }
+
             rememberThumbnail(thumbnail);
             return thumbnail;
 
         } catch (Exception e) {
             Files.deleteIfExists(thumbnail);
 
-            System.out.println("⚠️ HEIC thumbnail skipped for: " + file);
-            System.out.println("Reason: exception during conversion");
+            System.out.println("⚠️ HEIC exception for: " + file);
             e.printStackTrace();
 
+            /*return null;*/
+            return createHeicThumbnailWithPython(file, thumbnail);
+        }
+    }private Path createHeicThumbnailWithPython(Path file, Path thumbnail) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(
+                "python3",
+                "/usr/local/bin/heic2jpg.py",
+                file.toAbsolutePath().toString(),
+                thumbnail.toAbsolutePath().toString()
+        );
+
+        pb.redirectErrorStream(true);
+
+        try {
+            Process process = pb.start();
+
+            StringBuilder log = new StringBuilder();
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.append(line).append(System.lineSeparator());
+                }
+            }
+
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0 || !Files.exists(thumbnail) || Files.size(thumbnail) == 0) {
+                Files.deleteIfExists(thumbnail);
+
+                System.out.println("⚠️ HEIC Python fallback failed for: " + file);
+                System.out.println("Exit code: " + exitCode);
+                System.out.println(log);
+
+                return null;
+            }
+
+            rememberThumbnail(thumbnail);
+            return thumbnail;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Files.deleteIfExists(thumbnail);
             return null;
         }
     }
@@ -326,6 +375,17 @@ public class ThumbnailService {
         ProcessBuilder pb = new ProcessBuilder(
                 ffmpegPath,
                 "-y",
+                "-ss", "1",
+                "-i", input.toAbsolutePath().toString(),
+                "-map", "0:v:0",
+                "-frames:v", "1",
+                "-vf", "scale=320:-2",
+                "-q:v", "5",
+                output.toAbsolutePath().toString()
+        );
+        /*ProcessBuilder pb = new ProcessBuilder(
+                ffmpegPath,
+                "-y",
 
                 "-i", input.toAbsolutePath().toString(),
 
@@ -333,7 +393,7 @@ public class ThumbnailService {
                 "-frames:v", "1",
 
                 output.toAbsolutePath().toString()
-        );
+        );*/
 
         pb.redirectErrorStream(true);
         Process process = pb.start();
@@ -358,6 +418,7 @@ public class ThumbnailService {
                 System.out.println("FFmpeg thumbnail skipped for: " + input);
                 System.out.println("Reason: no video frame or too short/corrupted video");
                 System.out.println("FFmpeg exit code: " + exitCode);
+                System.out.println(ffmpegLog);
                 return;
             }
 
@@ -457,13 +518,32 @@ public class ThumbnailService {
     }
     public boolean hasImageThumbnail(Path imagePath) {
         try {
+
+            String ext = getExtension(imagePath.getFileName().toString()).toLowerCase();
+
+            Path output;
+
+            if (ext.equals("heic") || ext.equals("heif")) {
+                output = thumbnailFileFor(imagePath, ".heic.jpg");
+            } else {
+                output = thumbnailFileFor(imagePath, ".jpg");
+            }
+
+            return thumbnailExistsFast(output);
+
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    /*public boolean hasImageThumbnail(Path imagePath) {
+        try {
             Path output = thumbnailFileFor(imagePath, ".jpg");
 
             return thumbnailExistsFast(output);
         } catch (Exception e) {
             return false;
         }
-    }
+    }*/
 
     public boolean hasVideoThumbnail(Path videoPath) {
         try {

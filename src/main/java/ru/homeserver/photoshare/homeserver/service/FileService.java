@@ -12,10 +12,7 @@ import ru.homeserver.photoshare.homeserver.dto.FolderNodeDto;
 import java.io.IOException;
 import java.net.URLConnection;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -46,17 +43,65 @@ public class FileService {
             ".upload_tmp",
             ".preview_journal",
             ".metadata_cache",
-            ".folder_cache"
+            ".folder_cache",
+            ".security",
+
+            "$RECYCLE.BIN",
+            "System Volume Information"
     );
     public long countItems(String relativePath) throws IOException {
+
+        Path current = resolveSafe(relativePath);
+
+        try (DirectoryStream<Path> stream =
+                     Files.newDirectoryStream(current)) {
+
+            long count = 0;
+
+            for (Path path : stream) {
+
+                try {
+
+                    String name =
+                            path.getFileName().toString();
+
+                    if (HIDDEN_DIRS.contains(name)) {
+                        continue;
+                    }
+
+                    if (Files.isSymbolicLink(path)) {
+                        continue;
+                    }
+
+                    count++;
+
+                } catch (Exception ignored) {
+                }
+            }
+
+            return count;
+        }
+    }
+    /*public long countItems(String relativePath) throws IOException {
         Path current = resolveSafe(relativePath);
 
         try (Stream<Path> stream = Files.list(current)) {
             return stream
-                    .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
+                    .filter(path -> {
+                        try {
+                            return !HIDDEN_DIRS.contains(path.getFileName().toString())
+                                    && !Files.isSymbolicLink(path);
+                                    *//*&& !Files.isHidden(path);*//*
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
                     .count();
+            *//*return stream
+                    .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
+                    .count();*//*
         }
-    }
+    }*/
     public FileService(MetadataService metadataService, AppProperties appProperties) throws IOException {
         this.metadataService = metadataService;
         this.rootPath = Paths.get(appProperties.getStorageRoot()).toAbsolutePath().normalize();
@@ -107,7 +152,15 @@ public class FileService {
          * но не обходит рекурсивно все подпапки.
          */
         try (Stream<Path> stream = Files.list(current)) {
+            /*List<Path> all = stream*/
             List<Path> all = stream
+                    .filter(path -> {
+                        try {
+                            return !Files.isSymbolicLink(path);
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
                     .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
                     .sorted(
                             Comparator
@@ -133,9 +186,19 @@ public class FileService {
                     String thumbnailUrl = null;
 
                     if (!isDir) {
-                        if ("image".equals(type)) {
+                        /*if ("image".equals(type)) {
                             previewUrl = "/api/files/raw?path=" + encodePath(relStr);
                             thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
+                        }*/if ("image".equals(type)) {
+                            String lower = relStr.toLowerCase(Locale.ROOT);
+
+                            thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
+
+                            if (lower.endsWith(".heic") || lower.endsWith(".heif")) {
+                                previewUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
+                            } else {
+                                previewUrl = "/api/files/raw?path=" + encodePath(relStr);
+                            }
                         } else if ("video".equals(type)) {
                             String lower = relStr.toLowerCase();
 
@@ -229,9 +292,10 @@ public class FileService {
     private void collectFolderPaths(FolderNodeDto node, List<Path> result) {
         String relativePath = node.relativePath();
 
-        Path path = relativePath == null || relativePath.isBlank()
+        /*Path path = relativePath == null || relativePath.isBlank()
                 ? rootPath
-                : rootPath.resolve(relativePath).normalize();
+                : rootPath.resolve(relativePath).normalize();*/
+        Path path = resolveSafe(relativePath);
 
         result.add(path);
 
@@ -252,6 +316,11 @@ public class FileService {
                 String name = child.getFileName().toString();
 
                 if (HIDDEN_DIRS.contains(name)) {
+                    continue;
+                }
+
+                /*if (Files.isDirectory(child)) {*/
+                if (Files.isSymbolicLink(child)) {
                     continue;
                 }
 
@@ -297,8 +366,16 @@ public class FileService {
 
         Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
     }
-
     private FolderNodeDto buildFolderNode(Path folder) throws IOException {
+
+        String folderName = folder.getFileName() != null
+                ? folder.getFileName().toString()
+                : "";
+
+        if (HIDDEN_DIRS.contains(folderName)) {
+            return null;
+        }
+
         String relativePath = rootPath.equals(folder)
                 ? ""
                 : rootPath.relativize(folder).toString().replace("\\", "/");
@@ -306,19 +383,35 @@ public class FileService {
         List<FolderNodeDto> children;
 
         try (Stream<Path> stream = Files.list(folder)) {
+
             children = stream
-                    .filter(Files::isDirectory)
-                    /*.filter(path -> !path.getFileName().toString().equals(".thumbnails"))*/
+                    /*.filter(Files::isDirectory)*/
+                    .filter(path -> {
+                        try {
+                            return Files.isDirectory(path)
+                                    && !Files.isSymbolicLink(path);
+                                    /*&& !Files.isHidden(path);*/
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
                     .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
-                    .sorted(Comparator.comparing(path -> path.getFileName().toString().toLowerCase(Locale.ROOT)))
+                    .sorted(Comparator.comparing(path ->
+                            path.getFileName().toString().toLowerCase(Locale.ROOT)))
                     .map(path -> {
                         try {
                             return buildFolderNode(path);
+                        } catch (AccessDeniedException e) {
+                            return null;
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
                     })
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toList());
+
+        } catch (AccessDeniedException e) {
+            return null;
         }
 
         return new FolderNodeDto(
@@ -466,20 +559,41 @@ public class FileService {
      *
      * Это один из самых важных методов во всем проекте.
      */
-    public Path resolveSafe(String relativePath) {
-        /*
+    /*public Path resolveSafe(String relativePath) {
+        *//*
          * Если путь null или пустой,
          * считаем, что имеется в виду корень.
-         */
+         *//*
         String clean = relativePath == null ? "" : relativePath.trim();
 
         Path resolved = clean.isEmpty()
                 ? rootPath
                 : rootPath.resolve(clean).normalize();
 
-        /*
+        *//*
          * Проверяем, что путь остался внутри разрешенного rootPath.
-         */
+         *//*
+        ensureInsideRoot(resolved);
+
+        return resolved;
+    }*/
+    public Path resolveSafe(String relativePath) {
+        String clean = relativePath == null ? "" : relativePath.trim();
+
+        clean = clean.replace("\\", "/");
+
+        while (clean.startsWith("/")) {
+            clean = clean.substring(1);
+        }
+
+        if (clean.contains("\0")) {
+            throw new IllegalArgumentException("Invalid path");
+        }
+
+        Path resolved = clean.isEmpty()
+                ? rootPath
+                : rootPath.resolve(clean).normalize();
+
         ensureInsideRoot(resolved);
 
         return resolved;
@@ -496,12 +610,18 @@ public class FileService {
      * После resolve + normalize это превратится в реальный путь,
      * и если он не начинается с rootPath, значит доступ запрещен.
      */
-    private void ensureInsideRoot(Path path) {
+   /* private void ensureInsideRoot(Path path) {
         if (!path.startsWith(rootPath)) {
             throw new IllegalArgumentException("Access outside root folder is forbidden");
         }
-    }
+    }*/
+    private void ensureInsideRoot(Path path) {
+        Path normalized = path.toAbsolutePath().normalize();
 
+        if (!normalized.startsWith(rootPath)) {
+            throw new IllegalArgumentException("Access outside root folder is forbidden");
+        }
+    }
     /*
      * Определение логического типа файла.
      *
@@ -591,14 +711,6 @@ public class FileService {
             System.out.println("Failed to build folder tree cache on startup: " + e.getMessage());
         }
     }
-    /*@PostConstruct
-    public void initFolderTreeCache() {
-        try {
-            rebuildFolderTreeCache();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }*/
 
     public FolderNodeDto getFolderTreeCached() throws IOException {
         if (cachedFolderTree == null) {

@@ -510,7 +510,7 @@ public class FileController {
      *
      * Загружает файлы в выбранную папку.
      */
-    @PostMapping("/upload/init")
+    /*@PostMapping("/upload/init")
     public ResponseEntity<?> initUpload(
             @RequestParam String fileName,
             @RequestParam long fileSize,
@@ -540,6 +540,56 @@ public class FileController {
 
             writeMeta(meta);
         }
+
+        return ResponseEntity.ok(meta);
+    }*/
+    @PostMapping("/upload/init")
+    public ResponseEntity<?> initUpload(
+            @RequestParam String fileName,
+            @RequestParam long fileSize,
+            @RequestParam long chunkSize,
+            @RequestParam(defaultValue = "") String path,
+            @RequestParam long lastModified
+    ) throws IOException {
+
+        if (fileSize <= 0 || chunkSize <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid fileSize or chunkSize"));
+        }
+
+        Path targetDir = fileService.resolveSafe(path);
+
+        if (!Files.exists(targetDir)) {
+            Files.createDirectories(targetDir);
+        }
+
+        if (!Files.isDirectory(targetDir)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Target is not a directory"));
+        }
+
+        String safeFileName = Path.of(fileName).getFileName().toString();
+
+        if (!StringUtils.hasText(safeFileName)
+                || safeFileName.contains("..")
+                || safeFileName.contains("/")
+                || safeFileName.contains("\\")
+                || safeFileName.contains("\0")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid file name"));
+        }
+
+        int totalChunks = (int) Math.ceil((double) fileSize / chunkSize);
+
+        String uploadId = UUID.randomUUID().toString();
+
+        UploadSessionDto meta = new UploadSessionDto();
+        meta.setUploadId(uploadId);
+        meta.setFileName(safeFileName);
+        meta.setTargetPath(path);
+        meta.setFileSize(fileSize);
+        meta.setChunkSize(chunkSize);
+        meta.setTotalChunks(totalChunks);
+        meta.setUploadedChunks(new java.util.ArrayList<>());
+
+        writeMeta(meta);
 
         return ResponseEntity.ok(meta);
     }
@@ -878,7 +928,7 @@ public class FileController {
         }
         return ResponseEntity.ok(metadataService.readFileProperties(file));
     }
-    @DeleteMapping("/clear-temp")
+    /*@DeleteMapping("/clear-temp")
     public ResponseEntity<?> clearTemp() throws IOException {
         Path tempDir = fileService.getRootPath().resolve(".upload_tmp");
 
@@ -886,6 +936,28 @@ public class FileController {
             try (var stream = Files.walk(tempDir)) {
                 stream
                         .sorted(Comparator.reverseOrder()) // сначала файлы, потом папки
+                        .forEach(path -> {
+                            try {
+                                if (!path.equals(tempDir)) {
+                                    Files.deleteIfExists(path);
+                                }
+                            } catch (IOException e) {
+                                System.out.println("Failed to delete: " + path);
+                            }
+                        });
+            }
+        }
+
+        return ResponseEntity.ok().build();
+    }*/
+    @DeleteMapping("/clear-temp")
+    public ResponseEntity<?> clearTemp() throws IOException {
+        Path tempDir = getUploadTempDir();
+
+        if (Files.exists(tempDir)) {
+            try (var stream = Files.walk(tempDir)) {
+                stream
+                        .sorted(Comparator.reverseOrder())
                         .forEach(path -> {
                             try {
                                 if (!path.equals(tempDir)) {
@@ -958,7 +1030,7 @@ public class FileController {
 
         return ResponseEntity.ok().build();
     }
-    @PostMapping("/upload/complete")
+    /*@PostMapping("/upload/complete")
     public ResponseEntity<?> completeUpload(@RequestParam String uploadId) throws IOException {
         UploadSessionDto meta = readMeta(uploadId);
 
@@ -990,6 +1062,57 @@ public class FileController {
         uploadLocks.remove(uploadId);
         totalCacheService.rebuildStorageScanCacheAsync();
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
+    }*/
+    @PostMapping("/upload/complete")
+    public ResponseEntity<?> completeUpload(@RequestParam String uploadId) throws IOException {
+        UploadSessionDto meta = readMeta(uploadId);
+
+        if (meta == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Upload session not found"));
+        }
+
+        String safeFileName = Path.of(meta.getFileName()).getFileName().toString();
+
+        if (!StringUtils.hasText(safeFileName)
+                || !safeFileName.equals(meta.getFileName())
+                || safeFileName.contains("..")
+                || safeFileName.contains("/")
+                || safeFileName.contains("\\")
+                || safeFileName.contains("\0")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid file name"));
+        }
+
+        Path tempFile = getTempFile(uploadId);
+
+        Path finalDir = fileService.resolveSafe(meta.getTargetPath());
+
+        if (!Files.exists(finalDir)) {
+            Files.createDirectories(finalDir);
+        }
+
+        if (!Files.isDirectory(finalDir)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Target is not a directory"));
+        }
+
+        Path finalPath = fileService.resolveSafe(
+                meta.getTargetPath() + "/" + safeFileName
+        );
+
+        if (!Files.exists(tempFile)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Temp file not found"));
+        }
+
+        if (meta.getUploadedChunks().size() != meta.getTotalChunks()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Not all chunks uploaded"));
+        }
+
+        Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
+        Files.deleteIfExists(getMetaFile(uploadId));
+
+        uploadLocks.remove(uploadId);
+        totalCacheService.rebuildStorageScanCacheAsync();
+
+        return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
     @GetMapping("/download-selected")
     public ResponseEntity<StreamingResponseBody> downloadSelected(
@@ -1007,8 +1130,15 @@ public class FileController {
                     if (Files.isDirectory(source)) {
                         try (Stream<Path> walk = Files.walk(source)) {
                             for (Path file : walk.filter(Files::isRegularFile).toList()) {
-                                Path relative = source.getParent().relativize(file);
-                                zipOut.putNextEntry(new java.util.zip.ZipEntry(relative.toString().replace("\\\\", "/")));
+                                /*Path relative = source.getParent().relativize(file);
+                                zipOut.putNextEntry(new java.util.zip.ZipEntry(relative.toString().replace("\\\\", "/")));*/
+                                Path relative = source.relativize(file);
+
+                                String entryName = source.getFileName().toString()
+                                        + "/"
+                                        + relative.toString().replace("\\", "/");
+
+                                zipOut.putNextEntry(new java.util.zip.ZipEntry(entryName));
                                 Files.copy(file, zipOut);
                                 zipOut.closeEntry();
                             }

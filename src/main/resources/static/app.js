@@ -1,4 +1,64 @@
 let currentPath = "";
+
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+
+    if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+    }
+
+    return null;
+}
+
+function csrfHeaders(extraHeaders = {}) {
+
+    const token = getCookie("XSRF-TOKEN");
+    //console.log("CSRF TOKEN:", token);
+    return {
+        ...extraHeaders,
+
+        ...(token
+            ? {"X-XSRF-TOKEN": decodeURIComponent(token)}
+            : {})
+    };
+}
+
+/*async function secureFetch(url, options = {}) {
+    const method = (options.method || "GET").toUpperCase();
+
+    const unsafe =
+        method !== "GET" &&
+        method !== "HEAD" &&
+        method !== "OPTIONS";
+
+    return window.fetch(url, {
+        ...options,
+        headers: unsafe
+            ? csrfHeaders(options.headers || {})
+            : (options.headers || {})
+    });
+}*/
+async function secureFetch(url, options = {}) {
+
+    const method = (options.method || "GET").toUpperCase();
+
+    const unsafe =
+        method !== "GET"
+        && method !== "HEAD"
+        && method !== "OPTIONS";
+
+    return window.fetch(url, {
+        credentials: "same-origin",
+
+        ...options,
+
+        headers: unsafe
+            ? csrfHeaders(options.headers || {})
+            : (options.headers || {})
+    });
+}
+
 let parentPath = "";
 let currentPlayer = null;
 
@@ -162,14 +222,16 @@ let metadataProcessed = 0;
 const METADATA_QUEUE = [];
 let metadataRunning = 0;
 const MAX_METADATA_REQUESTS = window.innerWidth <= 768 ? 2 : 4; // 🔥 для телефона критично
-const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20: 80;
+const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20 : 80;
 let currentPreparedTotal = 0;
 const PAGE_LIMIT = 1000;
+
 function closePropertiesModal() {
     if (!propertiesModal) return;
 
     propertiesModal.classList.add("hidden");
 }
+
 /*async function loadFilesPrepared(path = "") {*/
 async function loadFilesPrepared(path = "", options = {}) {
     showLoadingGif();
@@ -218,7 +280,7 @@ async function loadFilesPrepared(path = "", options = {}) {
             showMetadataLoadingModal();
         }
 
-        const res = await fetch(
+        const res = await secureFetch(
             /*`/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}`,*/
             `/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}&groupMode=${encodeURIComponent(groupingMode)}&periodEnabled=${periodFilterEnabled}&periodFrom=${encodeURIComponent(periodFromValue)}&periodTo=${encodeURIComponent(periodToValue)}`,
             {method: "POST"}
@@ -233,7 +295,7 @@ async function loadFilesPrepared(path = "", options = {}) {
         let ready = false;
 
         while (!ready) {
-            const statusRes = await fetch(`/api/files/prepare-status?jobId=${encodeURIComponent(jobId)}`);
+            const statusRes = await secureFetch(`/api/files/prepare-status?jobId=${encodeURIComponent(jobId)}`);
             const status = await statusRes.json();
             if (sessionId !== folderLoadSession) {
                 hideMetadataLoadingModal();
@@ -271,6 +333,7 @@ async function loadFilesPrepared(path = "", options = {}) {
         hideLoadingGif();
     }
 }
+
 function showLoadingGif() {
     if (!loadingGifOverlay) return;
 
@@ -284,13 +347,14 @@ function hideLoadingGif() {
     loadingGifOverlay.classList.add("hidden");
     loadingGifOverlay.style.display = "none";
 }
+
 async function loadPreparedPage(jobId) {
     if (preparedAllLoaded || loading) return;
 
     loading = true;
 
     try {
-        const res = await fetch(
+        const res = await secureFetch(
             /*`/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${LIMIT}`*/
             `/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${PAGE_LIMIT}`
         );
@@ -332,6 +396,7 @@ async function loadPreparedPage(jobId) {
         }
     }
 }
+
 async function openTotalCacheModal() {
 
     totalCacheModal.classList.remove("hidden");
@@ -341,7 +406,7 @@ async function openTotalCacheModal() {
     }
 
     // просто читаем текущий status
-    const response = await fetch("/api/files/total-cache/raw-status");
+    const response = await secureFetch("/api/files/total-cache/raw-status");
 
     if (!response.ok) return;
 
@@ -357,11 +422,11 @@ async function openTotalCacheModal() {
 
 async function showTotalCacheStatus() {
 
-    await fetch("/api/files/total-cache/status-start", {
+    await secureFetch("/api/files/total-cache/status-start", {
         method: "POST"
     });
 
-    await fetch("/api/files/total-cache/status");
+    await secureFetch("/api/files/total-cache/status");
 
     if (totalCacheTimer) {
         clearInterval(totalCacheTimer);
@@ -371,27 +436,29 @@ async function showTotalCacheStatus() {
 }
 
 async function pauseTotalCache() {
-    await fetch("/api/files/total-cache/pause", {
+    await secureFetch("/api/files/total-cache/pause", {
         method: "POST"
     });
 
     await updateTotalCacheStatus();
 }
+
 async function cancelTotalCache() {
     if (totalCacheTimer) {
         clearInterval(totalCacheTimer);
         totalCacheTimer = null;
     }
 
-    await fetch("/api/files/total-cache/cancel", { method: "POST" });
-    await fetch("/api/files/total-cache/reset", { method: "POST" });
+    await secureFetch("/api/files/total-cache/cancel", {method: "POST"});
+    await secureFetch("/api/files/total-cache/reset", {method: "POST"});
 
     totalCacheModal.classList.add("hidden");
 }
+
 async function resumeTotalCache() {
     totalCacheModal.classList.remove("hidden");
 
-    await fetch("/api/files/total-cache/start", {
+    await secureFetch("/api/files/total-cache/start", {
         method: "POST"
     });
 
@@ -407,6 +474,7 @@ function startTotalCachePolling() {
 
     totalCacheTimer = setInterval(updateTotalCacheStatus, 1000);
 }
+
 function renderTotalCacheStatus(status) {
 
     totalCacheStage.textContent = status.stage || "Ожидание";
@@ -437,9 +505,10 @@ function renderTotalCacheStatus(status) {
     pauseTotalCacheBtn.disabled = !status.running;
     resumeTotalCacheBtn.disabled = !!status.running;
 }
+
 async function updateTotalCacheStatus() {
 
-    const response = await fetch("/api/files/total-cache/raw-status");
+    const response = await secureFetch("/api/files/total-cache/raw-status");
 
     if (!response.ok) return;
 
@@ -460,6 +529,7 @@ async function updateTotalCacheStatus() {
 async function loadFiles(path = "", options = {}) {
     return loadFilesPrepared(path, options);
 }
+
 async function maybeLoadMorePrepared(jobId = currentPreparedJobId) {
     if (!jobId || jobId !== currentPreparedJobId) return;
     if (preparedAllLoaded || loading) return;
@@ -478,6 +548,7 @@ async function maybeLoadMorePrepared(jobId = currentPreparedJobId) {
         await loadPreparedPage(jobId);
     }
 }
+
 function openRenameModal(path, name) {
     renameTargetPath = path;
     renameTargetName = name;
@@ -492,6 +563,7 @@ function openRenameModal(path, name) {
         renameInput.select();
     }, 40);
 }
+
 function closeRenameModal() {
     renameModal.classList.add("hidden");
 
@@ -500,6 +572,7 @@ function closeRenameModal() {
 
     renameInput.value = "";
 }
+
 groupingBtn.onclick = () => {
     groupingModal.classList.remove("hidden");
 };
@@ -526,6 +599,20 @@ applyGroupingBtn.onclick = () => {
 
     loadFiles(currentPath);
 };
+function resetGroupingState() {
+
+    groupingMode = "all";
+    periodFilterEnabled = false;
+    periodFromValue = "";
+    periodToValue = "";
+
+    localStorage.removeItem("groupingMode");
+    localStorage.removeItem("periodFilterEnabled");
+    localStorage.removeItem("periodFromValue");
+    localStorage.removeItem("periodToValue");
+
+    groupingBtn.classList.remove("active");
+}
 resetGroupingBtn.onclick = () => {
     groupingMode = "all";
     periodFilterEnabled = false;
@@ -545,6 +632,7 @@ resetGroupingBtn.onclick = () => {
 };
 cancelRenameBtn.onclick = closeRenameModal;
 closeRenameModalBtn.onclick = closeRenameModal;
+
 function showToast(message) {
     const toast = document.getElementById("toast");
 
@@ -565,6 +653,7 @@ function showToast(message) {
         setTimeout(() => toast.classList.add("hidden"), 250);
     }, 3000);
 }
+
 function showDownloadActionToast(item) {
     const toast = document.getElementById("actionToast");
     const text = toast.querySelector(".toast-text");
@@ -607,6 +696,7 @@ function showDownloadActionToast(item) {
         hideActionToast();
     }, 5000);
 }
+
 function getParentPath(path) {
     if (!path) return "";
 
@@ -615,10 +705,11 @@ function getParentPath(path) {
 
     return parts.join("/");
 }
+
 async function fetchMetadataBulk(paths) {
     if (!paths || paths.length === 0) return;
 
-    const response = await fetch("/api/files/metadata/card-bulk", {
+    const response = await secureFetch("/api/files/metadata/card-bulk", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(paths)
@@ -695,7 +786,7 @@ async function processMetadataQueue() {
     metadataRunning++;
 
     try {
-        const response = await fetch("/api/files/metadata/card-bulk", {
+        const response = await secureFetch("/api/files/metadata/card-bulk", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(batch)
@@ -757,6 +848,7 @@ function enqueueMetadata(paths) {
 
     processMetadataQueue();
 }
+
 function scrollToFile(path) {
     const el = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
     if (!el) return;
@@ -859,6 +951,7 @@ function updateSortButtonsState() {
             ? "↑ От меньшего к большему"
             : "↓ От большего к меньшему";
 }
+
 groupingBtn.onclick = () => {
     enablePeriodFilter.checked = periodFilterEnabled;
     periodFrom.value = periodFromValue;
@@ -905,6 +998,7 @@ document.querySelectorAll(".sort-field-btn").forEach(btn => {
         loadFiles(currentPath);
     };
 });
+
 function openBulkDownloadModal() {
     if (!selectedItems.size) return;
 
@@ -936,7 +1030,7 @@ async function preparePreviewVideo(item) {
     const form = new URLSearchParams();
     form.append("path", item.relativePath);
 
-    const startResponse = await fetch("/api/files/preview/start", {
+    const startResponse = await secureFetch("/api/files/preview/start", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -955,7 +1049,7 @@ async function preparePreviewVideo(item) {
 
     return new Promise((resolve, reject) => {
         previewStatusTimer = setInterval(async () => {
-            const statusResponse = await fetch(`/api/files/preview/status?previewId=${encodeURIComponent(currentPreviewId)}`);
+            const statusResponse = await secureFetch(`/api/files/preview/status?previewId=${encodeURIComponent(currentPreviewId)}`);
 
             if (!statusResponse.ok) {
                 clearInterval(previewStatusTimer);
@@ -1036,7 +1130,7 @@ async function confirmMove() {
     formData.append("sourcePath", moveSourcePath);
     formData.append("targetPath", selectedMovePath);
 
-    const response = await fetch("/api/files/move", {
+    const response = await secureFetch("/api/files/move", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -1062,7 +1156,7 @@ async function executeBulkMove() {
         formData.append("sourcePath", item.path);
         formData.append("targetPath", selectedMovePath);
 
-        const response = await fetch("/api/files/move", {
+        const response = await secureFetch("/api/files/move", {
             method: "POST",
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded"
@@ -1192,7 +1286,7 @@ abortTotalCacheBtn.onclick = () => {
 
     totalCacheModal.classList.add("hidden");
 
-    fetch("/api/files/total-cache/abort", {
+    secureFetch("/api/files/total-cache/abort", {
         method: "POST"
     }).catch(console.error);
 };
@@ -1209,7 +1303,7 @@ confirmRenameBtn.onclick = async () => {
     form.append("path", renameTargetPath);
     form.append("newName", newName);
 
-    const response = await fetch("/api/files/rename", {
+    const response = await secureFetch("/api/files/rename", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -1309,6 +1403,14 @@ let viewerIndex = -1;
 let moveSourcePath = null;
 let moveSourceName = null;
 let selectedMovePath = "";
+
+let viewerZoom = 1;
+let viewerPanX = 0;
+let viewerPanY = 0;
+let viewerDragging = false;
+let viewerDragStartX = 0;
+let viewerDragStartY = 0;
+let viewerLastTouchDistance = null;
 
 let selectedFolderListPath = "";
 
@@ -1441,7 +1543,7 @@ async function completeUploadSession(uploadId) {
     const form = new URLSearchParams();
     form.append("uploadId", uploadId);
 
-    const response = await fetch("/api/files/upload/complete", {
+    const response = await secureFetch("/api/files/upload/complete", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -1463,7 +1565,7 @@ async function initUploadSession(file, targetPath, chunkSize) {
     form.append("path", targetPath);
     form.append("lastModified", file.lastModified);
 
-    const response = await fetch("/api/files/upload/init", {
+    const response = await secureFetch("/api/files/upload/init", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -1836,7 +1938,7 @@ document.getElementById("clearTransfersBtn").onclick = async () => {
     localStorage.removeItem(TRANSFERS_STORAGE_KEY);
 
     try {
-        await fetch("/api/files/clear-temp", {
+        await secureFetch("/api/files/clear-temp", {
             method: "DELETE"
         });
     } catch (e) {
@@ -1885,6 +1987,7 @@ function restoreTransferTasks() {
 
     renderTransferList();
 }
+
 /*async function downloadResumableManaged(task) {
     const item = task.item;
 
@@ -1905,7 +2008,7 @@ async function downloadResumableManaged(task) {
 
     let start = Number(localStorage.getItem(key)) || 0;
 
-    const response = await fetch(item.downloadUrl, {
+    const response = await secureFetch(item.downloadUrl, {
         headers: {"Range": `bytes=${start}-`}
     });
 
@@ -1999,7 +2102,7 @@ async function openFolderListModal() {
     folderListTreeContainer.innerHTML = `<div>Загрузка папок...</div>`;
     folderListModal.classList.remove("hidden");
 
-    const response = await fetch("/api/files/folders/tree");
+    const response = await secureFetch("/api/files/folders/tree");
     if (!response.ok) {
         folderListTreeContainer.innerHTML = `<div>Не удалось загрузить список папок</div>`;
         return;
@@ -2075,7 +2178,7 @@ async function cleanupCurrentPreview() {
         currentPreviewId = null;
 
         try {
-            await fetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(id)}`, {
+            await secureFetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(id)}`, {
                 method: "DELETE"
             });
         } catch (e) {
@@ -2093,7 +2196,7 @@ async function openRenamePreview(item) {
     const form = new URLSearchParams();
     form.append("path", item.relativePath);
 
-    const resp = await fetch("/api/files/preview/rename-original-start", {
+    const resp = await secureFetch("/api/files/preview/rename-original-start", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -2111,7 +2214,7 @@ async function openRenamePreview(item) {
 
     return new Promise((resolve, reject) => {
         previewStatusTimer = setInterval(async () => {
-            const statusResponse = await fetch(
+            const statusResponse = await secureFetch(
                 `/api/files/preview/status?previewId=${encodeURIComponent(currentPreviewId)}`
             );
 
@@ -2293,6 +2396,7 @@ function enablePreviewPan(img) {
         }
     });
 }
+
 function appendItems(items) {
     if (activeFolderPath !== currentPath) return;
     if (!items || items.length === 0) return;
@@ -2324,6 +2428,7 @@ function appendItems(items) {
         updateBulkButtons();
     });
 }
+
 const metadataLoadingModal = document.getElementById("metadataLoadingModal");
 const metadataLoadingBar = document.getElementById("metadataLoadingBar");
 const metadataLoadingCount = document.getElementById("metadataLoadingCount");
@@ -2356,6 +2461,7 @@ function hideMetadataLoadingModal() {
     if (!metadataLoadingModal) return;
     metadataLoadingModal.classList.add("hidden");
 }
+
 function showThumbLoadingModal(total) {
     if (!thumbLoadingModal || !thumbLoadingBar || !thumbLoadingCount) {
         console.warn("Thumb loading modal not found");
@@ -2403,11 +2509,13 @@ function hideThumbLoadingModal() {
     if (!thumbLoadingModal) return;
     thumbLoadingModal.classList.add("hidden");
 }
+
 function getGalleryColumns() {
     const grid = getComputedStyle(gallery);
     const columns = grid.gridTemplateColumns.split(" ").filter(Boolean).length;
     return Math.max(1, columns);
 }
+
 function updateGalleryScrollMode() {
     if (!gallery) return;
 
@@ -2433,6 +2541,7 @@ function showFolderLoadingRing(percent = 0) {
     ring.classList.remove("hidden");
     updateFolderLoadingRing(percent);
 }
+
 function updateFolderLoadingRing(percent) {
     const progress = document.getElementById("folderLoadingRingProgress");
     const text = document.getElementById("folderLoadingPercent");
@@ -2467,7 +2576,7 @@ function hideFolderLoadingRing() {
 async function confirmDelete() {
     if (selectedItems.size > 0 && deleteTargetPath == null) {
         for (const item of selectedItems.values()) {
-            const response = await fetch(`/api/files?path=${encodeURIComponent(item.path)}`, {
+            const response = await secureFetch(`/api/files?path=${encodeURIComponent(item.path)}`, {
                 method: "DELETE"
             });
 
@@ -2487,7 +2596,7 @@ async function confirmDelete() {
 
     if (!deleteTargetPath) return;
 
-    const response = await fetch(`/api/files?path=${encodeURIComponent(deleteTargetPath)}`, {
+    const response = await secureFetch(`/api/files?path=${encodeURIComponent(deleteTargetPath)}`, {
         method: "DELETE"
     });
 
@@ -2770,7 +2879,7 @@ async function openPropertiesModal(path) {
     propertiesModal.classList.remove("hidden");
     propertiesBody.innerHTML = "Загрузка свойств...";
 
-    const response = await fetch(`/api/files/properties?path=${encodeURIComponent(path)}`);
+    const response = await secureFetch(`/api/files/properties?path=${encodeURIComponent(path)}`);
 
     if (!response.ok) {
         propertiesBody.innerHTML = "Ошибка загрузки";
@@ -2785,7 +2894,7 @@ async function openPropertiesModal(path) {
     if (data.type === "folder") {
         propertiesBody.innerHTML += `<div id="folderStatsBlock">Считаем размер папки...</div>`;
 
-        const statsResponse = await fetch(`/api/files/properties/folder-stats?path=${encodeURIComponent(path)}`);
+        const statsResponse = await secureFetch(`/api/files/properties/folder-stats?path=${encodeURIComponent(path)}`);
 
         if (statsResponse.ok) {
             const stats = await statsResponse.json();
@@ -2865,6 +2974,7 @@ function propRow(label, value) {
 
     return `<div><b>${label}:</b> ${escapeHtml(String(value))}</div>`;
 }
+
 function initLazyThumbs() {
     const images = document.querySelectorAll("img.lazy-thumb[data-src]");
     if (!images.length) return;
@@ -2873,6 +2983,7 @@ function initLazyThumbs() {
 
     let loadedThumbs = 0;
     let loadingThumbs = 0;
+
     function onThumbLoaded() {
         if (session !== thumbSession) return;
 
@@ -2886,6 +2997,7 @@ function initLazyThumbs() {
             hideFolderLoadingRing();
         }
     }
+
     // 🔥 если много — показываем кольцо
     /*if (total > 50) {
         showFolderLoadingRing(0);
@@ -2945,10 +3057,11 @@ function initLazyThumbs() {
     window.thumbObserver = observer;
     images.forEach(img => observer.observe(img));
 }
+
 async function removeItem(path, name) {
     if (!confirm(`Удалить "${name}"?`)) return;
 
-    const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
+    const response = await secureFetch(`/api/files?path=${encodeURIComponent(path)}`, {
         method: "DELETE"
     });
 
@@ -3007,9 +3120,10 @@ upBtn.addEventListener("click", async () => {
     hideMetadataLoadingModal();
     hideThumbLoadingModal();
     hideFolderLoadingRing();
-
-    await loadFiles(targetPath, { showPrepareModal: false });
+    resetGroupingState();
+    await loadFiles(targetPath, {showPrepareModal: false});
 });
+
 function openCreateFolderModal() {
     createFolderInput.value = "";
     createFolderModal.classList.remove("hidden");
@@ -3034,7 +3148,7 @@ async function confirmCreateFolder() {
     const formData = new URLSearchParams();
     formData.append("name", name);
 
-    const response = await fetch(`/api/files/folder?path=${encodeURIComponent(currentPath)}`, {
+    const response = await secureFetch(`/api/files/folder?path=${encodeURIComponent(currentPath)}`, {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -3059,6 +3173,129 @@ function openViewerByPath(relativePath) {
     renderViewerItem();
     viewer.classList.remove("hidden");
 }
+function resetViewerZoom() {
+    viewerZoom = 1;
+    viewerPanX = 0;
+    viewerPanY = 0;
+    viewerDragging = false;
+    viewerLastTouchDistance = null;
+}
+
+function applyViewerZoom() {
+    const img = document.getElementById("viewerImage");
+    if (!img) return;
+
+    img.style.transform =
+        `translate(${viewerPanX}px, ${viewerPanY}px) scale(${viewerZoom})`;
+
+    img.classList.toggle("zoomed", viewerZoom > 1);
+}
+
+function getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function initViewerImageZoom() {
+    const img = document.getElementById("viewerImage");
+    if (!img) return;
+
+    img.addEventListener("wheel", (e) => {
+        e.preventDefault();
+
+        const delta = e.deltaY < 0 ? 0.15 : -0.15;
+
+        viewerZoom = Math.min(5, Math.max(1, viewerZoom + delta));
+
+        if (viewerZoom === 1) {
+            viewerPanX = 0;
+            viewerPanY = 0;
+        }
+
+        applyViewerZoom();
+    }, {passive: false});
+
+    img.addEventListener("dblclick", () => {
+        if (viewerZoom === 1) {
+            viewerZoom = 2.5;
+        } else {
+            resetViewerZoom();
+        }
+
+        applyViewerZoom();
+    });
+
+    img.addEventListener("mousedown", (e) => {
+        if (viewerZoom <= 1) return;
+
+        viewerDragging = true;
+        viewerDragStartX = e.clientX - viewerPanX;
+        viewerDragStartY = e.clientY - viewerPanY;
+    });
+
+    window.addEventListener("mousemove", (e) => {
+        if (!viewerDragging) return;
+
+        viewerPanX = e.clientX - viewerDragStartX;
+        viewerPanY = e.clientY - viewerDragStartY;
+
+        applyViewerZoom();
+    });
+
+    window.addEventListener("mouseup", () => {
+        viewerDragging = false;
+    });
+
+    img.addEventListener("touchstart", (e) => {
+        if (e.touches.length === 2) {
+            viewerLastTouchDistance = getTouchDistance(e.touches);
+        }
+
+        if (e.touches.length === 1 && viewerZoom > 1) {
+            viewerDragging = true;
+            viewerDragStartX = e.touches[0].clientX - viewerPanX;
+            viewerDragStartY = e.touches[0].clientY - viewerPanY;
+        }
+    }, {passive: false});
+
+    img.addEventListener("touchmove", (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+
+            const distance = getTouchDistance(e.touches);
+
+            if (viewerLastTouchDistance) {
+                const diff = distance - viewerLastTouchDistance;
+                viewerZoom = Math.min(5, Math.max(1, viewerZoom + diff * 0.01));
+                applyViewerZoom();
+            }
+
+            viewerLastTouchDistance = distance;
+            return;
+        }
+
+        if (e.touches.length === 1 && viewerDragging && viewerZoom > 1) {
+            e.preventDefault();
+
+            viewerPanX = e.touches[0].clientX - viewerDragStartX;
+            viewerPanY = e.touches[0].clientY - viewerDragStartY;
+
+            applyViewerZoom();
+        }
+    }, {passive: false});
+
+    img.addEventListener("touchend", () => {
+        viewerDragging = false;
+        viewerLastTouchDistance = null;
+
+        if (viewerZoom <= 1) {
+            resetViewerZoom();
+            applyViewerZoom();
+        }
+    });
+}
 
 function renderViewerItem() {
     if (viewerIndex < 0 || viewerIndex >= viewerItems.length) return;
@@ -3070,8 +3307,27 @@ function renderViewerItem() {
         currentPlayer = null;
     }
 
-    if (item.type === "image") {
+    /*if (item.type === "image") {
         viewerBody.innerHTML = `<img src="${item.previewUrl}" alt="${escapeHtml(item.name)}">`;
+    }*/if (item.type === "image") {
+        const lower = item.name.toLowerCase();
+
+        const src =
+            lower.endsWith(".heic") || lower.endsWith(".heif")
+                ? `/api/files/image-thumbnail?path=${encodeURIComponent(item.relativePath)}`
+                : item.previewUrl;
+
+        /*viewerBody.innerHTML = `<img src="${src}" alt="${escapeHtml(item.name)}">`;*/
+        resetViewerZoom();
+
+        viewerBody.innerHTML = `
+    <img id="viewerImage"
+         class="viewer-image"
+         src="${src}"
+         alt="${escapeHtml(item.name)}">
+`;
+
+        initViewerImageZoom();
     } else if (item.type === "video") {
         const lower = item.name.toLowerCase();
         if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
@@ -3210,7 +3466,7 @@ confirmDownloadFormatBtn.onclick = async () => {
         const form = new URLSearchParams();
         form.append("path", item.relativePath);
 
-        const response = await fetch("/api/files/download/mp4-start", {
+        const response = await secureFetch("/api/files/download/mp4-start", {
             method: "POST",
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded"
@@ -3229,7 +3485,7 @@ confirmDownloadFormatBtn.onclick = async () => {
             `/api/files/download/mp4-file?previewId=${encodeURIComponent(data.previewId)}`;
 
         setTimeout(() => {
-            fetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(data.previewId)}`, {
+            secureFetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(data.previewId)}`, {
                 method: "DELETE"
             });
         }, 5000);
@@ -3256,7 +3512,7 @@ cancelPreviewBuildBtn.onclick = async () => {
     }
 
     if (currentPreviewId) {
-        await fetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(currentPreviewId)}`, {
+        await secureFetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(currentPreviewId)}`, {
             method: "DELETE"
         });
     }
@@ -3387,7 +3643,7 @@ bulkMoveBtn.onclick = () => {
 
     moveModal.classList.remove("hidden");
 
-    fetch("/api/files/folders/tree")
+    secureFetch("/api/files/folders/tree")
         .then(r => r.json())
         .then(tree => {
             folderTreeContainer.innerHTML = "";
@@ -3470,6 +3726,7 @@ selectViewerBtn.addEventListener("click", () => {
 });
 fullscreenViewerBtn.addEventListener("click", toggleFullscreen);
 homeBtn.addEventListener("click", () => {
+    resetGroupingState();
     loadFiles(""); // переход в корень
 });
 
@@ -3498,6 +3755,7 @@ document.addEventListener("keydown", e => {
         closeRenameModal();
     }
 });
+
 function updateNavButtons() {
     if (!currentPath) {
         upBtn.style.display = "none";
@@ -3519,7 +3777,7 @@ async function openMoveModal(sourcePath, sourceName) {
 
     moveModal.classList.remove("hidden");
 
-    const response = await fetch("/api/files/folders/tree");
+    const response = await secureFetch("/api/files/folders/tree");
     if (!response.ok) {
         folderTreeContainer.innerHTML = `<div>Не удалось загрузить список папок</div>`;
         return;
@@ -3534,7 +3792,7 @@ async function openMoveModal(sourcePath, sourceName) {
 async function sendChunk(formData) {
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            const res = await fetch("/api/files/upload-chunk", {
+            const res = await secureFetch("/api/files/upload-chunk", {
                 method: "POST",
                 body: formData
             });
@@ -3687,6 +3945,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.metadataLoadingCount = document.getElementById("metadataLoadingCount");
     window.metadataLoadingText = document.getElementById("metadataLoadingText");
 });
+
 async function handleLoadMoreScroll() {
     if (!currentPreparedJobId || preparedAllLoaded || loading) return;
 
@@ -3712,7 +3971,7 @@ document.addEventListener("touchend", function (event) {
         event.preventDefault();
     }
     lastTouchEnd = now;
-}, { passive: false });
+}, {passive: false});
 document.addEventListener("gesturestart", function (e) {
     e.preventDefault();
 });

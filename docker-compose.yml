@@ -4,25 +4,48 @@ services:
   home-gallery:
     build: .
     container_name: home-gallery
+
     ports:
-      - "8080:8080"
+      - "38471:38471"
+
     environment:
-      APP_STORAGE_ROOT: /data
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
+
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: 38471
+
+      SSL_ENABLED: "true"
+      SSL_KEY_STORE: file:/security/cloudkris.p12
+      SSL_KEY_STORE_PASSWORD: ${SSL_KEY_STORE_PASSWORD}
+      SSL_KEY_ALIAS: cloudkris
+
+#      APP_STORAGE_ROOT: /data
+      APP_STORAGE_ROOT: /storage
       APP_UPLOAD_TEMP_DIR: /cache/upload_tmp
       APP_METADATA_CACHE_DIR: /cache/metadata
       APP_THUMBNAIL_CACHE_DIR: /cache/thumbnails
       APP_PREVIEW_CACHE_DIR: /cache/previews
       APP_FOLDER_CACHE_DIR: /cache/folders
+
       APP_FFMPEG_PATH: ffmpeg
       APP_FFPROBE_PATH: ffprobe
-      APP_MAGICK_PATH: convert
-      APP_SECURITY_USERNAME: admin
-      APP_SECURITY_PASSWORD: 12345
-      SERVER_ADDRESS: 0.0.0.0
-      SERVER_PORT: 8080
+      APP_MAGICK_PATH: magick
+
+      APP_SECURITY_USERNAME: ${APP_SECURITY_USERNAME}
+      APP_SECURITY_PASSWORD: ${APP_SECURITY_PASSWORD}
     volumes:
-      - "G:/arc_Y_disc:/data"
+      - "G:/arc_Y_disc:/storage/main"
+      - "K:/HDD_2:/storage/HDD2"
+      - "G:/arc_Y_disc/.security:/security:ro"
       - home_gallery_cache:/cache
+#    volumes:
+#      - "G:/arc_Y_disc:/data"
+#      - "K:/:/storage/HDD2"
+#      - "G:/arc_Y_disc/.security:/security:ro"
+#      - home_gallery_cache:/cache
+
     restart: unless-stopped
 
 volumes:

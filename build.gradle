@@ -22,6 +22,8 @@ dependencies {
     implementation "com.drewnoakes:metadata-extractor:2.19.0"
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    /*implementation 'com.bucket4j:bucket4j-core:8.12.1'*/
+    implementation 'com.bucket4j:bucket4j_jdk17-core:8.18.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 

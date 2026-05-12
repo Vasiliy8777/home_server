@@ -8,6 +8,7 @@ import ru.homeserver.photoshare.homeserver.dto.FolderPrepareJob;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -75,7 +76,11 @@ public class    FolderPrepareService {
         final String finalPeriodTo = periodTo;
 
         System.out.println("START PREPARE PATH = " + finalPath);
-
+        try {
+            fileService.resolveSafe(finalPath);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid path");
+        }
         String jobId = UUID.randomUUID().toString();
 
         FolderPrepareJob job = new FolderPrepareJob();
@@ -101,48 +106,6 @@ public class    FolderPrepareService {
 
         return jobId;
     }
-    /*public String start(String path, String sortField, String sortDirection) {*/
-    /*public String start(
-            String path,
-            String sortField,
-            String sortDirection,
-            String groupMode,
-            boolean periodEnabled,
-            String periodFrom,
-            String periodTo
-    ) {
-        try {
-            path = java.net.URLDecoder.decode(path, java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Exception ignored) {}
-        System.out.println("START PREPARE PATH = " + path);
-        String jobId = UUID.randomUUID().toString();
-
-        FolderPrepareJob job = new FolderPrepareJob();
-        job.id = jobId;
-        job.path = path;
-        job.ready = false;
-        job.progress = 0;
-        job.sortField = sortField;
-        job.sortDirection = sortDirection;
-
-        jobs.put(jobId, job);
-
-        *//*new Thread(() -> process(job)).start();*//*
-        new Thread(() -> process(
-                job,
-                path,
-                sortField,
-                sortDirection,
-                groupMode,
-                periodEnabled,
-                periodFrom,
-                periodTo
-        )).start();
-
-        return jobId;
-    }*/
-
-    /*private void process(FolderPrepareJob job) {*/
     private void process(
             FolderPrepareJob job,
             String path,
@@ -272,9 +235,6 @@ public class    FolderPrepareService {
             pool.shutdown();
             writeFolderItemsCache(folder, currentSignature, enriched);
 
-            /*enriched.sort(createComparator(job.sortField, job.sortDirection));
-
-            job.items = enriched;*/
             List<FileItemDto> filtered = enriched.stream()
                     .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo))
                     .toList();
@@ -290,7 +250,7 @@ public class    FolderPrepareService {
 
         } catch (Exception e) {
             e.printStackTrace();
-
+            job.stage = "Ошибка чтения папки";
             job.ready = true;
             job.items = List.of();
             job.progress = 100;
@@ -345,7 +305,89 @@ public class    FolderPrepareService {
         String hash = sha256(item.relativePath());
         return folderItemsDir(folder).resolve(hash + ".json");
     }
-    private FolderSignature buildFolderSignature(Path folder) throws IOException {
+    private FolderSignature buildFolderSignature(Path folder)
+            throws IOException {
+
+        if (!Files.exists(folder) || !Files.isDirectory(folder)) {
+            return new FolderSignature(0, 0, 0, "");
+        }
+
+        long count = 0;
+        long lastModifiedMax = 0;
+        long totalSize = 0;
+
+        List<String> names = new ArrayList<>();
+
+        try (DirectoryStream<Path> stream =
+                     Files.newDirectoryStream(folder)) {
+
+            for (Path child : stream) {
+
+                try {
+
+                    if (Files.isSymbolicLink(child)) {
+                        continue;
+                    }
+
+                    String name =
+                            child.getFileName().toString();
+
+                    if (name.equals(".metadata_cache")
+                            || name.equals(".thumbnails")
+                            || name.equals(".previews")
+                            || name.equals(".preview_journal")
+                            || name.equals(".folder_cache")
+                            || name.equals(".upload_tmp")
+                            || name.equals("$RECYCLE.BIN")
+                            || name.equals("System Volume Information")) {
+
+                        continue;
+                    }
+
+                    count++;
+
+                    long modified =
+                            Files.getLastModifiedTime(child)
+                                    .toMillis();
+
+                    lastModifiedMax =
+                            Math.max(lastModifiedMax, modified);
+
+                    long size =
+                            Files.isRegularFile(child)
+                                    ? Files.size(child)
+                                    : 0;
+
+                    totalSize += size;
+
+                    names.add(
+                            name
+                                    + "|"
+                                    + modified
+                                    + "|"
+                                    + size
+                                    + "|"
+                                    + Files.isDirectory(child)
+                    );
+
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        Collections.sort(names);
+
+        String namesHash =
+                sha256(String.join("\n", names));
+
+        return new FolderSignature(
+                count,
+                lastModifiedMax,
+                totalSize,
+                namesHash
+        );
+    }
+    /*private FolderSignature buildFolderSignature(Path folder) throws IOException {
         if (!Files.exists(folder) || !Files.isDirectory(folder)) {
             return new FolderSignature(0, 0, 0, "");
         }
@@ -356,7 +398,10 @@ public class    FolderPrepareService {
         List<String> names = new ArrayList<>();
 
         try (var stream = Files.list(folder)) {
-            for (Path child : stream.toList()) {
+            *//*for (Path child : stream.toList()) {*//*
+            for (Path child : stream
+                    .filter(p -> !Files.isSymbolicLink(p))
+                    .toList()) {
                 String name = child.getFileName().toString();
 
                 if (name.equals(".metadata_cache")
@@ -384,7 +429,7 @@ public class    FolderPrepareService {
         String namesHash = sha256(String.join("\n", names));
 
         return new FolderSignature(count, lastModifiedMax, totalSize, namesHash);
-    }
+    }*/
     private List<FileItemDto> readFolderItemsCache(Path folder, FolderSignature currentSignature) {
         try {
             Path signatureFile = folderSignatureFile(folder);
@@ -433,8 +478,12 @@ public class    FolderPrepareService {
 
             for (FileItemDto item : items) {
                 String fileName = sha256(item.relativePath()) + ".json";
-
                 Path target = itemsDir.resolve(fileName);
+
+                Files.createDirectories(target.getParent());
+
+                objectMapper.writeValue(target.toFile(), item);
+                /*Path target = itemsDir.resolve(fileName);
                 Path temp = target.resolveSibling(fileName + ".tmp");
 
                 objectMapper.writeValue(temp.toFile(), item);
@@ -443,22 +492,30 @@ public class    FolderPrepareService {
                         temp,
                         target,
                         StandardCopyOption.REPLACE_EXISTING
-                );
+                );*/
 
                 manifest.add(fileName);
             }
-
             Path manifestFile = folderManifestFile(folder);
+
+            Files.createDirectories(manifestFile.getParent());
+
+            objectMapper.writeValue(manifestFile.toFile(), manifest);
+            /*Path manifestFile = folderManifestFile(folder);
             Path manifestTemp = manifestFile.resolveSibling("manifest.json.tmp");
 
             objectMapper.writeValue(manifestTemp.toFile(), manifest);
-            Files.move(manifestTemp, manifestFile, StandardCopyOption.REPLACE_EXISTING);
-
+            Files.move(manifestTemp, manifestFile, StandardCopyOption.REPLACE_EXISTING);*/
             Path signatureFile = folderSignatureFile(folder);
+
+            Files.createDirectories(signatureFile.getParent());
+
+            objectMapper.writeValue(signatureFile.toFile(), signature);
+            /*Path signatureFile = folderSignatureFile(folder);
             Path signatureTemp = signatureFile.resolveSibling("signature.json.tmp");
 
             objectMapper.writeValue(signatureTemp.toFile(), signature);
-            Files.move(signatureTemp, signatureFile, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(signatureTemp, signatureFile, StandardCopyOption.REPLACE_EXISTING);*/
 
         } catch (Exception e) {
             System.out.println("Folder items cache write failed: " + folder);
