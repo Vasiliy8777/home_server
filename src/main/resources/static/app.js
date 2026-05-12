@@ -24,21 +24,6 @@ function csrfHeaders(extraHeaders = {}) {
     };
 }
 
-/*async function secureFetch(url, options = {}) {
-    const method = (options.method || "GET").toUpperCase();
-
-    const unsafe =
-        method !== "GET" &&
-        method !== "HEAD" &&
-        method !== "OPTIONS";
-
-    return window.fetch(url, {
-        ...options,
-        headers: unsafe
-            ? csrfHeaders(options.headers || {})
-            : (options.headers || {})
-    });
-}*/
 async function secureFetch(url, options = {}) {
 
     const method = (options.method || "GET").toUpperCase();
@@ -347,7 +332,6 @@ function hideLoadingGif() {
     loadingGifOverlay.classList.add("hidden");
     loadingGifOverlay.style.display = "none";
 }
-
 async function loadPreparedPage(jobId) {
     if (preparedAllLoaded || loading) return;
 
@@ -355,11 +339,12 @@ async function loadPreparedPage(jobId) {
 
     try {
         const res = await secureFetch(
-            /*`/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${LIMIT}`*/
             `/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${PAGE_LIMIT}`
         );
 
         if (!res.ok) {
+            preparedAllLoaded = true;
+            hideFolderLoadingRing();
             hideLoadingGif();
             return;
         }
@@ -367,21 +352,32 @@ async function loadPreparedPage(jobId) {
         const data = await res.json();
         const items = data.items || [];
 
-        estimatedTotalItems = data.total || estimatedTotalItems || 0;
+        estimatedTotalItems = data.total || 0;
 
         if (items.length === 0) {
-            setTimeout(() => maybeLoadMorePrepared(), 500);
+            preparedAllLoaded = true;
+            hideFolderLoadingRing();
+            hideLoadingGif();
+
+            if (offset === 0) {
+                gallery.innerHTML = `
+                    <div class="empty-folder-message">
+                        Папка пустая
+                    </div>
+                `;
+            }
 
             return;
         }
 
         appendItems(items);
-        /*appendItems(sortItems(items));*/
+
         offset += items.length;
 
-        if (estimatedTotalItems > 0 && offset >= estimatedTotalItems) {
+        if (offset >= estimatedTotalItems) {
             preparedAllLoaded = true;
             hideFolderLoadingRing();
+            hideLoadingGif();
         } else {
             updateFolderLoadingRing(
                 estimatedTotalItems
@@ -389,11 +385,9 @@ async function loadPreparedPage(jobId) {
                     : 0
             );
         }
+
     } finally {
         loading = false;
-        if (estimatedTotalItems > 0 && offset >= estimatedTotalItems) {
-            hideLoadingGif();
-        }
     }
 }
 
@@ -1114,6 +1108,9 @@ function openBulkDeleteModal() {
 }
 
 async function confirmMove() {
+    showLoadingGif();
+
+    try {
     if (bulkMoveMode) {
         const count = selectedItems.size;
         const targetText = selectedMovePath ? "/" + selectedMovePath : "/";
@@ -1146,9 +1143,16 @@ async function confirmMove() {
 
     closeMoveModal();
     await loadFiles(currentPath);
+    } finally {
+
+        hideLoadingGif();
+    }
 }
 
 async function executeBulkMove() {
+    showLoadingGif();
+
+    try {
     const count = selectedItems.size;
 
     for (const item of selectedItems.values()) {
@@ -1179,6 +1183,10 @@ async function executeBulkMove() {
 
     await loadFiles(currentPath);
     updateBulkButtons();
+    } finally {
+
+        hideLoadingGif();
+    }
 }
 
 const transferPanel = document.getElementById("transferPanel");
@@ -1291,7 +1299,9 @@ abortTotalCacheBtn.onclick = () => {
     }).catch(console.error);
 };
 confirmRenameBtn.onclick = async () => {
+    showLoadingGif();
 
+    try {
     if (!renameTargetPath) return;
 
     const newName = renameInput.value.trim();
@@ -1321,6 +1331,10 @@ confirmRenameBtn.onclick = async () => {
     closeRenameModal();
 
     await loadFiles(currentPath);
+    } finally {
+
+        hideLoadingGif();
+    }
 };
 renamePropertiesBtn.onclick = () => {
     closePropertiesModal();
@@ -2574,11 +2588,14 @@ function hideFolderLoadingRing() {
 }
 
 async function confirmDelete() {
+    showLoadingGif();
+
+    try {
     if (selectedItems.size > 0 && deleteTargetPath == null) {
         for (const item of selectedItems.values()) {
             const response = await secureFetch(`/api/files?path=${encodeURIComponent(item.path)}`, {
                 method: "DELETE"
-            });
+             });
 
             if (!response.ok) {
                 const text = await response.text();
@@ -2608,6 +2625,9 @@ async function confirmDelete() {
 
     closeDeleteModal();
     await loadFiles(currentPath);
+    } finally {
+        hideLoadingGif();
+    }
 }
 
 function getVisibleItems() {
@@ -3139,6 +3159,9 @@ function closeCreateFolderModal() {
 }
 
 async function confirmCreateFolder() {
+    showLoadingGif();
+
+    try {
     const name = createFolderInput.value.trim();
     if (!name) {
         alert("Введите имя папки");
@@ -3164,6 +3187,9 @@ async function confirmCreateFolder() {
 
     closeCreateFolderModal();
     await loadFiles(currentPath);
+    } finally {
+        hideLoadingGif();
+    }
 }
 
 
