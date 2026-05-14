@@ -256,7 +256,7 @@ async function loadFilesPrepared(path = "", options = {}) {
         gallery.scrollTop = 0;
 
         currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
-
+        currentPathEl.classList.remove("path-expanded");
         /*showFolderLoadingRing(0);
         showMetadataLoadingModal();*/
         showFolderLoadingRing(0);
@@ -892,7 +892,7 @@ function updateDownloadFormatButtons() {
     downloadMp4FormatBtn.classList.toggle("active", selectedDownloadFormat === "mp4");
 }
 
-function updateBulkButtons() {
+/*function updateBulkButtons() {
     const count = selectedItems.size;
 
     bulkMoveBtn.disabled = count === 0;
@@ -903,6 +903,32 @@ function updateBulkButtons() {
     bulkDownloadBtn.textContent = count ? `Скачать (${count})` : "Скачать выделенные";
     bulkMoveBtn.textContent = count ? `Переместить (${count})` : "Переместить выбранные";
     bulkDeleteBtn.textContent = count ? `Удалить (${count})` : "Удалить выбранные";
+}*/
+function updateBulkButtons() {
+    const count = selectedItems.size;
+    const hasSelection = count > 0;
+
+    clearSelectionBtn.hidden = !hasSelection;
+    bulkMoveBtn.hidden = !hasSelection;
+    bulkDownloadBtn.hidden = !hasSelection;
+    bulkDeleteBtn.hidden = !hasSelection;
+
+    bulkMoveBtn.disabled = !hasSelection;
+    bulkDeleteBtn.disabled = !hasSelection;
+    clearSelectionBtn.disabled = !hasSelection;
+    bulkDownloadBtn.disabled = !hasSelection;
+
+    bulkDownloadBtn.textContent =
+        count ? `Скачать выбранные (${count})` : "Скачать";
+
+    bulkMoveBtn.textContent =
+        count ? `Переместить выбранные (${count})` : "Переместить";
+
+    bulkDeleteBtn.textContent =
+        count ? `Удалить выбранные (${count})` : "Удалить";
+
+    clearSelectionBtn.textContent =
+        count ? `Снять выбор (${count})` : "Снять";
 }
 
 //функция сортировки
@@ -1472,6 +1498,9 @@ async function handleLoadMoreScroll() {
 window.addEventListener("scroll", handleLoadMoreScroll);
 gallery.addEventListener("scroll", handleLoadMoreScroll);
 const currentPathEl = document.getElementById("currentPath");
+currentPathEl.onclick = () => {
+    currentPathEl.classList.toggle("path-expanded");
+};
 const upBtn = document.getElementById("upBtn");
 const fileInput = document.getElementById("fileInput");
 const newFolderBtn = document.getElementById("newFolderBtn");
@@ -2826,10 +2855,6 @@ function createCard(item) {
             actions.appendChild(downloadLink);
         }
     }
-    /*const moveBtn = document.createElement("button");
-    moveBtn.textContent = "Переместить";
-    moveBtn.onclick = () => openMoveModal(item.relativePath, item.name);
-    actions.appendChild(moveBtn);*/
 
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "danger";
@@ -2907,8 +2932,7 @@ async function openPropertiesModal(path) {
     }
 
     const data = await response.json();
-    /*currentPropertiesPath = item.relativePath;
-    currentPropertiesName = item.name;*/
+
     propertiesBody.innerHTML = renderFullProperties(data);
 
     if (data.type === "folder") {
@@ -3019,9 +3043,7 @@ function initLazyThumbs() {
     }
 
     // 🔥 если много — показываем кольцо
-    /*if (total > 50) {
-        showFolderLoadingRing(0);
-    }*/
+
     if (window.thumbObserver) {
         window.thumbObserver.disconnect();
     }
@@ -3333,9 +3355,7 @@ function renderViewerItem() {
         currentPlayer = null;
     }
 
-    /*if (item.type === "image") {
-        viewerBody.innerHTML = `<img src="${item.previewUrl}" alt="${escapeHtml(item.name)}">`;
-    }*/if (item.type === "image") {
+    if (item.type === "image") {
         const lower = item.name.toLowerCase();
 
         const src =
@@ -3343,7 +3363,7 @@ function renderViewerItem() {
                 ? `/api/files/image-thumbnail?path=${encodeURIComponent(item.relativePath)}`
                 : item.previewUrl;
 
-        /*viewerBody.innerHTML = `<img src="${src}" alt="${escapeHtml(item.name)}">`;*/
+
         resetViewerZoom();
 
         viewerBody.innerHTML = `
@@ -3442,9 +3462,7 @@ document.querySelectorAll(".sort-field-btn").forEach(btn => {
         await loadFiles(currentPath);
     });
 });
-/*closePropertiesModalBtn.onclick = () => {
-    propertiesModal.classList.add("hidden");
-};*/
+
 closePropertiesModalBtn.onclick = closePropertiesModal;
 downloadOriginalFormatBtn.onclick = () => {
     selectedDownloadFormat = "original";
@@ -4008,3 +4026,4 @@ document.addEventListener("gestureend", function (e) {
     e.preventDefault();
 });
 updateSortButtonsState();
+updateBulkButtons();

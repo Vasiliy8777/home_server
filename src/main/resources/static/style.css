@@ -390,7 +390,7 @@ body {
 }
 
 
-.item-checkbox:checked::after {
+/*.item-checkbox:checked::after {
     content: "";
     position: absolute;
     top: 4px;
@@ -400,6 +400,21 @@ body {
     border: solid white;
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
+}*/
+.item-checkbox:checked::after {
+    content: "";
+    position: absolute;
+
+    top: 50%;
+    left: 50%;
+
+    width: 5px;
+    height: 9px;
+
+    border: solid white;
+    border-width: 0 2px 2px 0;
+
+    transform: translate(-50%, -58%) rotate(45deg);
 }
 
 
@@ -656,8 +671,12 @@ body.topbar-collapsed .container {
 
     padding: 10px 12px;
 
-    background: rgba(30, 30, 40, 0.7);
-    backdrop-filter: blur(12px);
+    /*background: rgba(30, 30, 40, 0.7);
+    backdrop-filter: blur(12px);*/
+    background: rgba(30, 30, 40, 0.78) !important;
+    backdrop-filter: blur(12px) saturate(130%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
+    isolation: isolate;
 
     margin: 0;
     border-radius: 0 0 14px 14px;
@@ -756,7 +775,9 @@ body.topbar-collapsed .container {
 body.topbar-collapsed .container {
     padding-top: 90px;
 }
-
+.path-row {
+    align-items: center;
+}
 
 .topbar h1 {
     margin: 0;
@@ -957,12 +978,12 @@ button:hover,
 
     overflow: hidden;
 
-    border-radius: 16px 16px 0 0;
+    border-radius: 14px 14px 0 0;
 
     isolation: isolate;
 
-    clip-path: inset(0 round 16px 16px 0 0);
-    -webkit-clip-path: inset(0 round 16px 16px 0 0);
+    clip-path: inset(0 round 14px 14px 0 0);
+    -webkit-clip-path: inset(0 round 14px 14px 0 0);
 }
 .image-thumb {
     width: 100%;
@@ -1962,7 +1983,7 @@ button:hover,
     /*outline: 2px solid rgba(139, 92, 246, 0.9);
     outline-offset: -2px;*/
     border-color: rgba(139, 92, 246, 0.9);
-
+    padding: 2px;
     box-shadow:
             inset 0 0 0 2px rgba(139, 92, 246, 0.9),
             0 0 12px rgba(139, 92, 246, 0.7),
@@ -2061,8 +2082,8 @@ button:hover,
     }
     .thumb,
     .video-thumb-wrap {
-        clip-path: inset(0 round 16px 16px 0 0);
-        -webkit-clip-path: inset(0 round 16px 16px 0 0);
+        clip-path: inset(0 round 14px 14px 0 0);
+        -webkit-clip-path: inset(0 round 14px 14px 0 0);
     }
 
     .image-thumb,
@@ -2071,6 +2092,24 @@ button:hover,
     .thumb video {
         transform: translate3d(0, 0, 0);
         -webkit-transform: translate3d(0, 0, 0);
+    }
+    #currentPath {
+        flex: 1 1 auto;
+        min-width: 0;
+
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+
+        line-height: 1.2;
+        max-height: 2.4em;
+        overflow: hidden;
+        transition: max-height 0.25s ease;
+    }
+
+    #currentPath.path-expanded {
+        max-height: 12em;
+        overflow: auto;
     }
 }
 
@@ -2774,4 +2813,7 @@ body::before {
 
 .viewer-image.zoomed:active {
     cursor: grabbing;
+}
+button[hidden] {
+    display: none !important;
 }
