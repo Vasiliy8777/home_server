@@ -1868,10 +1868,12 @@ button:hover,
 
 
 .card.selected {
-    outline: 2px solid rgba(139, 92, 246, 0.9);
-    outline-offset: -2px;
+    /*outline: 2px solid rgba(139, 92, 246, 0.9);
+    outline-offset: -2px;*/
+    border-color: rgba(139, 92, 246, 0.9);
 
     box-shadow:
+            inset 0 0 0 2px rgba(139, 92, 246, 0.9),
             0 0 12px rgba(139, 92, 246, 0.7),
             0 0 30px rgba(139, 92, 246, 0.5);
 
