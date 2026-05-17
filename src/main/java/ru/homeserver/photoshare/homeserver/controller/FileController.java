@@ -126,9 +126,7 @@ public class FileController {
         return ResponseEntity.ok(totalCacheService.rebuildActualStatus());
     }
     private Path getUploadTempDir() throws IOException {
-        /*Path dir = fileService.getRootPath().resolve(".upload_tmp");
-        Files.createDirectories(dir);
-        return dir;*/
+
         Path dir = Path.of(appProperties.getUploadTempDir());
         Files.createDirectories(dir);
         return dir;
@@ -267,15 +265,6 @@ public class FileController {
 
         return Map.of("jobId", jobId);
     }
-   /*@PostMapping("/prepare-folder")
-   public Map<String, String> prepareFolder(
-           @RequestParam String path,
-           @RequestParam(defaultValue = "name") String sortField,
-           @RequestParam(defaultValue = "asc") String sortDirection
-   ) {
-       String jobId = folderPrepareService.start(path, sortField, sortDirection);
-       return Map.of("jobId", jobId);
-   }*/
     @GetMapping("/prepare-status")
     public Map<String, Object> prepareStatus(@RequestParam String jobId) {
         FolderPrepareJob job = folderPrepareService.get(jobId);
@@ -505,44 +494,6 @@ public class FileController {
         return ResponseEntity.ok(meta);
     }
 
-    /*
-     * POST /api/files/upload?path=...
-     *
-     * Загружает файлы в выбранную папку.
-     */
-    /*@PostMapping("/upload/init")
-    public ResponseEntity<?> initUpload(
-            @RequestParam String fileName,
-            @RequestParam long fileSize,
-            @RequestParam long chunkSize,
-            @RequestParam(defaultValue = "") String path,
-            @RequestParam long lastModified
-    ) throws IOException {
-
-        if (fileSize <= 0 || chunkSize <= 0) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid fileSize or chunkSize"));
-        }
-
-        int totalChunks = (int) Math.ceil((double) fileSize / chunkSize);
-        String uploadId = fileName + "_" + fileSize + "_" + lastModified;
-
-        UploadSessionDto meta = readMeta(uploadId);
-
-        if (meta == null) {
-            meta = new UploadSessionDto();
-            meta.setUploadId(uploadId);
-            meta.setFileName(fileName);
-            meta.setTargetPath(path);
-            meta.setFileSize(fileSize);
-            meta.setChunkSize(chunkSize);
-            meta.setTotalChunks(totalChunks);
-            meta.setUploadedChunks(new java.util.ArrayList<>());
-
-            writeMeta(meta);
-        }
-
-        return ResponseEntity.ok(meta);
-    }*/
     @PostMapping("/upload/init")
     public ResponseEntity<?> initUpload(
             @RequestParam String fileName,
@@ -928,28 +879,6 @@ public class FileController {
         }
         return ResponseEntity.ok(metadataService.readFileProperties(file));
     }
-    /*@DeleteMapping("/clear-temp")
-    public ResponseEntity<?> clearTemp() throws IOException {
-        Path tempDir = fileService.getRootPath().resolve(".upload_tmp");
-
-        if (Files.exists(tempDir)) {
-            try (var stream = Files.walk(tempDir)) {
-                stream
-                        .sorted(Comparator.reverseOrder()) // сначала файлы, потом папки
-                        .forEach(path -> {
-                            try {
-                                if (!path.equals(tempDir)) {
-                                    Files.deleteIfExists(path);
-                                }
-                            } catch (IOException e) {
-                                System.out.println("Failed to delete: " + path);
-                            }
-                        });
-            }
-        }
-
-        return ResponseEntity.ok().build();
-    }*/
     @DeleteMapping("/clear-temp")
     public ResponseEntity<?> clearTemp() throws IOException {
         Path tempDir = getUploadTempDir();
@@ -1030,39 +959,6 @@ public class FileController {
 
         return ResponseEntity.ok().build();
     }
-    /*@PostMapping("/upload/complete")
-    public ResponseEntity<?> completeUpload(@RequestParam String uploadId) throws IOException {
-        UploadSessionDto meta = readMeta(uploadId);
-
-        if (meta == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Upload session not found"));
-        }
-
-        Path tempFile = getTempFile(uploadId);
-
-        Path finalDir = fileService.resolveSafe(meta.getTargetPath());
-        Files.createDirectories(finalDir);
-
-        Path finalPath = finalDir.resolve(meta.getFileName()).normalize();
-        if (!finalPath.startsWith(fileService.getRootPath())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid target path"));
-        }
-
-        if (!Files.exists(tempFile)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Temp file not found"));
-        }
-
-        if (meta.getUploadedChunks().size() != meta.getTotalChunks()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Not all chunks uploaded"));
-        }
-
-        Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
-        Files.deleteIfExists(getMetaFile(uploadId));
-
-        uploadLocks.remove(uploadId);
-        totalCacheService.rebuildStorageScanCacheAsync();
-        return ResponseEntity.ok(Map.of("message", "Upload completed"));
-    }*/
     @PostMapping("/upload/complete")
     public ResponseEntity<?> completeUpload(@RequestParam String uploadId) throws IOException {
         UploadSessionDto meta = readMeta(uploadId);

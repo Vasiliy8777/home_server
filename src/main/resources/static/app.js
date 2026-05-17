@@ -257,8 +257,7 @@ async function loadFilesPrepared(path = "", options = {}) {
 
         currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
         currentPathEl.classList.remove("path-expanded");
-        /*showFolderLoadingRing(0);
-        showMetadataLoadingModal();*/
+
         showFolderLoadingRing(0);
 
         if (showPrepareModal) {
@@ -728,11 +727,7 @@ async function fetchMetadataBulk(paths) {
             metaEl.innerHTML = hasContent
                 ? "Папка с файлами"
                 : "Пустая папка";
-            /*if (metaEl.childNodes[0]) {
-                metaEl.childNodes[0].textContent = hasContent
-                    ? "Папка с файлами"
-                    : "Пустая папка";
-            }*/
+
         } else if (dateEl && meta.createdAt) {
             dateEl.textContent = " · " + formatDateTime(meta.createdAt);
             dateEl.dataset.createdAt = meta.createdAt;
@@ -892,18 +887,6 @@ function updateDownloadFormatButtons() {
     downloadMp4FormatBtn.classList.toggle("active", selectedDownloadFormat === "mp4");
 }
 
-/*function updateBulkButtons() {
-    const count = selectedItems.size;
-
-    bulkMoveBtn.disabled = count === 0;
-    bulkDeleteBtn.disabled = count === 0;
-    clearSelectionBtn.disabled = count === 0;
-    bulkDownloadBtn.disabled = count === 0;
-
-    bulkDownloadBtn.textContent = count ? `Скачать (${count})` : "Скачать выделенные";
-    bulkMoveBtn.textContent = count ? `Переместить (${count})` : "Переместить выбранные";
-    bulkDeleteBtn.textContent = count ? `Удалить (${count})` : "Удалить выбранные";
-}*/
 function updateBulkButtons() {
     const count = selectedItems.size;
     const hasSelection = count > 0;
@@ -2030,21 +2013,6 @@ function restoreTransferTasks() {
 
     renderTransferList();
 }
-
-/*async function downloadResumableManaged(task) {
-    const item = task.item;
-
-    task.progress = 100;
-    task.status = "done";
-    saveTransferTasks();
-    renderTransferList();
-    updateTopProgress();
-
-    const key = "download_" + item.name;
-    localStorage.removeItem(key);
-
-    window.location.href = item.downloadUrl;
-}*/
 async function downloadResumableManaged(task) {
     const item = task.item;
     const key = "download_" + item.name;
@@ -2567,14 +2535,6 @@ function updateGalleryScrollMode() {
 
     gallery.classList.toggle("gallery-scroll", needScroll);
 }
-
-/*function showFolderLoadingRing(percent = 0) {
-    const ring = document.getElementById("folderLoadingRing");
-    if (!ring) return;
-
-    ring.classList.remove("hidden");
-    updateFolderLoadingRing(percent);
-}*/
 function showFolderLoadingRing(percent = 0) {
     const ring = document.getElementById("folderLoadingRing");
     if (!ring) return;
@@ -2596,15 +2556,6 @@ function updateFolderLoadingRing(percent) {
     progress.setAttribute("stroke-dasharray", `${safePercent}, 100`);
     text.textContent = `${safePercent}%`;
 }
-
-/*function hideFolderLoadingRing() {
-    const ring = document.getElementById("folderLoadingRing");
-    if (!ring) return;
-
-    setTimeout(() => {
-        ring.classList.add("hidden");
-    }, 400);
-}*/
 function hideFolderLoadingRing() {
     const ring = document.getElementById("folderLoadingRing");
     if (!ring) return;
@@ -2859,13 +2810,13 @@ function createCard(item) {
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "danger";
     deleteBtn.textContent = "Удалить";
-    //deleteBtn.onclick = () => removeItem(item.relativePath, item.name);
+
     deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
     actions.appendChild(deleteBtn);
 
     const propertiesBtn = document.createElement("button");
     propertiesBtn.textContent = "Свойства";
-    /*propertiesBtn.onclick = () => openPropertiesModal(item.relativePath);*/
+
     propertiesBtn.onclick = async () => {
 
         currentPropertiesPath = item.relativePath;
@@ -3981,7 +3932,6 @@ if (savedTopbarState === "1") {
     setTopbarCollapsed(true);
 }
 restoreTransferTasks();
-//window.addEventListener("scroll", debounce(loadVisibleMetadata, 200));
 document.addEventListener("DOMContentLoaded", () => {
     loadFiles();
     window.metadataLoadingModal = document.getElementById("metadataLoadingModal");

@@ -82,26 +82,6 @@ public class FileService {
             return count;
         }
     }
-    /*public long countItems(String relativePath) throws IOException {
-        Path current = resolveSafe(relativePath);
-
-        try (Stream<Path> stream = Files.list(current)) {
-            return stream
-                    .filter(path -> {
-                        try {
-                            return !HIDDEN_DIRS.contains(path.getFileName().toString())
-                                    && !Files.isSymbolicLink(path);
-                                    *//*&& !Files.isHidden(path);*//*
-                        } catch (Exception e) {
-                            return false;
-                        }
-                    })
-                    .count();
-            *//*return stream
-                    .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
-                    .count();*//*
-        }
-    }*/
     public FileService(MetadataService metadataService, AppProperties appProperties) throws IOException {
         this.metadataService = metadataService;
         this.rootPath = Paths.get(appProperties.getStorageRoot()).toAbsolutePath().normalize();

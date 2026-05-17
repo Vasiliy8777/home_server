@@ -1,4 +1,6 @@
 HELP.md
+.env
+.env.*
 .gradle
 uploads_tmp/
 build/

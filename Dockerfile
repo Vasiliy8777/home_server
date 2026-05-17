@@ -41,14 +41,6 @@ ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
 
 COPY --from=build /app/build/libs/*.jar app.jar
 
-#RUN mkdir -p \
-#    /data \
-#    /security \
-#    /cache/metadata \
-#    /cache/thumbnails \
-#    /cache/previews \
-#    /cache/folders \
-#    /cache/upload_tmp
 RUN mkdir -p \
     /storage \
     /storage/main \

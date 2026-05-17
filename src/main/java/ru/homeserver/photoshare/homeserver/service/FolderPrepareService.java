@@ -387,49 +387,6 @@ public class    FolderPrepareService {
                 namesHash
         );
     }
-    /*private FolderSignature buildFolderSignature(Path folder) throws IOException {
-        if (!Files.exists(folder) || !Files.isDirectory(folder)) {
-            return new FolderSignature(0, 0, 0, "");
-        }
-
-        long count = 0;
-        long lastModifiedMax = 0;
-        long totalSize = 0;
-        List<String> names = new ArrayList<>();
-
-        try (var stream = Files.list(folder)) {
-            *//*for (Path child : stream.toList()) {*//*
-            for (Path child : stream
-                    .filter(p -> !Files.isSymbolicLink(p))
-                    .toList()) {
-                String name = child.getFileName().toString();
-
-                if (name.equals(".metadata_cache")
-                        || name.equals(".thumbnails")
-                        || name.equals(".previews")
-                        || name.equals(".preview_journal")
-                        || name.equals(".folder_cache")
-                        || name.equals(".upload_tmp")) {
-                    continue;
-                }
-
-                count++;
-
-                long modified = Files.getLastModifiedTime(child).toMillis();
-                lastModifiedMax = Math.max(lastModifiedMax, modified);
-
-                long size = Files.isRegularFile(child) ? Files.size(child) : 0;
-                totalSize += size;
-
-                names.add(name + "|" + modified + "|" + size + "|" + Files.isDirectory(child));
-            }
-        }
-
-        Collections.sort(names);
-        String namesHash = sha256(String.join("\n", names));
-
-        return new FolderSignature(count, lastModifiedMax, totalSize, namesHash);
-    }*/
     private List<FileItemDto> readFolderItemsCache(Path folder, FolderSignature currentSignature) {
         try {
             Path signatureFile = folderSignatureFile(folder);
@@ -483,16 +440,7 @@ public class    FolderPrepareService {
                 Files.createDirectories(target.getParent());
 
                 objectMapper.writeValue(target.toFile(), item);
-                /*Path target = itemsDir.resolve(fileName);
-                Path temp = target.resolveSibling(fileName + ".tmp");
 
-                objectMapper.writeValue(temp.toFile(), item);
-
-                Files.move(
-                        temp,
-                        target,
-                        StandardCopyOption.REPLACE_EXISTING
-                );*/
 
                 manifest.add(fileName);
             }
@@ -501,21 +449,13 @@ public class    FolderPrepareService {
             Files.createDirectories(manifestFile.getParent());
 
             objectMapper.writeValue(manifestFile.toFile(), manifest);
-            /*Path manifestFile = folderManifestFile(folder);
-            Path manifestTemp = manifestFile.resolveSibling("manifest.json.tmp");
 
-            objectMapper.writeValue(manifestTemp.toFile(), manifest);
-            Files.move(manifestTemp, manifestFile, StandardCopyOption.REPLACE_EXISTING);*/
             Path signatureFile = folderSignatureFile(folder);
 
             Files.createDirectories(signatureFile.getParent());
 
             objectMapper.writeValue(signatureFile.toFile(), signature);
-            /*Path signatureFile = folderSignatureFile(folder);
-            Path signatureTemp = signatureFile.resolveSibling("signature.json.tmp");
 
-            objectMapper.writeValue(signatureTemp.toFile(), signature);
-            Files.move(signatureTemp, signatureFile, StandardCopyOption.REPLACE_EXISTING);*/
 
         } catch (Exception e) {
             System.out.println("Folder items cache write failed: " + folder);

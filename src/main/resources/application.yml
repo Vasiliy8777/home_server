@@ -27,8 +27,8 @@ app:
   magick-path: ${APP_MAGICK_PATH:magick}
 
   security:
-    username: ${APP_SECURITY_USERNAME:admin@amg.com}
-    password: ${APP_SECURITY_PASSWORD:$*Uw-sU6xa8Ds5fwM2}
+    username: ${APP_SECURITY_USERNAME}
+    password: ${APP_SECURITY_PASSWORD}
 
 logging:
   level:

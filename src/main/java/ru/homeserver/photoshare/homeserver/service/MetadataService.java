@@ -223,7 +223,7 @@ public class MetadataService {
 
             return result;
         }
-        /*if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png"))*/
+
         if (
                 lower.endsWith(".jpg") ||
                         lower.endsWith(".jpeg") ||

@@ -706,27 +706,6 @@ public class TotalCacheService {
             return cachedScan;
         }
     }
-    /*private TotalCacheScan getOrBuildScan() throws IOException {
-
-        TotalCacheScan scan = cachedScan;
-
-        if (scan != null) {
-            return scan;
-        }
-
-        synchronized (lock) {
-
-            if (cachedScan == null) {
-
-                Path root = fileService.getRootPath();
-
-                cachedScan = scanStorageRoot(root);
-                cachedScanCreatedAt = System.currentTimeMillis();
-            }
-
-            return cachedScan;
-        }
-    }*/
     public void invalidateStorageScanCache() {
         synchronized (lock) {
             cachedScan = null;
@@ -749,8 +728,7 @@ public class TotalCacheService {
             List<Path> mediaFiles
     ) {}
     private void updateProgressUnsafe() {
-        /*long total = job.totalFolders + job.totalFiles;
-        long done = job.processedFolders + job.processedFiles;*/
+
         long total = job.totalFolders + job.totalFiles + job.totalThumbnails;
         long done = job.processedFolders + job.processedFiles + job.processedThumbnails;
 

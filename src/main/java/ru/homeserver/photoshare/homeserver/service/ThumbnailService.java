@@ -383,17 +383,6 @@ public class ThumbnailService {
                 "-q:v", "5",
                 output.toAbsolutePath().toString()
         );
-        /*ProcessBuilder pb = new ProcessBuilder(
-                ffmpegPath,
-                "-y",
-
-                "-i", input.toAbsolutePath().toString(),
-
-                "-vf", "select=eq(n\\,0),scale=320:-2",
-                "-frames:v", "1",
-
-                output.toAbsolutePath().toString()
-        );*/
 
         pb.redirectErrorStream(true);
         Process process = pb.start();
@@ -535,15 +524,6 @@ public class ThumbnailService {
             return false;
         }
     }
-    /*public boolean hasImageThumbnail(Path imagePath) {
-        try {
-            Path output = thumbnailFileFor(imagePath, ".jpg");
-
-            return thumbnailExistsFast(output);
-        } catch (Exception e) {
-            return false;
-        }
-    }*/
 
     public boolean hasVideoThumbnail(Path videoPath) {
         try {
