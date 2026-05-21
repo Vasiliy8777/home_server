@@ -388,19 +388,6 @@ body {
     background: #2f80ed;
     border-color: #2f80ed;
 }
-
-
-/*.item-checkbox:checked::after {
-    content: "";
-    position: absolute;
-    top: 4px;
-    left: 7px;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-}*/
 .item-checkbox:checked::after {
     content: "";
     position: absolute;
@@ -433,18 +420,20 @@ body {
 @keyframes purpleGlow {
     0% {
         box-shadow:
-                0 0 6px rgba(139, 92, 246, 0.2),
-                0 0 12px rgba(139, 92, 246, 0.1);
+                0 0 6px rgba(139, 92, 246, 0.35),
+                0 0 18px rgba(139, 92, 246, 0.22);
     }
+
     50% {
         box-shadow:
-                0 0 14px rgba(139, 92, 246, 0.5),
-                0 0 30px rgba(139, 92, 246, 0.3);
+                0 0 14px rgba(139, 92, 246, 0.75),
+                0 0 34px rgba(139, 92, 246, 0.48);
     }
+
     100% {
         box-shadow:
-                0 0 6px rgba(139, 92, 246, 0.2),
-                0 0 12px rgba(139, 92, 246, 0.1);
+                0 0 6px rgba(139, 92, 246, 0.35),
+                0 0 18px rgba(139, 92, 246, 0.22);
     }
 }
 
@@ -671,8 +660,7 @@ body.topbar-collapsed .container {
 
     padding: 10px 12px;
 
-    /*background: rgba(30, 30, 40, 0.7);
-    backdrop-filter: blur(12px);*/
+
     background: rgba(30, 30, 40, 0.78) !important;
     backdrop-filter: blur(12px) saturate(130%) !important;
     -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
@@ -880,32 +868,20 @@ button:hover,
     opacity: 0.7;
     white-space: nowrap;
 }
-
-
 /*
   Галерея на CSS Grid
   auto-fill + minmax(...) позволяют автоматически
   распределять карточки по ширине экрана.
 */
 /* Галерея */
-/*.gallery {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
-    overflow: auto;
-    height: 100%;
-}
-*/
+
 .gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
     height: auto;        /* ❗ убираем фикс высоту */
     overflow: visible;   /* ❗ убираем внутренний скролл */
-    /* height: calc(100vh - 160px);
-     overflow-y: auto;
-     overflow-x: hidden;
-     align-content: start;*/
+
 }
 
 #homeBtn {
@@ -921,61 +897,21 @@ button:hover,
 /*
   Верхняя часть карточки — превью
 */
-/*.thumb {
-    width: 100%;
-    height: 180px;
-    background: #eef2f7;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    cursor: pointer;
-}
-*/
-/*.thumb {
-    width: 100%;
-    height: 180px;
-
-    background: rgba(255,255,255,0.08);
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    overflow: hidden;
-    border-radius: 16px 16px 0 0;
-
-    cursor: pointer;
-
-    position: relative;
-    isolation: isolate;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    clip-path: inset(0 round 16px 16px 0 0);
-    -webkit-clip-path: inset(0 round 16px 16px 0 0);
-}*/
 .thumb {
     width: 100%;
     height: 180px;
 
-    background: rgba(255,255,255,0.08);
+    overflow: hidden;
 
+    border-radius: 16px 16px 0 0;
+
+    position: relative;
+    isolation: isolate;
     display: flex;
     align-items: center;
     justify-content: center;
 
     cursor: pointer;
-
-    position: relative;
-
-    overflow: hidden;
-
-    border-radius: 16px 16px 0 0;
-
-    isolation: isolate;
-
-    clip-path: inset(0 round 16px 16px 0 0);
-    -webkit-clip-path: inset(0 round 16px 16px 0 0);
 }
 .image-thumb {
     width: 100%;
@@ -1000,21 +936,6 @@ button:hover,
     -webkit-backface-visibility: hidden;
     will-change: object-position, transform;
 }
-/*.image-thumb {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    display: block;
-
-    border-radius: 16px 16px 0 0;
-
-    user-select: none;
-    -webkit-user-drag: none;
-    touch-action: none;
-    cursor: grab;
-}*/
-
 .video-thumb-img {
     width: 100%;
     height: 100%;
@@ -1037,21 +958,6 @@ button:hover,
     -webkit-backface-visibility: hidden;
     will-change: object-position, transform;
 }
-/*.video-thumb-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    display: block;
-
-    border-radius: 16px 16px 0 0;
-
-    user-select: none;
-    -webkit-user-drag: none;
-    touch-action: none;
-}*/
-
-
 .image-thumb.dragging-thumb {
     cursor: grabbing;
 }
@@ -1060,16 +966,6 @@ button:hover,
 /*
   Фото и видео в режиме "заполнить превью"
 */
-/*.thumb img,
-.thumb video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-
-    display: block;
-    border-radius: 16px 16px 0 0;
-}*/
-
 
 .folder-thumb {
     font-size: 56px;
@@ -1895,12 +1791,6 @@ button:hover,
     background: #e5e7eb;
     color: #111;
 }
-/*
-
-.thumb {
-    background: rgba(255,255,255,0.08);
-}*/
-
 
 .card-actions button:hover,
 .card-actions a:hover {
@@ -1946,6 +1836,7 @@ button:hover,
 .card {
     position: relative;
     overflow: visible;
+    isolation: isolate;
 
     background: rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(10px);
@@ -1968,31 +1859,34 @@ button:hover,
 
     position: relative;
 
-    clip-path: inset(0 round 16px 16px 0 0);
-    -webkit-clip-path: inset(0 round 16px 16px 0 0);
 }
-
 .card.selected {
-    border-color: transparent;
+    border-color: rgba(139, 92, 246, 0.95);
 
-    box-shadow:
-            0 0 12px rgba(139, 92, 246, 0.7),
-            0 0 30px rgba(139, 92, 246, 0.5);
-
-    animation: purpleGlow 2.5s infinite ease-in-out;
 }
 .card.selected::after {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: -1px;
 
-    border-radius: inherit;
+    border-radius: 17px;
     border: 2px solid rgba(139, 92, 246, 0.95);
 
-    pointer-events: none;
-    z-index: 20;
-}
+    box-shadow:
+            0 0 0 1px rgba(139, 92, 246, 0.55),
+            0 0 10px 2px rgba(139, 92, 246, 0.45),
+            0 0 28px 6px rgba(139, 92, 246, 0.28);
 
+    animation: purpleGlow 2.5s infinite ease-in-out;
+
+    pointer-events: none;
+    z-index: 100;
+}
+.thumb,
+.card-body {
+    position: relative;
+    z-index: 1;
+}
 @media (max-width: 768px) {
     body {
         background-attachment: scroll;
@@ -2008,9 +1902,6 @@ button:hover,
     }
     .card:hover {
         transform: none; /* убираем дергание */
-    }
-    .card.selected {
-        animation: none; /* экономим батарею */
     }
     body.topbar-collapsed .container {
         padding-top: 82px;
@@ -2081,16 +1972,17 @@ button:hover,
         width: auto;
         max-width: 100%;
     }
-    .thumb,
-    .video-thumb-wrap {
-        clip-path: inset(0 round 14px 14px 0 0);
-        -webkit-clip-path: inset(0 round 14px 14px 0 0);
-    }
 
     .image-thumb,
     .video-thumb-img,
     .thumb img,
     .thumb video {
+        width: calc(100% + 2px);
+        height: calc(100% + 2px);
+
+        margin: -1px;
+
+        object-fit: cover;
         transform: translate3d(0, 0, 0);
         -webkit-transform: translate3d(0, 0, 0);
     }
