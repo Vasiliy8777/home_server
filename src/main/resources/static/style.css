@@ -2675,7 +2675,27 @@ body::before {
 
     padding: 0 10px;
 }
+#bulkMoveConfirmModal {
+    z-index: 17000;
+}
 
+#moveModal {
+    z-index: 15000;
+}
+
+#confirmMoveBtn {
+    touch-action: none;
+    pointer-events: auto;
+}
+#confirmMoveBtn {
+    touch-action: none;
+    pointer-events: auto;
+}
+/*#confirmMoveBtn {
+    touch-action: manipulation;
+    position: relative;
+    z-index: 16000;
+}*/
 .grouping-actions {
     display: flex;
     justify-content: center;

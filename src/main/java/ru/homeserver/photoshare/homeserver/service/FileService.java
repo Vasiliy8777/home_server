@@ -90,7 +90,23 @@ public class FileService {
     public Path getRootPath() {
         return rootPath;
     }
+    public String toRelative(Path path) {
+        if (path == null) {
+            return "";
+        }
 
+        Path normalized = path.toAbsolutePath().normalize();
+
+        if (rootPath.equals(normalized)) {
+            return "";
+        }
+
+        ensureInsideRoot(normalized);
+
+        return rootPath.relativize(normalized)
+                .toString()
+                .replace("\\", "/");
+    }
     /*
      * Вернуть список файлов и папок в указанной директории.
      *

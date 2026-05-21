@@ -1115,8 +1115,77 @@ function openBulkDeleteModal() {
 
     deleteModal.classList.remove("hidden");
 }
+let ignoreMoveConfirmBackdropUntil = 0;
 
-async function confirmMove() {
+function openMoveConfirmModalSafe() {
+    ignoreMoveConfirmBackdropUntil = Date.now() + 600;
+    bulkMoveConfirmModal.classList.remove("hidden");
+}
+
+function confirmMove() {
+    const targetText = selectedMovePath ? "/" + selectedMovePath : "/";
+
+    if (bulkMoveMode) {
+        bulkMoveConfirmText.textContent =
+            `Переместить ${selectedItems.size} выбранных объектов в папку ${targetText}?`;
+    } else {
+        bulkMoveConfirmText.textContent =
+            `Переместить "${moveSourceName}" в папку ${targetText}?`;
+    }
+
+    openMoveConfirmModalSafe();
+}
+/*function confirmMove() {
+    if (!selectedMovePath && selectedMovePath !== "") {
+        return;
+    }
+
+    const targetText = selectedMovePath ? "/" + selectedMovePath : "/";
+
+    if (bulkMoveMode) {
+        bulkMoveConfirmText.textContent =
+            `Переместить ${selectedItems.size} выбранных объектов в папку ${targetText}?`;
+    } else {
+        bulkMoveConfirmText.textContent =
+            `Переместить "${moveSourceName}" в папку ${targetText}?`;
+    }
+
+    bulkMoveConfirmModal.classList.remove("hidden");
+}*/
+async function executeSingleMove() {
+    showLoadingGif();
+
+    try {
+        if (!moveSourcePath) return;
+
+        const formData = new URLSearchParams();
+        formData.append("sourcePath", moveSourcePath);
+        formData.append("targetPath", selectedMovePath);
+
+        const response = await secureFetch("/api/files/move", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            alert("Не удалось переместить:\n" + text);
+            return;
+        }
+
+        bulkMoveConfirmModal.classList.add("hidden");
+        closeMoveModal();
+
+        await loadFiles(currentPath);
+
+    } finally {
+        hideLoadingGif();
+    }
+}
+/*async function confirmMove() {
     showLoadingGif();
 
     try {
@@ -1156,7 +1225,7 @@ async function confirmMove() {
 
         hideLoadingGif();
     }
-}
+}*/
 
 async function executeBulkMove() {
     showLoadingGif();
@@ -1605,7 +1674,17 @@ async function initUploadSession(file, targetPath, chunkSize) {
 
     return await response.json();
 }
+async function getUploadStatus(uploadId) {
+    const response = await secureFetch(
+        `/api/files/upload/status?uploadId=${encodeURIComponent(uploadId)}`
+    );
 
+    if (!response.ok) {
+        return null;
+    }
+
+    return await response.json();
+}
 function updateTopProgress() {
     if (!topProgressBar || !toggleTransfersBtn) return;
 
@@ -1731,19 +1810,33 @@ async function uploadFileResumableManaged(task, isPaused) {
     const file = task.file;
     const targetPath = task.targetPath;
     const CHUNK_SIZE = 1024 * 1024;
-    /*const CHUNK_SIZE = window.innerWidth <= 768
-        ? 256 * 1024
-        : 1024 * 1024;*/
 
-    const initData = await initUploadSession(file, targetPath, CHUNK_SIZE);
+    /*const initData = await initUploadSession(file, targetPath, CHUNK_SIZE);
 
     const uploadId = initData.uploadId;
     task.uploadId = uploadId;
     task.totalChunks = initData.totalChunks;
 
     const totalChunks = initData.totalChunks;
-    const uploadedChunks = new Set(initData.uploadedChunks || []);
+    const uploadedChunks = new Set(initData.uploadedChunks || []);*/
+    let initData = null;
 
+    if (task.uploadId) {
+        initData = await getUploadStatus(task.uploadId);
+    }
+
+    if (!initData) {
+        initData = await initUploadSession(file, targetPath, CHUNK_SIZE);
+        task.uploadId = initData.uploadId;
+    }
+
+    task.totalChunks = initData.totalChunks;
+
+    const uploadId = task.uploadId;
+    const totalChunks = initData.totalChunks;
+    const uploadedChunks = new Set(initData.uploadedChunks || task.uploadedChunks || []);
+
+    saveTransferTasks();
     for (let i = 0; i < totalChunks; i++) {
         if (uploadedChunks.has(i)) {
             const percent = Math.round(((i + 1) / totalChunks) * 100);
@@ -1756,7 +1849,12 @@ async function uploadFileResumableManaged(task, isPaused) {
         if (cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id)) {
             throw new Error("Upload cancelled");
         }
+        /*if (isPaused()) {
+            return;
+        }*/
         if (isPaused()) {
+            task.status = "paused";
+            saveTransferTasks();
             return;
         }
 
@@ -1774,6 +1872,14 @@ async function uploadFileResumableManaged(task, isPaused) {
         formData.append("chunkIndex", i);
 
         await sendChunk(formData);
+        if (!task.uploadedChunks) {
+            task.uploadedChunks = [];
+        }
+
+        if (!task.uploadedChunks.includes(i)) {
+            task.uploadedChunks.push(i);
+            task.uploadedChunks.sort((a, b) => a - b);
+        }
         const percent = Math.round(((i + 1) / totalChunks) * 100);
         task.progress = percent;
 
@@ -3630,6 +3736,8 @@ bulkMoveBtn.onclick = () => {
     if (!selectedItems.size) return;
 
     bulkMoveMode = true;
+    moveSourcePath = null;
+    moveSourceName = null;
     selectedMovePath = "";
 
     moveModalTargetName.textContent = `Перемещаем объектов: ${selectedItems.size}`;
@@ -3657,13 +3765,27 @@ folderListModal.addEventListener("click", (e) => {
         closeFolderListModal();
     }
 });
-confirmBulkMoveBtn.onclick = executeBulkMove;
 
-cancelBulkMoveBtn.onclick = () => {
+confirmBulkMoveBtn.onclick = () => {
+    if (bulkMoveMode) {
+        executeBulkMove();
+    } else {
+        executeSingleMove();
+    }
+};
+cancelBulkMoveBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     bulkMoveConfirmModal.classList.add("hidden");
 };
-
 bulkMoveConfirmModal.addEventListener("click", (e) => {
+    if (Date.now() < ignoreMoveConfirmBackdropUntil) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+    }
+
     if (e.target.classList.contains("delete-modal-backdrop")) {
         bulkMoveConfirmModal.classList.add("hidden");
     }
@@ -3686,7 +3808,22 @@ collapseMoveTreeBtn.addEventListener("click", () => {
 
 closeMoveModalBtn.addEventListener("click", closeMoveModal);
 cancelMoveBtn.addEventListener("click", closeMoveModal);
-confirmMoveBtn.addEventListener("click", confirmMove);
+
+function handleConfirmMovePress(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    confirmMove();
+}
+
+confirmMoveBtn.onclick = null;
+confirmMoveBtn.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    confirmMove();
+}, { passive: false });
 
 moveModal.addEventListener("click", (e) => {
     if (e.target.classList.contains("move-modal-backdrop")) {
@@ -3760,8 +3897,9 @@ function updateNavButtons() {
         homeBtn.style.display = "inline-flex";
     }
 }
-
 async function openMoveModal(sourcePath, sourceName) {
+    bulkMoveMode = false;
+
     moveSourcePath = sourcePath;
     moveSourceName = sourceName;
     selectedMovePath = "";
@@ -3773,6 +3911,7 @@ async function openMoveModal(sourcePath, sourceName) {
     moveModal.classList.remove("hidden");
 
     const response = await secureFetch("/api/files/folders/tree");
+
     if (!response.ok) {
         folderTreeContainer.innerHTML = `<div>Не удалось загрузить список папок</div>`;
         return;
@@ -3800,7 +3939,18 @@ async function sendChunk(formData) {
         }
     }
 }
+function selectMoveFolder(node, row) {
+    selectedMovePath = node.relativePath || "";
 
+    selectedMovePathEl.textContent =
+        `Выбрано: ${selectedMovePath ? "/" + selectedMovePath : "/"}`;
+
+    folderTreeContainer
+        .querySelectorAll(".folder-tree-row.selected")
+        .forEach(el => el.classList.remove("selected"));
+
+    row.classList.add("selected");
+}
 
 function renderFolderTree(node) {
     const wrapper = document.createElement("div");
@@ -3812,54 +3962,64 @@ function renderFolderTree(node) {
     const toggle = document.createElement("div");
     toggle.className = "folder-toggle";
 
-    const hasChildren = node.children && node.children.length > 0;
-    toggle.textContent = hasChildren ? "▼" : "";
-
     const label = document.createElement("div");
     label.className = "folder-label";
     label.textContent = node.name === "/" ? "📁 Корень /" : `📁 ${node.name}`;
 
+    const hasChildren = node.children && node.children.length > 0;
+    toggle.textContent = hasChildren ? "▶" : "";
+
     row.appendChild(toggle);
     row.appendChild(label);
-
-    row.addEventListener("click", () => {
-        selectedMovePath = node.relativePath || "";
-        selectedMovePathEl.textContent = `Выбрано: ${selectedMovePath ? "/" + selectedMovePath : "/"}`;
-
-        document.querySelectorAll(".folder-tree-row.selected").forEach(el => {
-            el.classList.remove("selected");
-        });
-        row.classList.add("selected");
-    });
-
     wrapper.appendChild(row);
-    if (hasChildren) {
-        const childrenContainer = document.createElement("div");
-        childrenContainer.className = "folder-children hidden"; // <-- сразу скрыто
-        toggle.textContent = "▶"; // <-- стрелка вправо
 
+    const childrenContainer = document.createElement("div");
+    childrenContainer.className = "folder-children hidden";
+
+    if (hasChildren) {
         for (const child of node.children) {
             childrenContainer.appendChild(renderFolderTree(child));
         }
 
-        toggle.addEventListener("click", (e) => {
-            e.stopPropagation();
-            childrenContainer.classList.toggle("hidden");
-            toggle.textContent = childrenContainer.classList.contains("hidden") ? "▶" : "▼";
-        });
-
         wrapper.appendChild(childrenContainer);
     }
 
+    label.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectMoveFolder(node, row);
+    });
+
+    row.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectMoveFolder(node, row);
+    });
+
+    toggle.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!hasChildren) return;
+
+        childrenContainer.classList.toggle("hidden");
+        toggle.textContent = childrenContainer.classList.contains("hidden") ? "▶" : "▼";
+    });
+
     return wrapper;
 }
-
 function closeMoveModal() {
     moveModal.classList.add("hidden");
+
+    bulkMoveMode = false;
+
     moveSourcePath = null;
     moveSourceName = null;
     selectedMovePath = "";
+
     folderTreeContainer.innerHTML = "";
+    selectedMovePathEl.textContent = "Выбрано: /";
+    moveModalTargetName.textContent = "";
 }
 
 function formatBytes(bytes) {

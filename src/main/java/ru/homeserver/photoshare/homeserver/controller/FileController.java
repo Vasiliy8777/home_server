@@ -557,7 +557,8 @@ public class FileController {
          * - телом ответа
          */
         fileService.upload(path, files);
-        totalCacheService.rebuildStorageScanCacheAsync();
+        folderPrepareService.invalidateFolderCache(path);
+        /*totalCacheService.rebuildStorageScanCacheAsync();*/
         return ResponseEntity.ok(Map.of("message", "Uploaded"));
     }
 
@@ -573,8 +574,9 @@ public class FileController {
     ) throws IOException {
         fileService.createFolder(path, name);
         fileService.rebuildFolderTreeCache();
+        folderPrepareService.invalidateFolderCache(path);
         /*metadataService.clearFolderCache();*/
-        totalCacheService.rebuildStorageScanCacheAsync();
+        /*totalCacheService.rebuildStorageScanCacheAsync();*/
         return ResponseEntity.ok(Map.of("message", "Folder created"));
     }
 
@@ -585,10 +587,16 @@ public class FileController {
      */
     @DeleteMapping
     public ResponseEntity<Map<String, String>> delete(@RequestParam String path) throws IOException {
+        Path deleted = fileService.resolveSafe(path);
+        String parent = fileService.toRelative(deleted.getParent());
+        boolean wasDirectory = Files.isDirectory(deleted);
         fileService.delete(path);
-        fileService.rebuildFolderTreeCache();
+        if (wasDirectory) {
+            fileService.rebuildFolderTreeCache();
+        }
+        folderPrepareService.invalidateFolderCache(parent);
         /*metadataService.clearFolderCache();*/
-        totalCacheService.rebuildStorageScanCacheAsync();
+        /*totalCacheService.rebuildStorageScanCacheAsync();*/
         return ResponseEntity.ok(Map.of("message", "Deleted"));
     }
     @PostMapping("/rename")
@@ -596,10 +604,17 @@ public class FileController {
             @RequestParam String path,
             @RequestParam String newName
     ) throws IOException {
+        Path source = fileService.resolveSafe(path);
+        String parent = fileService.toRelative(source.getParent());
+        boolean wasDirectory = Files.isDirectory(source);
+
         fileService.rename(path, newName);
 
-        fileService.rebuildFolderTreeCache();
-        totalCacheService.rebuildStorageScanCacheAsync();
+        if (wasDirectory) {
+            fileService.rebuildFolderTreeCache();
+        }
+        folderPrepareService.invalidateFolderCache(parent);
+        /*totalCacheService.rebuildStorageScanCacheAsync();*/
 
         return ResponseEntity.ok().build();
     }
@@ -797,7 +812,7 @@ public class FileController {
         writePreviewJournal(session);
 
         Files.move(source, renamed, StandardCopyOption.ATOMIC_MOVE);
-
+        folderPrepareService.invalidateFolderCache(fileService.toRelative(source.getParent()));
         previewFiles.put(previewId, renamed);
         previewProgress.put(previewId, 100);
 
@@ -865,9 +880,17 @@ public class FileController {
             @RequestParam String sourcePath,
             @RequestParam String targetPath
     ) throws IOException {
+        Path source = fileService.resolveSafe(sourcePath);
+        Path sourceParent = source.getParent();
+        boolean wasDirectory = Files.isDirectory(source);
+        //Path target = fileService.resolveSafe(targetPath);
         fileService.move(sourcePath, targetPath);
-        fileService.rebuildFolderTreeCache();
-        totalCacheService.rebuildStorageScanCacheAsync();
+        if (wasDirectory) {
+            fileService.rebuildFolderTreeCache();
+        }
+        folderPrepareService.invalidateFolderCache(fileService.toRelative(sourceParent));
+        folderPrepareService.invalidateFolderCache(targetPath);
+        /*totalCacheService.rebuildStorageScanCacheAsync();*/
         return ResponseEntity.ok(Map.of("message", "Moved"));
     }
     @GetMapping("/properties")
@@ -1003,10 +1026,11 @@ public class FileController {
         }
 
         Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
+        folderPrepareService.invalidateFolderCache(meta.getTargetPath());
         Files.deleteIfExists(getMetaFile(uploadId));
 
         uploadLocks.remove(uploadId);
-        totalCacheService.rebuildStorageScanCacheAsync();
+        /*totalCacheService.rebuildStorageScanCacheAsync();*/
 
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
@@ -1251,7 +1275,7 @@ public class FileController {
         writePreviewJournal(session);
 
         Files.move(source, renamed, StandardCopyOption.ATOMIC_MOVE);
-
+        folderPrepareService.invalidateFolderCache(fileService.toRelative(source.getParent()));
         previewFiles.put(previewId, renamed);
         previewProgress.put(previewId, 100);
 

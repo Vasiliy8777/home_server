@@ -20,6 +20,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 @Service
 public class    FolderPrepareService {
@@ -471,7 +472,30 @@ public class    FolderPrepareService {
             throw new RuntimeException(e);
         }
     }
+    public void invalidateFolderCache(String relativePath) {
+        try {
+            Path folder = fileService.resolveSafe(relativePath);
 
+            if (!Files.isDirectory(folder)) {
+                folder = folder.getParent();
+            }
+
+            if (folder == null) return;
+
+            Path dir = folderCacheDir(folder);
+
+            if (Files.exists(dir)) {
+                try (Stream<Path> stream = Files.walk(dir)) {
+                    stream.sorted(Comparator.reverseOrder())
+                            .forEach(path -> {
+                                try {
+                                    Files.deleteIfExists(path);
+                                } catch (Exception ignored) {}
+                            });
+                }
+            }
+        } catch (Exception ignored) {}
+    }
     private static class FolderSignature {
         public long count;
         public long lastModifiedMax;
