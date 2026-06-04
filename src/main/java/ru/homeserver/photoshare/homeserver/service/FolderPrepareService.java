@@ -211,7 +211,10 @@ public class    FolderPrepareService {
                                         item.lastModified(),
                                         created,
                                         item.fileCount(),
-                                        item.folderCount()
+                                        item.folderCount(),
+                                        item.hlsSupported(),
+                                        item.hlsPrepareUrl(),
+                                        item.hlsStatusUrl()
                                 );
                             }
 

@@ -2730,3 +2730,40 @@ body::before {
 button[hidden] {
     display: none !important;
 }
+.hls-progress-widget {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 19999;
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 13px;
+    backdrop-filter: blur(8px);
+}
+
+.hls-progress-ring {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background:
+            conic-gradient(#ffffff var(--progress), rgba(255,255,255,0.2) 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hls-progress-inner {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

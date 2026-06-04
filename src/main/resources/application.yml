@@ -26,6 +26,16 @@ app:
   ffprobe-path: ${APP_FFPROBE_PATH:ffprobe}
   magick-path: ${APP_MAGICK_PATH:magick}
 
+  video:
+    hls-cache-dir: ${APP_VIDEO_HLS_CACHE_DIR:G:/arc_Y_disc/.previews/hls}
+    ffmpeg-path: ${APP_FFMPEG_PATH:ffmpeg}
+    ffprobe-path: ${APP_FFPROBE_PATH:ffprobe}
+    hls-segment-seconds: ${APP_VIDEO_HLS_SEGMENT_SECONDS:4}
+    preview-width: ${APP_VIDEO_PREVIEW_WIDTH:1920}
+    preview-video-bitrate: ${APP_VIDEO_PREVIEW_VIDEO_BITRATE:5000k}
+    preview-audio-bitrate: ${APP_VIDEO_PREVIEW_AUDIO_BITRATE:128k}
+
+
   security:
     username: ${APP_SECURITY_USERNAME}
     password: ${APP_SECURITY_PASSWORD}

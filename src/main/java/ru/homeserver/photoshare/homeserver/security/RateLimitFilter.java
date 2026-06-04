@@ -34,6 +34,7 @@ public class RateLimitFilter implements Filter {
                         || uri.startsWith("/api/files/image-thumbnail")
                         || uri.startsWith("/api/files/video-thumbnail")
                         || uri.startsWith("/api/files/stream")
+                        || uri.startsWith("/api/video/hls")
         ) {
             chain.doFilter(request, response);
             return;

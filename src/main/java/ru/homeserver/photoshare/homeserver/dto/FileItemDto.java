@@ -68,6 +68,9 @@ public record FileItemDto(
         // Если нет — fallback на дату изменения.
         long createdAt,
         Long fileCount,
-        Long folderCount
+        Long folderCount,
+        Boolean hlsSupported,
+        String hlsPrepareUrl,
+        String hlsStatusUrl
 ) {
 }

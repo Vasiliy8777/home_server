@@ -45,7 +45,6 @@ public class FileService {
             ".metadata_cache",
             ".folder_cache",
             ".security",
-
             "$RECYCLE.BIN",
             "System Volume Information"
     );
@@ -148,7 +147,6 @@ public class FileService {
          * но не обходит рекурсивно все подпапки.
          */
         try (Stream<Path> stream = Files.list(current)) {
-            /*List<Path> all = stream*/
             List<Path> all = stream
                     .filter(path -> {
                         try {
@@ -180,12 +178,11 @@ public class FileService {
                     String previewUrl = null;
                     String downloadUrl = isDir ? null : "/api/files/download?path=" + encodePath(relStr);
                     String thumbnailUrl = null;
-
+                    String hlsPrepareUrl = null;
+                    String hlsStatusUrl = null;
+                    boolean hlsSupported = false;
                     if (!isDir) {
-                        /*if ("image".equals(type)) {
-                            previewUrl = "/api/files/raw?path=" + encodePath(relStr);
-                            thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
-                        }*/if ("image".equals(type)) {
+                        if ("image".equals(type)) {
                             String lower = relStr.toLowerCase(Locale.ROOT);
 
                             thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
@@ -197,7 +194,11 @@ public class FileService {
                             }
                         } else if ("video".equals(type)) {
                             String lower = relStr.toLowerCase();
-
+                            if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+                                hlsSupported = true;
+                                hlsPrepareUrl = "/api/video/hls/prepare?path=" + encodePath(relStr);
+                                hlsStatusUrl = "/api/video/hls/status?path=" + encodePath(relStr);
+                            }
                             if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
                                 previewUrl = "/api/files/video-proxy?path=" + encodePath(relStr);
                             } else {
@@ -211,14 +212,11 @@ public class FileService {
                     }
                     long modified = Files.getLastModifiedTime(path).toMillis();
 
-                    /*long createdAt = isDir
-                            ? modified
-                            : metadataService.readCreatedAtMillisCached(path);*/
+
                     long createdAt = isDir ? 0L : modified;
                     Long fileCount = null;
                     Long folderCount = null;
 
-                    /*long createdAt = modified;*/
                     if (isDir) {
                         long[] counts = countDirectFolderChildren(path);
                         fileCount = counts[0];
@@ -236,7 +234,10 @@ public class FileService {
                             modified,
                             createdAt,
                             fileCount,
-                            folderCount
+                            folderCount,
+                            hlsSupported,
+                            hlsPrepareUrl,
+                            hlsStatusUrl
                     ));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -555,24 +556,7 @@ public class FileService {
      *
      * Это один из самых важных методов во всем проекте.
      */
-    /*public Path resolveSafe(String relativePath) {
-        *//*
-         * Если путь null или пустой,
-         * считаем, что имеется в виду корень.
-         *//*
-        String clean = relativePath == null ? "" : relativePath.trim();
 
-        Path resolved = clean.isEmpty()
-                ? rootPath
-                : rootPath.resolve(clean).normalize();
-
-        *//*
-         * Проверяем, что путь остался внутри разрешенного rootPath.
-         *//*
-        ensureInsideRoot(resolved);
-
-        return resolved;
-    }*/
     public Path resolveSafe(String relativePath) {
         String clean = relativePath == null ? "" : relativePath.trim();
 
@@ -606,11 +590,7 @@ public class FileService {
      * После resolve + normalize это превратится в реальный путь,
      * и если он не начинается с rootPath, значит доступ запрещен.
      */
-   /* private void ensureInsideRoot(Path path) {
-        if (!path.startsWith(rootPath)) {
-            throw new IllegalArgumentException("Access outside root folder is forbidden");
-        }
-    }*/
+
     private void ensureInsideRoot(Path path) {
         Path normalized = path.toAbsolutePath().normalize();
 
