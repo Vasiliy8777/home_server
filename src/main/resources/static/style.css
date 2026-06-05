@@ -2730,40 +2730,50 @@ body::before {
 button[hidden] {
     display: none !important;
 }
-.hls-progress-widget {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    z-index: 19999;
-    width: 74px;
-    height: 74px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.65);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 13px;
-    backdrop-filter: blur(8px);
-}
-
 .hls-progress-ring {
-    width: 56px;
-    height: 56px;
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 54px;
+    height: 54px;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.45);
     border-radius: 50%;
-    background:
-            conic-gradient(#ffffff var(--progress), rgba(255,255,255,0.2) 0);
     display: flex;
     align-items: center;
     justify-content: center;
+    backdrop-filter: blur(6px);
 }
 
-.hls-progress-inner {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.75);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.hls-progress-ring svg {
+    width: 54px;
+    height: 54px;
+    transform: rotate(-90deg);
+}
+
+.hls-progress-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.25);
+    stroke-width: 3;
+}
+
+.hls-progress-fill {
+    fill: none;
+    stroke: white;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dasharray 0.3s ease;
+}
+
+.hls-progress-text {
+    position: absolute;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+}
+
+.hls-progress-ring.done {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
 }

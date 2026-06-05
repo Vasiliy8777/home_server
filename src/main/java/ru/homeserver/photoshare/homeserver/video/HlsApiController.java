@@ -42,9 +42,10 @@ public class HlsApiController {
         Path sourceFile = fileService.resolveSafe(path);
         hlsConversionService.cancel(sourceFile);
     }
-    /*@GetMapping("/progress")
-    public HlsProgressDto progress(@RequestParam String path) {
+    @GetMapping("/progress")
+    public HlsProgressState progress(@RequestParam String path) {
         Path sourceFile = fileService.resolveSafe(path);
+
         return hlsConversionService.getProgress(sourceFile);
-    }*/
+    }
 }
