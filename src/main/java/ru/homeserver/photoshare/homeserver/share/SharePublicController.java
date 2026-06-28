@@ -6,10 +6,12 @@ import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import ru.homeserver.photoshare.homeserver.config.VideoPreviewProperties;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.service.FileService;
 import ru.homeserver.photoshare.homeserver.service.FolderPrepareService;
 import ru.homeserver.photoshare.homeserver.service.ThumbnailService;
+import ru.homeserver.photoshare.homeserver.video.HlsConversionService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -26,17 +28,21 @@ public class SharePublicController {
     private final FileService fileService;
     private final ThumbnailService thumbnailService;
     private final FolderPrepareService folderPrepareService;
+    private final HlsConversionService hlsConversionService;
+    private final VideoPreviewProperties videoPreviewProperties;
 
     public SharePublicController(
             ShareService shareService,
             FileService fileService,
             ThumbnailService thumbnailService,
-            FolderPrepareService folderPrepareService
+            FolderPrepareService folderPrepareService, HlsConversionService hlsConversionService, VideoPreviewProperties videoPreviewProperties
     ) {
         this.shareService = shareService;
         this.fileService = fileService;
         this.thumbnailService = thumbnailService;
         this.folderPrepareService = folderPrepareService;
+        this.hlsConversionService = hlsConversionService;
+        this.videoPreviewProperties = videoPreviewProperties;
     }
 
     @GetMapping("/info")
@@ -54,6 +60,128 @@ public class SharePublicController {
         ));
     }
 
+    @PostMapping("/video/hls/prepare")
+    public ResponseEntity<?> prepareHls(
+            @PathVariable String token,
+            @RequestParam(defaultValue = "") String path
+    ) throws IOException {
+        ShareLink link = shareService.requireActive(token);
+
+        String realPath = shareService.resolveInsideShare(link, path);
+        Path sourceFile = fileService.resolveSafe(realPath);
+
+        if (!Files.exists(sourceFile) || Files.isDirectory(sourceFile)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(
+                hlsConversionService.prepareHls(
+                        sourceFile,
+                        "/share/" + token + "/video/hls/files"
+                )
+        );
+    }
+
+    @GetMapping("/video/hls/status")
+    public ResponseEntity<?> hlsStatus(
+            @PathVariable String token,
+            @RequestParam(defaultValue = "") String path
+    ) throws IOException {
+        ShareLink link = shareService.requireActive(token);
+
+        String realPath = shareService.resolveInsideShare(link, path);
+        Path sourceFile = fileService.resolveSafe(realPath);
+
+        if (!Files.exists(sourceFile) || Files.isDirectory(sourceFile)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(
+                hlsConversionService.getStatus(sourceFile)
+        );
+    }
+
+    @GetMapping("/video/hls/progress")
+    public ResponseEntity<?> hlsProgress(
+            @PathVariable String token,
+            @RequestParam(defaultValue = "") String path
+    ) throws IOException {
+        ShareLink link = shareService.requireActive(token);
+
+        String realPath = shareService.resolveInsideShare(link, path);
+        Path sourceFile = fileService.resolveSafe(realPath);
+
+        if (!Files.exists(sourceFile) || Files.isDirectory(sourceFile)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(
+                hlsConversionService.getProgress(sourceFile)
+        );
+    }
+
+    @DeleteMapping("/video/hls/cancel")
+    public ResponseEntity<?> cancelHls(
+            @PathVariable String token,
+            @RequestParam(defaultValue = "") String path
+    ) throws IOException {
+        ShareLink link = shareService.requireActive(token);
+
+        String realPath = shareService.resolveInsideShare(link, path);
+        Path sourceFile = fileService.resolveSafe(realPath);
+
+        if (!Files.exists(sourceFile) || Files.isDirectory(sourceFile)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        hlsConversionService.cancel(sourceFile);
+
+        return ResponseEntity.ok().build();
+    }
+    @GetMapping("/video/hls/files/{key}/{filename}")
+    public ResponseEntity<Resource> publicHlsFile(
+            @PathVariable String token,
+            @PathVariable String key,
+            @PathVariable String filename
+    ) throws IOException {
+        shareService.requireActive(token);
+
+        Path folder = videoPreviewProperties.getHlsCacheDir()
+                .resolve(key)
+                .normalize();
+
+        Path file = folder.resolve(filename).normalize();
+
+        if (!file.startsWith(folder) || !Files.exists(file)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        MediaType mediaType = detectHlsMediaType(filename);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL,
+                        "no-store, no-cache, must-revalidate, max-age=0")
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .header(HttpHeaders.EXPIRES, "0")
+                .contentType(mediaType)
+                .body(new FileSystemResource(file));
+    }
+
+    private MediaType detectHlsMediaType(String filename) {
+        if (filename.endsWith(".m3u8")) {
+            return MediaType.parseMediaType("application/vnd.apple.mpegurl");
+        }
+
+        if (filename.endsWith(".m4s")) {
+            return MediaType.parseMediaType("video/iso.segment");
+        }
+
+        if (filename.endsWith(".mp4")) {
+            return MediaType.parseMediaType("video/mp4");
+        }
+
+        return MediaType.APPLICATION_OCTET_STREAM;
+    }
     @GetMapping("/list")
     public ResponseEntity<?> list(
             @PathVariable String token,
@@ -63,9 +191,6 @@ public class SharePublicController {
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
 
-        /*if (!link.isDirectory()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Share target is not a folder"));
-        }*/
         if (!link.isDirectory()) {
             Path file = fileService.resolveSafe(link.getPath());
 

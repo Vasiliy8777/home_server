@@ -3077,3 +3077,44 @@ button[hidden] {
     gap: 8px;
     flex-wrap: wrap;
 }
+/* ===== SHARE MODAL SCROLL FIX ===== */
+
+#shareModal {
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+#shareModal .share-modal-content {
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    margin: 20px auto;
+
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    #shareModal .share-modal-content {
+        width: calc(100vw - 32px);
+        max-width: none;
+
+        max-height: calc(100vh - 32px);
+
+        margin: 16px auto;
+        padding: 20px;
+
+        border-radius: 22px;
+    }
+
+    #shareExistingLinksList {
+        max-height: 34vh;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+
+    .share-url-input {
+        font-size: 12px;
+    }
+}

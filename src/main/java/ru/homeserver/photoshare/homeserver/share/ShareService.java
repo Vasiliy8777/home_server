@@ -157,31 +157,6 @@ public class ShareService {
 
         return link;
     }
-
-    /*public String resolveInsideShare(ShareLink link, String publicRelativePath) {
-        Path sharedRoot = fileService.resolveSafe(link.getPath());
-
-        String clean = publicRelativePath == null ? "" : publicRelativePath.trim();
-        clean = clean.replace("\\", "/");
-
-        while (clean.startsWith("/")) {
-            clean = clean.substring(1);
-        }
-
-        if (clean.contains("\0")) {
-            throw new IllegalArgumentException("Invalid path");
-        }
-
-        Path resolved = clean.isBlank()
-                ? sharedRoot
-                : sharedRoot.resolve(clean).normalize();
-
-        if (!resolved.startsWith(sharedRoot)) {
-            throw new IllegalArgumentException("Access outside shared folder is forbidden");
-        }
-
-        return fileService.toRelative(resolved);
-    }*/
     public String resolveInsideShare(ShareLink link, String publicRelativePath) {
         Path sharedRoot = fileService.resolveSafe(link.getPath());
 
@@ -219,9 +194,6 @@ public class ShareService {
         Path sharedRoot = fileService.resolveSafe(link.getPath());
         Path itemPath = fileService.resolveSafe(item.relativePath());
 
-        /*String publicRelative = sharedRoot.equals(itemPath)
-                ? ""
-                : sharedRoot.relativize(itemPath).toString().replace("\\", "/");*/
         String publicRelative;
 
         if (!link.isDirectory()) {
