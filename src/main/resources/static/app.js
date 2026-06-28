@@ -3719,30 +3719,29 @@ async function openShareModal(item) {
     });
 
     shareModal.classList.remove("hidden");
+    updateSharePermissionOptions(item);
 
     shareTargetLinks = await loadExistingShareForItem(item);
     renderExistingShareLinks();
 }
+function updateSharePermissionOptions(item) {
+    const uploadRow = document.querySelector('input[name="sharePermission"][value="UPLOAD"]')?.closest(".share-permission-row");
+    const manageRow = document.querySelector('input[name="sharePermission"][value="MANAGE"]')?.closest(".share-permission-row");
 
-/*function openShareModal(item) {
-    shareTargetItem = item;
-    currentShareToken = null;
+    if (!item.directory) {
+        uploadRow?.classList.add("hidden");
+        manageRow?.classList.add("hidden");
 
-    shareTargetName.textContent =
-        item.directory
-            ? `Папка: ${item.name}`
-            : `Файл: ${item.name}`;
+        const checked = document.querySelector('input[name="sharePermission"]:checked');
 
-    shareExpiresSelect.value = "";
-    shareUrlInput.value = "";
-    shareResultBox.classList.add("hidden");
-
-    document.querySelectorAll('input[name="sharePermission"]').forEach(input => {
-        input.checked = input.value === "VIEW";
-    });
-
-    shareModal.classList.remove("hidden");
-}*/
+        if (checked && (checked.value === "UPLOAD" || checked.value === "MANAGE")) {
+            document.querySelector('input[name="sharePermission"][value="VIEW"]').checked = true;
+        }
+    } else {
+        uploadRow?.classList.remove("hidden");
+        manageRow?.classList.remove("hidden");
+    }
+}
 
 function closeShareModal() {
     shareModal.classList.add("hidden");

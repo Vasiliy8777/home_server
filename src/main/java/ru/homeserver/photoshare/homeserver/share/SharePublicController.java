@@ -63,8 +63,33 @@ public class SharePublicController {
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
 
-        if (!link.isDirectory()) {
+        /*if (!link.isDirectory()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Share target is not a folder"));
+        }*/
+        if (!link.isDirectory()) {
+            Path file = fileService.resolveSafe(link.getPath());
+
+            if (!Files.exists(file)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String parentPath = file.getParent() == null
+                    ? ""
+                    : fileService.toRelative(file.getParent());
+
+            List<FileItemDto> items = fileService.list(parentPath, 0, 1000)
+                    .stream()
+                    .filter(item -> item.relativePath().equals(link.getPath()))
+                    .map(item -> shareService.toPublicItem(link, item))
+                    .toList();
+
+            return ResponseEntity.ok(Map.of(
+                    "currentPath", "",
+                    "items", items,
+                    "total", items.size(),
+                    "permission", link.getPermission(),
+                    "singleFile", true
+            ));
         }
 
         String realPath = shareService.resolveInsideShare(link, path);

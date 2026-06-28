@@ -49,7 +49,10 @@ public class ShareService {
         }
         SharePermission permission =
                 request.permission() == null ? SharePermission.VIEW : request.permission();
-
+        if (!Files.isDirectory(target)
+                && (permission == SharePermission.UPLOAD || permission == SharePermission.MANAGE)) {
+            throw new IllegalArgumentException("Для файла доступна только ссылка на просмотр или скачивание");
+        }
         String relativePath = fileService.toRelative(target);
 
         ShareLink existing = findExisting(relativePath, permission);
@@ -63,7 +66,8 @@ public class ShareService {
         link.setToken(token);
         link.setPath(fileService.toRelative(target));
         link.setDirectory(Files.isDirectory(target));
-        link.setPermission(request.permission() == null ? SharePermission.VIEW : request.permission());
+        /*link.setPermission(request.permission() == null ? SharePermission.VIEW : request.permission());*/
+        link.setPermission(permission);
         link.setCreatedAt(Instant.now());
         link.setActive(true);
 
@@ -154,7 +158,7 @@ public class ShareService {
         return link;
     }
 
-    public String resolveInsideShare(ShareLink link, String publicRelativePath) {
+    /*public String resolveInsideShare(ShareLink link, String publicRelativePath) {
         Path sharedRoot = fileService.resolveSafe(link.getPath());
 
         String clean = publicRelativePath == null ? "" : publicRelativePath.trim();
@@ -177,15 +181,56 @@ public class ShareService {
         }
 
         return fileService.toRelative(resolved);
+    }*/
+    public String resolveInsideShare(ShareLink link, String publicRelativePath) {
+        Path sharedRoot = fileService.resolveSafe(link.getPath());
+
+        String clean = publicRelativePath == null ? "" : publicRelativePath.trim();
+        clean = clean.replace("\\", "/");
+
+        while (clean.startsWith("/")) {
+            clean = clean.substring(1);
+        }
+
+        if (clean.contains("\0")) {
+            throw new IllegalArgumentException("Invalid path");
+        }
+
+        if (!link.isDirectory()) {
+            if (clean.isBlank() || clean.equals(sharedRoot.getFileName().toString())) {
+                return fileService.toRelative(sharedRoot);
+            }
+
+            throw new IllegalArgumentException("Access outside shared file is forbidden");
+        }
+
+        Path resolved = clean.isBlank()
+                ? sharedRoot
+                : sharedRoot.resolve(clean).normalize();
+
+        if (!resolved.startsWith(sharedRoot)) {
+            throw new IllegalArgumentException("Access outside shared folder is forbidden");
+        }
+
+        return fileService.toRelative(resolved);
     }
 
     public FileItemDto toPublicItem(ShareLink link, FileItemDto item) {
         Path sharedRoot = fileService.resolveSafe(link.getPath());
         Path itemPath = fileService.resolveSafe(item.relativePath());
 
-        String publicRelative = sharedRoot.equals(itemPath)
+        /*String publicRelative = sharedRoot.equals(itemPath)
                 ? ""
-                : sharedRoot.relativize(itemPath).toString().replace("\\", "/");
+                : sharedRoot.relativize(itemPath).toString().replace("\\", "/");*/
+        String publicRelative;
+
+        if (!link.isDirectory()) {
+            publicRelative = item.name();
+        } else {
+            publicRelative = sharedRoot.equals(itemPath)
+                    ? ""
+                    : sharedRoot.relativize(itemPath).toString().replace("\\", "/");
+        }
 
         String token = link.getToken();
         String encoded = encode(publicRelative);

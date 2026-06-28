@@ -115,6 +115,9 @@ body {
     flex-shrink: 0;
 }
 
+.hidden {
+    display: none !important;
+}
 
 .folder-loading-ring.hidden {
     display: none;
