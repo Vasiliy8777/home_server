@@ -12,7 +12,18 @@ function shareApi(path) {
         throw new Error("SHARE_TOKEN is missing");
     }
 
+    if (path.startsWith("/api/files?")) {
+        return path.replace("/api/files", `/share/${SHARE_TOKEN}`);
+    }
+
     return path
+        .replace("/api/files/clear-temp", `/share/${SHARE_TOKEN}/clear-temp`)
+        .replace("/api/files/upload/init", `/share/${SHARE_TOKEN}/upload/init`)
+        .replace("/api/files/upload/status", `/share/${SHARE_TOKEN}/upload/status`)
+        .replace("/api/files/upload/complete", `/share/${SHARE_TOKEN}/upload/complete`)
+        .replace("/api/files/upload-chunk", `/share/${SHARE_TOKEN}/upload-chunk`)
+        .replace("/api/files/download-selected", `/share/${SHARE_TOKEN}/download-selected`)
+        .replace("/api/files/folder", `/share/${SHARE_TOKEN}/folder`)
         .replace("/api/files/prepare-folder", `/share/${SHARE_TOKEN}/prepare-folder`)
         .replace("/api/files/prepare-status", `/share/${SHARE_TOKEN}/prepare-status`)
         .replace("/api/files/prepared-items", `/share/${SHARE_TOKEN}/prepared-items`)
@@ -250,8 +261,18 @@ const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20 : 80;
 let currentPreparedTotal = 0;
 const PAGE_LIMIT = 1000;
 
-
 function hideInPublicMode() {
+    if (!PUBLIC_SHARE_MODE) {
+        return;
+    }
+
+    [
+        folderListBtn,
+        totalCacheBtn,
+        bulkMoveBtn
+    ].forEach(e => e?.remove());
+}
+/*function hideInPublicMode() {
 
     if (!PUBLIC_SHARE_MODE) {
         return;
@@ -268,7 +289,7 @@ function hideInPublicMode() {
         bulkDownloadBtn
     ].forEach(e => e?.remove());
 
-}
+}*/
 
 async function cancelHlsConversion(item) {
     if (!item || !item.relativePath) return;
@@ -776,6 +797,7 @@ async function loadPublicShareFiles(path = "") {
         }
 
         const data = await response.json();
+        window.PUBLIC_SHARE_PERMISSION = data.permission;
         const items = data.items || [];
 
         renderItems(items);
@@ -794,6 +816,74 @@ async function loadPublicShareFiles(path = "") {
 }
 
 function updatePublicShareButtons(permission) {
+    if (!PUBLIC_SHARE_MODE) return;
+
+    const canUpload = permission === "UPLOAD" || permission === "MANAGE";
+    const canDelete = permission === "MANAGE";
+    const canDownload =
+        permission === "DOWNLOAD" ||
+        permission === "UPLOAD" ||
+        permission === "MANAGE";
+
+    const canSelect = permission !== "VIEW";
+
+    if (newFolderBtn) {
+        newFolderBtn.style.display = canDelete ? "inline-flex" : "none";
+    }
+
+    if (folderListBtn) folderListBtn.style.display = "none";
+    if (totalCacheBtn) totalCacheBtn.style.display = "none";
+    if (bulkMoveBtn) bulkMoveBtn.style.display = "none";
+
+    if (selectAllBtn) {
+        selectAllBtn.style.display = canSelect ? "inline-flex" : "none";
+    }
+
+    if (clearSelectionBtn) {
+        clearSelectionBtn.style.display = canSelect ? "inline-flex" : "none";
+    }
+
+    if (bulkDownloadBtn) {
+        bulkDownloadBtn.style.display = canSelect ? "inline-flex" : "none";
+    }
+
+    if (bulkDeleteBtn) {
+        bulkDeleteBtn.style.display = canDelete ? "inline-flex" : "none";
+    }
+
+    if (fileInput) {
+        const uploadLabel = fileInput.closest(".upload-label");
+        if (uploadLabel) {
+            uploadLabel.style.display = canUpload ? "inline-flex" : "none";
+        }
+    }
+
+    if (toggleTransfersBtn) {
+        toggleTransfersBtn.style.display = canUpload ? "inline-flex" : "none";
+    }
+
+    if (transferPanel && !canUpload) {
+        transferPanel.classList.add("hidden");
+    }
+
+    document.querySelectorAll(".card-actions .danger").forEach(btn => {
+        btn.style.display = canDelete ? "inline-flex" : "none";
+    });
+
+    document.querySelectorAll(".card-actions a").forEach(link => {
+        link.style.display = canDownload ? "inline-flex" : "none";
+    });
+
+    document.querySelectorAll(".item-checkbox").forEach(cb => {
+        cb.style.display = canSelect ? "inline-flex" : "none";
+    });
+
+    if (downloadViewerBtn) {
+        downloadViewerBtn.style.display = canDownload ? "inline-flex" : "none";
+    }
+}
+
+/*function updatePublicShareButtons(permission) {
     if (!PUBLIC_SHARE_MODE) return;
 
     const canUpload = permission === "UPLOAD" || permission === "MANAGE";
@@ -828,7 +918,7 @@ function updatePublicShareButtons(permission) {
     if (downloadViewerBtn) {
         downloadViewerBtn.style.display = canDownload ? "inline-flex" : "none";
     }
-}
+}*/
 
 /*async function loadFilesPrepared(path = "") {*/
 async function loadFilesPrepared(path = "", options = {}) {
@@ -1755,7 +1845,7 @@ function getPermissionTitle(permission) {
     switch (permission) {
         case "VIEW": return "Только просмотр";
         case "DOWNLOAD": return "Просмотр и скачивание";
-        case "UPLOAD": return "Просмотр и загрузка";
+        case "UPLOAD": return "Смотреть, скачивать, загружать";
         case "MANAGE": return "Полный доступ";
         default: return permission;
     }
@@ -1823,6 +1913,28 @@ function executeBulkDownload() {
         params.append("paths", item.path);
     }
 
+    const url = shareApi(`/api/files/download-selected?${params.toString()}`);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "selected-files.zip";
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    bulkDownloadModal.classList.add("hidden");
+}
+
+/*function executeBulkDownload() {
+    if (!selectedItems.size) return;
+
+    const params = new URLSearchParams();
+
+    for (const item of selectedItems.values()) {
+        params.append("paths", item.path);
+    }
+
     const link = document.createElement("a");
     link.href = `/api/files/download-selected?${params.toString()}`;
     link.download = "selected-files.zip";
@@ -1832,7 +1944,7 @@ function executeBulkDownload() {
     link.remove();
 
     bulkDownloadModal.classList.add("hidden");
-}
+}*/
 
 function openBulkDeleteModal() {
     if (!selectedItems.size) return;
@@ -3658,7 +3770,7 @@ function createCard(item) {
         }
     }
 
-    if (!PUBLIC_SHARE_MODE) {
+    if (!PUBLIC_SHARE_MODE || window.PUBLIC_SHARE_PERMISSION === "MANAGE") {
         const deleteBtn = document.createElement("button");
         deleteBtn.className = "danger";
         deleteBtn.textContent = "Удалить";
@@ -4177,11 +4289,7 @@ async function uploadPublicShareFiles(files) {
     }
 }
 fileInput.addEventListener("change", () => {
-    if (PUBLIC_SHARE_MODE) {
-        uploadPublicShareFiles(fileInput.files);
-        fileInput.value = "";
-        return;
-    }
+
     for (const file of fileInput.files) {
         const existing = Array.from(transferTasks.values()).find(task =>
             task.kind === "upload" &&

@@ -39,7 +39,10 @@ public class RateLimitFilter implements Filter {
             chain.doFilter(request, response);
             return;
         }
-
+        if (isPublicShareUploadOrStatic(uri)) {
+            chain.doFilter(request, response);
+            return;
+        }
         String key = httpRequest.getRemoteAddr();
 
         Bucket bucket = buckets.computeIfAbsent(key, k -> Bucket.builder()
@@ -56,5 +59,20 @@ public class RateLimitFilter implements Filter {
             httpResponse.setContentType("text/plain;charset=UTF-8");
             httpResponse.getWriter().write("Too many requests");
         }
+    }
+    private boolean isPublicShareUploadOrStatic(String uri) {
+        return uri.matches("^/share/[^/]+/upload(/.*)?$")
+                || uri.matches("^/share/[^/]+/upload-chunk$")
+                || uri.matches("^/share/[^/]+/clear-temp$")
+                || uri.matches("^/share/[^/]+/list$")
+                || uri.matches("^/share/[^/]+/thumbnail$")
+                || uri.matches("^/share/[^/]+/raw$")
+                || uri.matches("^/share/[^/]+/stream$")
+                || uri.matches("^/share/[^/]+/download$")
+                || uri.matches("^/share/[^/]+/video/hls(/.*)?$")
+                || uri.matches("^/share/[^/]+$")
+                || uri.startsWith("/video-placeholder.png")
+                || uri.startsWith("/image-placeholder.png")
+                || uri.startsWith("/img/");
     }
 }

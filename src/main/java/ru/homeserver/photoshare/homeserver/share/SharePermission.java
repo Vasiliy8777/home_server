@@ -11,7 +11,7 @@ public enum SharePermission {
     }
 
     public boolean canDownload() {
-        return this == DOWNLOAD || this == MANAGE;
+        return this == DOWNLOAD || this == UPLOAD || this == MANAGE;
     }
 
     public boolean canUpload() {
