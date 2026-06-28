@@ -1,5 +1,33 @@
 let currentPath = "";
 
+const PUBLIC_SHARE_MODE = window.PUBLIC_SHARE_MODE === true;
+const SHARE_TOKEN = window.SHARE_TOKEN || null;
+
+function shareApi(path) {
+    if (!PUBLIC_SHARE_MODE) {
+        return path;
+    }
+
+    if (!SHARE_TOKEN) {
+        throw new Error("SHARE_TOKEN is missing");
+    }
+
+    return path
+        .replace("/api/files/prepare-folder", `/share/${SHARE_TOKEN}/prepare-folder`)
+        .replace("/api/files/prepare-status", `/share/${SHARE_TOKEN}/prepare-status`)
+        .replace("/api/files/prepared-items", `/share/${SHARE_TOKEN}/prepared-items`)
+        .replace("/api/files/list", `/share/${SHARE_TOKEN}/list`)
+        .replace("/api/files/raw", `/share/${SHARE_TOKEN}/raw`)
+        .replace("/api/files/stream", `/share/${SHARE_TOKEN}/stream`)
+        .replace("/api/files/download", `/share/${SHARE_TOKEN}/download`)
+        .replace("/api/files/image-thumbnail", `/share/${SHARE_TOKEN}/thumbnail`)
+        .replace("/api/files/video-thumbnail", `/share/${SHARE_TOKEN}/thumbnail`)
+        .replace("/api/video/hls/prepare", `/share/${SHARE_TOKEN}/video/hls/prepare`)
+        .replace("/api/video/hls/status", `/share/${SHARE_TOKEN}/video/hls/status`)
+        .replace("/api/video/hls/progress", `/share/${SHARE_TOKEN}/video/hls/progress`)
+        .replace("/api/video/hls/cancel", `/share/${SHARE_TOKEN}/video/hls/cancel`);
+}
+
 function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -26,6 +54,8 @@ function csrfHeaders(extraHeaders = {}) {
 
 async function secureFetch(url, options = {}) {
 
+    url = shareApi(url);
+
     const method = (options.method || "GET").toUpperCase();
 
     const unsafe =
@@ -43,6 +73,12 @@ async function secureFetch(url, options = {}) {
             : (options.headers || {})
     });
 }
+
+/*function onClick(element, handler) {
+    if (element) {
+        element.addEventListener("click", handler);
+    }
+}*/
 
 let parentPath = "";
 let currentPlayer = null;
@@ -213,6 +249,26 @@ const MAX_METADATA_REQUESTS = window.innerWidth <= 768 ? 2 : 4; // 🔥 для �
 const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20 : 80;
 let currentPreparedTotal = 0;
 const PAGE_LIMIT = 1000;
+
+
+function hideInPublicMode() {
+
+    if (!PUBLIC_SHARE_MODE) {
+        return;
+    }
+
+    [
+        newFolderBtn,
+        folderListBtn,
+        totalCacheBtn,
+        selectAllBtn,
+        clearSelectionBtn,
+        bulkMoveBtn,
+        bulkDeleteBtn,
+        bulkDownloadBtn
+    ].forEach(e => e?.remove());
+
+}
 
 async function cancelHlsConversion(item) {
     if (!item || !item.relativePath) return;
@@ -694,8 +750,91 @@ function closePropertiesModal() {
     propertiesModal.classList.add("hidden");
 }
 
+async function loadPublicShareFiles(path = "") {
+    showLoadingGif();
+
+    try {
+        currentPath = path || "";
+        activeFolderPath = currentPath;
+        parentPath = getParentPath(currentPath);
+
+        currentItems = [];
+        viewerItems = [];
+        selectedItems.clear();
+
+        gallery.innerHTML = "";
+        currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
+        currentPathEl.classList.remove("path-expanded");
+
+        const response = await secureFetch(
+            `/share/${SHARE_TOKEN}/list?path=${encodeURIComponent(currentPath)}&offset=0&limit=1000`
+        );
+
+        if (!response.ok) {
+            gallery.innerHTML = `<div class="empty-folder-message">Ссылка недоступна или срок действия истёк</div>`;
+            return;
+        }
+
+        const data = await response.json();
+        const items = data.items || [];
+
+        renderItems(items);
+
+        if (!items.length) {
+            gallery.innerHTML = `<div class="empty-folder-message">Папка пустая</div>`;
+        }
+
+        updatePublicShareButtons(data.permission);
+
+        updateNavButtons();
+
+    } finally {
+        hideLoadingGif();
+    }
+}
+
+function updatePublicShareButtons(permission) {
+    if (!PUBLIC_SHARE_MODE) return;
+
+    const canUpload = permission === "UPLOAD" || permission === "MANAGE";
+    const canDelete = permission === "MANAGE";
+    const canDownload = permission === "DOWNLOAD" || permission === "MANAGE";
+
+    if (newFolderBtn) newFolderBtn.style.display = "none";
+    if (folderListBtn) folderListBtn.style.display = "none";
+    if (totalCacheBtn) totalCacheBtn.style.display = "none";
+
+    if (selectAllBtn) selectAllBtn.style.display = "none";
+    if (clearSelectionBtn) clearSelectionBtn.style.display = "none";
+    if (bulkMoveBtn) bulkMoveBtn.style.display = "none";
+    if (bulkDownloadBtn) bulkDownloadBtn.style.display = "none";
+    if (bulkDeleteBtn) bulkDeleteBtn.style.display = "none";
+
+    if (fileInput) {
+        const uploadLabel = fileInput.closest(".upload-label");
+        if (uploadLabel) {
+            uploadLabel.style.display = canUpload ? "inline-flex" : "none";
+        }
+    }
+
+    document.querySelectorAll(".card-actions .danger").forEach(btn => {
+        btn.style.display = canDelete ? "inline-flex" : "none";
+    });
+
+    document.querySelectorAll(".card-actions a").forEach(link => {
+        link.style.display = canDownload ? "inline-flex" : "none";
+    });
+
+    if (downloadViewerBtn) {
+        downloadViewerBtn.style.display = canDownload ? "inline-flex" : "none";
+    }
+}
+
 /*async function loadFilesPrepared(path = "") {*/
 async function loadFilesPrepared(path = "", options = {}) {
+    if (PUBLIC_SHARE_MODE) {
+        return loadPublicShareFiles(path);
+    }
     showLoadingGif();
     try {
         const showPrepareModal = options.showPrepareModal !== false;
@@ -1043,13 +1182,21 @@ function closeRenameModal() {
     renameInput.value = "";
 }
 
-groupingBtn.onclick = () => {
+/*groupingBtn.onclick = () => {
     groupingModal.classList.remove("hidden");
-};
+};*/
+groupingBtn?.addEventListener("click", () => {
+    groupingModal?.classList.remove("hidden");
+});
 
-closeGroupingBtn.onclick = () => {
+
+/*closeGroupingBtn.onclick = () => {
     groupingModal.classList.add("hidden");
-};
+};*/
+closeGroupingBtn?.addEventListener("click", () => {
+    groupingModal?.classList.add("hidden");
+});
+
 applyGroupingBtn.onclick = () => {
     periodFilterEnabled = enablePeriodFilter.checked;
     periodFromValue = periodFrom.value || "";
@@ -1390,7 +1537,31 @@ function updateBulkButtons() {
     clearSelectionBtn.textContent =
         count ? `Снять выбор (${count})` : "Снять";
 }
+const shareModal = document.getElementById("shareModal");
+const closeShareModalBtn = document.getElementById("closeShareModalBtn");
+const cancelShareBtn = document.getElementById("cancelShareBtn");
+const createShareBtn = document.getElementById("createShareBtn");
+const shareTargetName = document.getElementById("shareTargetName");
+const shareExpiresSelect = document.getElementById("shareExpiresSelect");
+const shareResultBox = document.getElementById("shareResultBox");
+const shareUrlInput = document.getElementById("shareUrlInput");
+const copyShareUrlBtn = document.getElementById("copyShareUrlBtn");
+const shareExistingLinksBox = document.getElementById("shareExistingLinksBox");
+const shareExistingLinksList = document.getElementById("shareExistingLinksList");
 
+const shareDuplicateModal = document.getElementById("shareDuplicateModal");
+const duplicateShareUrlInput = document.getElementById("duplicateShareUrlInput");
+const copyDuplicateShareBtn = document.getElementById("copyDuplicateShareBtn");
+const closeDuplicateShareBtn = document.getElementById("closeDuplicateShareBtn");
+const closeDuplicateShareModalBtn = document.getElementById("closeDuplicateShareModalBtn");
+
+let shareTargetLinks = [];
+
+
+const disableShareUrlBtn = document.getElementById("disableShareUrlBtn");
+
+let shareTargetItem = null;
+let currentShareToken = null;
 //функция сортировки
 function sortItems(items) {
     return [...items].sort((a, b) => {
@@ -1558,6 +1729,89 @@ async function preparePreviewVideo(item) {
             }
         }, 1000);
     });
+}
+
+async function loadExistingShareForItem(item) {
+    try {
+        const response = await secureFetch("/api/share");
+
+        if (!response.ok) {
+            return [];
+        }
+
+        const links = await response.json();
+
+        return links.filter(link =>
+            link.path === item.relativePath
+        );
+
+    } catch (e) {
+        console.warn("Existing share load failed", e);
+        return [];
+    }
+}
+
+function getPermissionTitle(permission) {
+    switch (permission) {
+        case "VIEW": return "Только просмотр";
+        case "DOWNLOAD": return "Просмотр и скачивание";
+        case "UPLOAD": return "Просмотр и загрузка";
+        case "MANAGE": return "Полный доступ";
+        default: return permission;
+    }
+}
+
+function renderExistingShareLinks() {
+    if (!shareExistingLinksBox || !shareExistingLinksList) return;
+
+    shareExistingLinksList.innerHTML = "";
+
+    if (!shareTargetLinks.length) {
+        shareExistingLinksBox.classList.add("hidden");
+        return;
+    }
+
+    shareExistingLinksBox.classList.remove("hidden");
+
+    for (const link of shareTargetLinks) {
+        const row = document.createElement("div");
+        row.className = "share-existing-link-row";
+
+        row.innerHTML = `
+            <div class="share-existing-link-info">
+                <b>${getPermissionTitle(link.permission)}</b>
+                <input class="share-url-input" value="${escapeHtml(link.url)}" readonly>
+            </div>
+            <div class="share-existing-link-actions">
+                <button type="button" data-action="copy">Копировать</button>
+                <button type="button" data-action="delete" class="danger">Удалить</button>
+            </div>
+        `;
+
+        row.querySelector('[data-action="copy"]').onclick = async () => {
+            await copyText(link.url);
+            showToast("ссылка скопирована");
+        };
+
+        row.querySelector('[data-action="delete"]').onclick = async () => {
+            await deleteShareLinkByToken(link.token);
+        };
+
+        shareExistingLinksList.appendChild(row);
+    }
+}
+
+async function copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (e) {
+        const input = document.createElement("input");
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+    }
 }
 
 function executeBulkDownload() {
@@ -1824,11 +2078,16 @@ transferList.addEventListener("click", (e) => {
         }
     }
 });
-totalCacheBtn.onclick = openTotalCacheModal;
+/*totalCacheBtn.onclick = openTotalCacheModal;*/
+totalCacheBtn?.addEventListener("click", openTotalCacheModal);
 
-statusTotalCacheBtn.onclick = showTotalCacheStatus;
+/*statusTotalCacheBtn.onclick = showTotalCacheStatus;
 pauseTotalCacheBtn.onclick = pauseTotalCache;
-resumeTotalCacheBtn.onclick = resumeTotalCache;
+resumeTotalCacheBtn.onclick = resumeTotalCache;*/
+
+statusTotalCacheBtn?.addEventListener("click", showTotalCacheStatus);
+pauseTotalCacheBtn?.addEventListener("click", pauseTotalCache);
+resumeTotalCacheBtn?.addEventListener("click", resumeTotalCache);
 
 // СКРЫТЬ — только закрывает модалку, процессы продолжаются
 closeTotalCacheModalBtn.onclick = () => {
@@ -2535,7 +2794,8 @@ async function processDownloadQueue() {
     processDownloadQueue();
 }
 
-document.getElementById("clearTransfersBtn").onclick = async () => {
+/*document.getElementById("clearTransfersBtn").onclick = async () => {*/
+document.getElementById("clearTransfersBtn")?.addEventListener("click", async () => {
     cancelAllTransfers = true;
 
     uploadQueue.length = 0;
@@ -2557,8 +2817,8 @@ document.getElementById("clearTransfersBtn").onclick = async () => {
     setTimeout(() => {
         cancelAllTransfers = false;
     }, 300);
-};
-
+/*};*/
+});
 function applyMarqueeIfNeeded() {
     document.querySelectorAll(".transfer-name").forEach(el => {
         const span = el.querySelector("span");
@@ -3368,6 +3628,12 @@ function createCard(item) {
     const actions = document.createElement("div");
     actions.className = "card-actions";
 
+    const canPublicDownload =
+        !PUBLIC_SHARE_MODE || !!item.downloadUrl;
+
+    const canPublicDelete =
+        !PUBLIC_SHARE_MODE;
+
     if (item.directory) {
         const openBtn = document.createElement("button");
         openBtn.textContent = "Открыть";
@@ -3382,32 +3648,45 @@ function createCard(item) {
             downloadBtn.onclick = () => openDownloadFormatModal(item);
             actions.appendChild(downloadBtn);
         } else {
-            const downloadLink = document.createElement("a");
-            downloadLink.href = item.downloadUrl;
-            downloadLink.textContent = "Скачать";
-            downloadLink.setAttribute("download", item.name);
-            actions.appendChild(downloadLink);
+            if (item.downloadUrl) {
+                const downloadLink = document.createElement("a");
+                downloadLink.href = item.downloadUrl;
+                downloadLink.textContent = "Скачать";
+                downloadLink.setAttribute("download", item.name);
+                actions.appendChild(downloadLink);
+            }
         }
     }
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "danger";
-    deleteBtn.textContent = "Удалить";
+    if (!PUBLIC_SHARE_MODE) {
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "danger";
+        deleteBtn.textContent = "Удалить";
 
-    deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
-    actions.appendChild(deleteBtn);
+        deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
+        actions.appendChild(deleteBtn);
+    }
 
-    const propertiesBtn = document.createElement("button");
-    propertiesBtn.textContent = "Свойства";
+    if (!PUBLIC_SHARE_MODE) {
+        const shareBtn = document.createElement("button");
+        shareBtn.textContent = "Поделиться";
+        shareBtn.onclick = () => openShareModal(item);
+        actions.appendChild(shareBtn);
+    }
 
-    propertiesBtn.onclick = async () => {
+    if (!PUBLIC_SHARE_MODE) {
+        const propertiesBtn = document.createElement("button");
+        propertiesBtn.textContent = "Свойства";
 
-        currentPropertiesPath = item.relativePath;
-        currentPropertiesName = item.name;
+        propertiesBtn.onclick = async () => {
+            currentPropertiesPath = item.relativePath;
+            currentPropertiesName = item.name;
 
-        await openPropertiesModal(item.relativePath);
-    };
-    actions.appendChild(propertiesBtn);
+            await openPropertiesModal(item.relativePath);
+        };
+
+        actions.appendChild(propertiesBtn);
+    }
 
     body.appendChild(actions);
     card.appendChild(thumb);
@@ -3416,17 +3695,233 @@ function createCard(item) {
     return card;
 }
 
+function getSelectedSharePermission() {
+    const checked = document.querySelector('input[name="sharePermission"]:checked');
+    return checked ? checked.value : "VIEW";
+}
+
+async function openShareModal(item) {
+    shareTargetItem = item;
+    currentShareToken = null;
+    shareTargetLinks = [];
+
+    shareTargetName.textContent =
+        item.directory
+            ? `Папка: ${item.name}`
+            : `Файл: ${item.name}`;
+
+    shareExpiresSelect.value = "";
+    shareUrlInput.value = "";
+    shareResultBox.classList.add("hidden");
+
+    document.querySelectorAll('input[name="sharePermission"]').forEach(input => {
+        input.checked = input.value === "VIEW";
+    });
+
+    shareModal.classList.remove("hidden");
+
+    shareTargetLinks = await loadExistingShareForItem(item);
+    renderExistingShareLinks();
+}
+
+/*function openShareModal(item) {
+    shareTargetItem = item;
+    currentShareToken = null;
+
+    shareTargetName.textContent =
+        item.directory
+            ? `Папка: ${item.name}`
+            : `Файл: ${item.name}`;
+
+    shareExpiresSelect.value = "";
+    shareUrlInput.value = "";
+    shareResultBox.classList.add("hidden");
+
+    document.querySelectorAll('input[name="sharePermission"]').forEach(input => {
+        input.checked = input.value === "VIEW";
+    });
+
+    shareModal.classList.remove("hidden");
+}*/
+
+function closeShareModal() {
+    shareModal.classList.add("hidden");
+
+    shareTargetItem = null;
+    currentShareToken = null;
+
+    shareUrlInput.value = "";
+    shareResultBox.classList.add("hidden");
+}
+
+async function createShareLink() {
+    if (!shareTargetItem) return;
+
+    const permission = getSelectedSharePermission();
+
+    const duplicate = shareTargetLinks.find(link =>
+        link.permission === permission
+    );
+
+    if (duplicate) {
+        showDuplicateShareModal(duplicate);
+        return;
+    }
+
+    const expiresRaw = shareExpiresSelect.value;
+
+    const payload = {
+        path: shareTargetItem.relativePath,
+        permission,
+        expiresInDays: expiresRaw ? Number(expiresRaw) : null
+    };
+
+    const response = await secureFetch("/api/share", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        alert("Не удалось создать ссылку:\n" + text);
+        return;
+    }
+
+    const data = await response.json();
+
+    const alreadyInList = shareTargetLinks.some(link =>
+        link.permission === data.permission
+    );
+
+    if (alreadyInList) {
+        showDuplicateShareModal(data);
+        return;
+    }
+
+    shareTargetLinks.push(data);
+    renderExistingShareLinks();
+
+    currentShareToken = data.token;
+    shareUrlInput.value = data.url;
+    shareResultBox.classList.remove("hidden");
+
+    showToast("Ссылка создана");
+}
+
+async function deleteShareLinkByToken(token) {
+    if (!token) return;
+
+    if (!confirm("Удалить ссылку общего доступа?")) {
+        return;
+    }
+
+    const response = await secureFetch(
+        `/api/share/${encodeURIComponent(token)}`,
+        { method: "DELETE" }
+    );
+
+    if (!response.ok) {
+        alert("Не удалось удалить ссылку");
+        return;
+    }
+
+    shareTargetLinks = shareTargetLinks.filter(link => link.token !== token);
+    renderExistingShareLinks();
+
+    if (currentShareToken === token) {
+        currentShareToken = null;
+        shareUrlInput.value = "";
+        shareResultBox.classList.add("hidden");
+    }
+
+    showToast("Ссылка удалена");
+}
+
+function showDuplicateShareModal(link) {
+    duplicateShareUrlInput.value = link.url;
+    shareDuplicateModal.classList.remove("hidden");
+}
+
+function closeDuplicateShareModal() {
+    shareDuplicateModal.classList.add("hidden");
+    duplicateShareUrlInput.value = "";
+}
+
+copyDuplicateShareBtn?.addEventListener("click", async () => {
+    await copyText(duplicateShareUrlInput.value);
+    showToast("ссылка скопирована");
+});
+
+closeDuplicateShareBtn?.addEventListener("click", closeDuplicateShareModal);
+closeDuplicateShareModalBtn?.addEventListener("click", closeDuplicateShareModal);
+
+async function disableCurrentShareLink() {
+    await deleteShareLinkByToken(currentShareToken);
+}
+
+async function copyCurrentShareLink() {
+    const url = shareUrlInput.value;
+    if (!url) return;
+
+    try {
+        await navigator.clipboard.writeText(url);
+    } catch (e) {
+        shareUrlInput.focus();
+        shareUrlInput.select();
+        document.execCommand("copy");
+    }
+
+    showCopyShareToast();
+}
+
+function showCopyShareToast() {
+    const toast = document.getElementById("toast");
+
+    if (!toast) {
+        alert("ссылка скопирована");
+        return;
+    }
+
+    toast.textContent = "ссылка скопирована";
+    toast.classList.remove("hidden");
+
+    requestAnimationFrame(() => {
+        toast.classList.add("show");
+    });
+
+    setTimeout(() => {
+        toast.classList.remove("show");
+
+        setTimeout(() => {
+            toast.classList.add("hidden");
+        }, 250);
+
+    }, 2000);
+}
+
 function buildImageThumbnailUrl(path) {
     if (!path) return "/image-placeholder.png";
+    if (PUBLIC_SHARE_MODE) {
+        return `/share/${SHARE_TOKEN}/thumbnail?path=${encodeURIComponent(path)}`;
+    }
     return `/api/files/image-thumbnail?path=${encodeURIComponent(path)}`;
 }
 
 function buildVideoStreamUrl(path) {
+    if (PUBLIC_SHARE_MODE) {
+        return `/share/${SHARE_TOKEN}/stream?path=${encodeURIComponent(path)}`;
+    }
     return `/api/files/stream?path=${encodeURIComponent(path)}`;
 }
 
 function buildVideoThumbnailUrl(path) {
     if (!path) return "/video-placeholder.png";
+    if (PUBLIC_SHARE_MODE) {
+        return `/share/${SHARE_TOKEN}/thumbnail?path=${encodeURIComponent(path)}`;
+    }
     return `/api/files/video-thumbnail?path=${encodeURIComponent(path)}`;
 }
 
@@ -3446,7 +3941,9 @@ function renderItems(items) {
     }
 
     initLazyThumbs();
-    initLazyMetadata();
+    if (!PUBLIC_SHARE_MODE) {
+        initLazyMetadata();
+    }
     const imageThumbs = gallery.querySelectorAll("img.image-thumb");
     imageThumbs.forEach(img => enablePreviewPan(img));
     const videoThumbs = gallery.querySelectorAll("img.video-thumb-img");
@@ -3648,8 +4145,44 @@ async function removeItem(path, name) {
 
     await loadFiles(currentPath);
 }
+async function uploadPublicShareFiles(files) {
+    if (!files || !files.length) return;
 
+    showLoadingGif();
+
+    try {
+        const formData = new FormData();
+
+        for (const file of files) {
+            formData.append("files", file);
+        }
+
+        const response = await secureFetch(
+            `/share/${SHARE_TOKEN}/upload?path=${encodeURIComponent(currentPath)}`,
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+        if (!response.ok) {
+            const text = await response.text();
+            alert("Не удалось загрузить файлы:\n" + text);
+            return;
+        }
+
+        await loadFiles(currentPath);
+
+    } finally {
+        hideLoadingGif();
+    }
+}
 fileInput.addEventListener("change", () => {
+    if (PUBLIC_SHARE_MODE) {
+        uploadPublicShareFiles(fileInput.files);
+        fileInput.value = "";
+        return;
+    }
     for (const file of fileInput.files) {
         const existing = Array.from(transferTasks.values()).find(task =>
             task.kind === "upload" &&
@@ -3952,55 +4485,6 @@ function renderViewerItem() {
         const video = document.getElementById("player");
         currentPlayer = new Plyr(video);
     }
-        /*if (item.type === "video") {
-        const lower = item.name.toLowerCase();
-        if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
-            viewerBody.innerHTML = `<div>Подготовка видео...</div>`;
-
-            downloadViewerBtn.onclick = () => {
-                openDownloadFormatModal(item, currentPreviewId);
-            };
-
-            openRenamePreview(item)
-                .then(url => {
-                    if (!url) {
-                        viewerBody.innerHTML = `<div>Не удалось подготовить видео</div>`;
-                        return;
-                    }
-
-                    viewerBody.innerHTML = `
-                <video id="player"
-                       controls
-                       preload="auto"
-                       poster="${buildVideoThumbnailUrl(item.relativePath)}"
-                       style="width:100%; max-height:75vh;">
-                    <source src="${url}" type="video/mp4">
-                </video>
-            `;
-
-                    const video = document.getElementById("player");
-                    currentPlayer = new Plyr(video);
-                })
-                .catch(e => {
-                    console.error(e);
-                    viewerBody.innerHTML = `<div>Не удалось подготовить видео</div>`;
-                });
-
-            return;
-        }
-        viewerBody.innerHTML = `
-        <video id="player"
-               controls
-               preload="metadata"
-               poster="${buildVideoThumbnailUrl(item.relativePath)}"
-               style="width:100%; max-height:75vh;">
-            <source src="${buildVideoStreamUrl(item.relativePath)}" type="video/mp4">
-        </video>
-    `;
-
-        const video = document.getElementById("player");
-        currentPlayer = new Plyr(video);
-    }*/
     downloadViewerBtn.onclick = () => {
         const item = viewerItems[viewerIndex];
         const lower = item.name.toLowerCase();
@@ -4217,6 +4701,18 @@ async function closeViewerModal() {
     viewerIndex = -1;
 }
 
+createShareBtn?.addEventListener("click", createShareLink);
+cancelShareBtn?.addEventListener("click", closeShareModal);
+closeShareModalBtn?.addEventListener("click", closeShareModal);
+copyShareUrlBtn?.addEventListener("click", copyCurrentShareLink);
+
+disableShareUrlBtn?.addEventListener("click", disableCurrentShareLink);
+
+shareModal?.addEventListener("click", (e) => {
+    if (e.target.classList.contains("delete-modal-backdrop")) {
+        closeShareModal();
+    }
+});
 
 toggleTopbarBtn?.addEventListener("click", toggleTopbar);
 
@@ -4633,6 +5129,7 @@ if (savedTopbarState === "1") {
     setTopbarCollapsed(true);
 }
 restoreTransferTasks();
+hideInPublicMode();
 document.addEventListener("DOMContentLoaded", () => {
     loadFiles();
     window.metadataLoadingModal = document.getElementById("metadataLoadingModal");

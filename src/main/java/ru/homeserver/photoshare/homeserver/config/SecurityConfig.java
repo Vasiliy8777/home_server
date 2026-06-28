@@ -45,7 +45,8 @@ public class SecurityConfig {
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(requestHandler)
                         .ignoringRequestMatchers("/api/files/prepare-folder",
-                                "/api/files/metadata/card-bulk")
+                                "/api/files/metadata/card-bulk",
+                                "/share/**")
                 ).headers(headers -> headers
                         .httpStrictTransportSecurity(hsts -> hsts
                                 .includeSubDomains(true)
@@ -54,7 +55,22 @@ public class SecurityConfig {
                 )
                 .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/error").permitAll()
+                        /*.requestMatchers("/login", "/error")*/
+                        .requestMatchers(
+                                "/login",
+                                "/error",
+                                "/share/**",
+                                "/share.html",
+                                "/deletedlink.html",
+                                "/style.css",
+                                "/app.js",
+                                "/bg.jpg",
+                                "/img/**",
+                                "/image-placeholder.png",
+                                "/video-placeholder.png",
+                                "/webjars/**",
+                                "/favicon.ico"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .formLogin(login -> login
