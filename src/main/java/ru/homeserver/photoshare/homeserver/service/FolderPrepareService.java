@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
@@ -137,6 +136,7 @@ public class    FolderPrepareService {
             if (cached != null) {
                 /*cached.sort(createComparator(job.sortField, job.sortDirection));*/
                 List<FileItemDto> filtered = cached.stream()
+                        .filter(item -> !isHiddenDirName(item.name()))
                         .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo))
                         .toList();
 
@@ -240,6 +240,7 @@ public class    FolderPrepareService {
             writeFolderItemsCache(folder, currentSignature, enriched);
 
             List<FileItemDto> filtered = enriched.stream()
+                    .filter(item -> !isHiddenDirName(item.name()))
                     .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo))
                     .toList();
 
@@ -336,7 +337,11 @@ public class    FolderPrepareService {
                     String name =
                             child.getFileName().toString();
 
-                    if (name.equals(".metadata_cache")
+                    if (isHiddenDirName(name)) {
+                        continue;
+                    }
+
+                    /*if (name.equals(".metadata_cache")
                             || name.equals(".thumbnails")
                             || name.equals(".previews")
                             || name.equals(".preview_journal")
@@ -346,7 +351,7 @@ public class    FolderPrepareService {
                             || name.equals("System Volume Information")) {
 
                         continue;
-                    }
+                    }*/
 
                     count++;
 
@@ -540,6 +545,19 @@ public class    FolderPrepareService {
 
        /* process(job);*/
         process(job, path, "name", "asc", "all", false, null, null);
+    }
+    private boolean isHiddenDirName(String name) {
+        return name != null && (
+                name.equals(".metadata_cache")
+                        || name.equals(".thumbnails")
+                        || name.equals(".previews")
+                        || name.equals(".preview_journal")
+                        || name.equals(".folder_cache")
+                        || name.equals(".upload_tmp")
+                        || name.equals(".security")
+                        || name.equals("$RECYCLE.BIN")
+                        || name.equals("System Volume Information")
+        );
     }
     private boolean matchesGrouping(
             FileItemDto item,

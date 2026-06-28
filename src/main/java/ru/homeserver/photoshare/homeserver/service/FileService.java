@@ -1,6 +1,5 @@
 package ru.homeserver.photoshare.homeserver.service;
 
-
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -46,6 +45,7 @@ public class FileService {
             ".folder_cache",
             ".security",
             "$RECYCLE.BIN",
+            ".previews",
             "System Volume Information"
     );
     public long countItems(String relativePath) throws IOException {

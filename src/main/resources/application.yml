@@ -3,10 +3,10 @@ server:
   port: ${SERVER_PORT:38471}
   ssl:
     enabled: ${SSL_ENABLED:true}
-    key-store: ${SSL_KEY_STORE:file:G:/arc_Y_disc/.security/cloudkris.p12}
+    key-store: ${SSL_KEY_STORE:file:C:/certs/cloudkris.servequake.com.pfx}
     key-store-password: ${SSL_KEY_STORE_PASSWORD}
     key-store-type: PKCS12
-    key-alias: ${SSL_KEY_ALIAS:cloudkris}
+    key-alias: ${SSL_KEY_ALIAS:cloudkris.servequake.com}
   servlet:
     session:
       timeout: 30m
