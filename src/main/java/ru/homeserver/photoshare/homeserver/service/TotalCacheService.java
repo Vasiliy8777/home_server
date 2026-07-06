@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.TotalCacheJobDto;
+import ru.homeserver.photoshare.homeserver.util.HiddenPaths;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -60,7 +61,7 @@ public class TotalCacheService {
 
         loadJournal();
     }
-    private boolean shouldSkipPath(Path path) {
+    /*private boolean shouldSkipPath(Path path) {
         String name = path.getFileName() == null
                 ? ""
                 : path.getFileName().toString().toLowerCase();
@@ -72,16 +73,31 @@ public class TotalCacheService {
                 || name.equals(".previews")
                 || name.equals(".preview_journal")
                 || name.equals(".folder_cache")
+                || name.equals(".upload_tmp")
+                || name.equals(".security")
+                || name.equals("$recycle.bin")
+                || name.equals("system volume information")
                 || full.contains("\\.metadata_cache\\")
                 || full.contains("\\.thumbnails\\")
                 || full.contains("\\.previews\\")
                 || full.contains("\\.preview_journal\\")
                 || full.contains("\\.folder_cache\\")
+                || full.contains("\\.upload_tmp\\")
+                || full.contains("\\.security\\")
+                || full.contains("\\$recycle.bin\\")
+                || full.contains("\\system volume information\\")
+                || full.contains("/.upload_tmp/")
+                || full.contains("/.security/")
+                || full.contains("/$recycle.bin/")
+                || full.contains("/system volume information/")
                 || full.contains("/.metadata_cache/")
                 || full.contains("/.thumbnails/")
                 || full.contains("/.previews/")
                 || full.contains("/.preview_journal/")
                 || full.contains("/.folder_cache/");
+    }*/
+    private boolean shouldSkipPath(Path path) {
+        return HiddenPaths.shouldSkip(path);
     }
     public TotalCacheJobDto getStatus() {
         synchronized (lock) {
@@ -123,7 +139,9 @@ public class TotalCacheService {
             updateStage("Сканирование папок и файлов", "");
 
             /*TotalCacheScan scan = scanStorageRoot(root);*/
-            TotalCacheScan scan = getOrBuildScan();
+            /*TotalCacheScan scan = getOrBuildScan();*/
+            invalidateStorageScanCache();
+            TotalCacheScan scan = scanStorageRoot(root);
 
             List<Path> folders = scan.folders();
             List<Path> mediaFiles = scan.mediaFiles();
@@ -243,8 +261,38 @@ public class TotalCacheService {
                             saveJournal();
                         }
                     }
+                    boolean thumbExists = false;
 
                     try {
+                        String type = detectType(file);
+
+                        if ("image".equals(type)) {
+                            if (!thumbnailService.hasImageThumbnail(file)) {
+                                thumbnailService.getOrCreateImageThumbnail(file);
+                            }
+
+                            thumbExists = thumbnailService.hasImageThumbnail(file);
+                        }
+
+                        if ("video".equals(type)) {
+                            if (!thumbnailService.hasVideoThumbnail(file)) {
+                                thumbnailService.getOrCreateVideoThumbnail(file);
+                            }
+
+                            thumbExists = thumbnailService.hasVideoThumbnail(file);
+                        }
+                    } catch (Exception ignored) {
+                    }
+
+                    synchronized (lock) {
+                        if (thumbExists) {
+                            job.processedThumbnails++;
+                        }
+
+                        updateProgressUnsafe();
+                        saveJournal();
+                    }
+                    /*try {
                         String type = detectType(file);
 
                         if ("image".equals(type)) {
@@ -260,11 +308,6 @@ public class TotalCacheService {
                         }
                     } catch (Exception ignored) {
                     }
-                    /*synchronized (lock) {
-                        job.processedThumbnails++;
-                        updateProgressUnsafe();
-                        saveJournal();
-                    }*/
                     synchronized (lock) {
                         job.processedThumbnails++;
 
@@ -273,7 +316,7 @@ public class TotalCacheService {
                             updateProgressUnsafe();
                             saveJournal();
                         }
-                    }
+                    }*/
                 }));
             }
 
@@ -361,10 +404,10 @@ public class TotalCacheService {
                 return job;
             }
 
-            if ("Анализ завершен".equals(job.stage)
+            /*if ("Анализ завершен".equals(job.stage)
                     || "Кеш готов".equals(job.stage)) {
                 return job;
-            }
+            }*/
 
             statusScanRunning = true;
             statusScanStopRequested = false;
@@ -382,42 +425,15 @@ public class TotalCacheService {
 
                 Path root = fileService.getRootPath();
                 /*TotalCacheScan scan = scanStorageRoot(root);*/
-                TotalCacheScan scan = getOrBuildScan();
+                /*TotalCacheScan scan = getOrBuildScan();*/
+                invalidateStorageScanCache();
+                TotalCacheScan scan = scanStorageRoot(root);
 
                 List<Path> folders = scan.folders();
                 List<Path> mediaFiles = scan.mediaFiles();
 
                 int total = folders.size() + mediaFiles.size();
-                /*List<Path> all = new ArrayList<>();
 
-                Files.walkFileTree(root, new SimpleFileVisitor<>() {
-                    @Override
-                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                        if (!dir.equals(root) && shouldSkipPath(dir)) {
-                            return FileVisitResult.SKIP_SUBTREE;
-                        }
-
-                        all.add(dir);
-                        return FileVisitResult.CONTINUE;
-                    }
-
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                        if (!shouldSkipPath(file) && Files.isRegularFile(file)) {
-                            all.add(file);
-                        }
-
-                        return FileVisitResult.CONTINUE;
-                    }
-
-                    @Override
-                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                        System.out.println("Skip unreadable path during status scan: " + file + " / " + exc.getMessage());
-                        return FileVisitResult.CONTINUE;
-                    }
-                });
-
-                int total = all.size();*/
                 int processed = 0;
 
                 long foldersCached = 0;
@@ -427,69 +443,6 @@ public class TotalCacheService {
                 long totalFolders = 0;
                 long totalFiles = 0;
 
-                /*for (Path path : all) {
-
-                    if (statusScanStopRequested) {
-                        synchronized (lock) {
-                            job.stage = "Анализ остановлен";
-                            statusScanRunning = false;
-                            saveJournal();
-                        }
-                        return;
-                    }
-
-                    processed++;
-
-                    synchronized (lock) {
-
-                        job.currentPath = toRelative(path);
-
-                        job.progress = Math.min(
-                                100,
-                                Math.round(processed * 100f / total)
-                        );
-
-                        if (processed % 50 == 0) {
-                            saveJournal();
-                        }
-                    }
-
-                    try {
-
-                        if (Files.isDirectory(path)) {
-
-                            totalFolders++;
-
-                            if (folderCacheExists(path)) {
-                                foldersCached++;
-                            }
-
-                        } else if (Files.isRegularFile(path)) {
-
-                            String type = detectType(path);
-
-                            if ("image".equals(type) || "video".equals(type)) {
-
-                                totalFiles++;
-
-                                if (metadataService.propertiesCacheExists(path)) {
-                                    metadataCached++;
-                                }
-
-                                boolean thumbExists =
-                                        "image".equals(type)
-                                                ? thumbnailService.hasImageThumbnail(path)
-                                                : thumbnailService.hasVideoThumbnail(path);
-
-                                if (thumbExists) {
-                                    thumbsCached++;
-                                }
-                            }
-                        }
-
-                    } catch (Exception ignored) {
-                    }
-                }*/
                     for (Path path : folders) {
                         if (statusScanStopRequested) {
                             synchronized (lock) {
@@ -603,7 +556,7 @@ public class TotalCacheService {
             saveJournal();
         }
     }
-    private boolean folderCacheExists(Path folder) {
+    /*private boolean folderCacheExists(Path folder) {
         try {
             Path dir = folderPrepareService.folderCacheDir(folder);
 
@@ -614,6 +567,9 @@ public class TotalCacheService {
         } catch (Exception e) {
             return false;
         }
+    }*/
+    private boolean folderCacheExists(Path folder) {
+        return folderPrepareService.folderCacheValid(folder);
     }
     public void resetStatus() {
         synchronized (lock) {

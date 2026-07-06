@@ -961,6 +961,8 @@ async function loadFilesPrepared(path = "", options = {}) {
         gallery.innerHTML = "";
         gallery.scrollTop = 0;
 
+        await loadSharedLinksIndex();
+
         currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
         currentPathEl.classList.remove("path-expanded");
 
@@ -1646,7 +1648,7 @@ const closeDuplicateShareBtn = document.getElementById("closeDuplicateShareBtn")
 const closeDuplicateShareModalBtn = document.getElementById("closeDuplicateShareModalBtn");
 
 let shareTargetLinks = [];
-
+let sharedLinksByPath = new Map();
 
 const disableShareUrlBtn = document.getElementById("disableShareUrlBtn");
 
@@ -1819,6 +1821,37 @@ async function preparePreviewVideo(item) {
             }
         }, 1000);
     });
+}
+
+async function loadSharedLinksIndex() {
+    if (PUBLIC_SHARE_MODE) return;
+
+    try {
+        const response = await secureFetch("/api/share");
+
+        if (!response.ok) {
+            sharedLinksByPath = new Map();
+            return;
+        }
+
+        const links = await response.json();
+
+        sharedLinksByPath = new Map();
+
+        for (const link of links) {
+            if (!link.path) continue;
+
+            if (!sharedLinksByPath.has(link.path)) {
+                sharedLinksByPath.set(link.path, []);
+            }
+
+            sharedLinksByPath.get(link.path).push(link);
+        }
+
+    } catch (e) {
+        console.warn("Share index load failed", e);
+        sharedLinksByPath = new Map();
+    }
 }
 
 async function loadExistingShareForItem(item) {
@@ -3626,6 +3659,21 @@ function createCard(item) {
     card.className = "card";
     card.dataset.path = item.relativePath;
 
+    if (!PUBLIC_SHARE_MODE && sharedLinksByPath.has(item.relativePath)) {
+        const shareBadge = document.createElement("button");
+        shareBadge.className = "card-share-badge";
+        shareBadge.title = "Общий доступ";
+        shareBadge.textContent = "↗";
+
+        shareBadge.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openShareModal(item);
+        };
+
+        card.appendChild(shareBadge);
+    }
+
     const selectBox = document.createElement("input");
     selectBox.type = "checkbox";
     selectBox.className = "item-checkbox";
@@ -3920,6 +3968,8 @@ async function createShareLink() {
     shareResultBox.classList.remove("hidden");
 
     showToast("Ссылка создана");
+    await loadSharedLinksIndex();
+    await loadFiles(currentPath, { showPrepareModal: false });
 }
 
 async function deleteShareLinkByToken(token) {
@@ -3949,6 +3999,8 @@ async function deleteShareLinkByToken(token) {
     }
 
     showToast("Ссылка удалена");
+    await loadSharedLinksIndex();
+    await loadFiles(currentPath, { showPrepareModal: false });
 }
 
 function showDuplicateShareModal(link) {

@@ -3118,3 +3118,37 @@ button[hidden] {
         font-size: 12px;
     }
 }
+.card {
+    position: relative;
+}
+
+.card-share-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+
+    width: 28px;
+    height: 28px;
+
+    border-radius: 50%;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    background: rgba(0, 255, 150, 0.18) !important;
+    border: 1px solid rgba(0, 255, 150, 0.45);
+
+    color: #54ffae !important;
+
+    font-size: 17px;
+    font-weight: 700;
+
+    z-index: 5;
+    cursor: pointer;
+}
+
+.card-share-badge:hover {
+    background: rgba(0, 255, 150, 0.32) !important;
+    transform: scale(1.08);
+}

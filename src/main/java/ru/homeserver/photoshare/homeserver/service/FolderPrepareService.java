@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.dto.FolderPrepareJob;
+import ru.homeserver.photoshare.homeserver.util.HiddenPaths;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +18,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
@@ -28,6 +31,9 @@ public class    FolderPrepareService {
     private final MetadataService metadataService;
     private final Map<String, FolderPrepareJob> jobs = new ConcurrentHashMap<>();
     private final ThumbnailService thumbnailService;
+
+    private final ExecutorService folderRefreshPool =
+            Executors.newFixedThreadPool(1);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Path folderCacheRoot;
@@ -48,6 +54,17 @@ public class    FolderPrepareService {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+    public void refreshFolderCacheAsync(String relativePath) {
+        folderRefreshPool.submit(() -> {
+            try {
+                invalidateFolderCache(relativePath);
+                prepareFolderCacheOnly(relativePath);
+            } catch (Exception e) {
+                System.out.println("Folder cache refresh failed: " + relativePath);
+                e.printStackTrace();
+            }
+        });
     }
     public String start(
             String path,
@@ -414,7 +431,9 @@ public class    FolderPrepareService {
             }
 
             String[] files = objectMapper.readValue(manifestFile.toFile(), String[].class);
-
+            if (files.length != currentSignature.count) {
+                return null;
+            }
             List<FileItemDto> items = new ArrayList<>();
 
             for (String fileName : files) {
@@ -543,21 +562,11 @@ public class    FolderPrepareService {
         job.ready = false;
         job.progress = 0;
 
-       /* process(job);*/
         process(job, path, "name", "asc", "all", false, null, null);
     }
+
     private boolean isHiddenDirName(String name) {
-        return name != null && (
-                name.equals(".metadata_cache")
-                        || name.equals(".thumbnails")
-                        || name.equals(".previews")
-                        || name.equals(".preview_journal")
-                        || name.equals(".folder_cache")
-                        || name.equals(".upload_tmp")
-                        || name.equals(".security")
-                        || name.equals("$RECYCLE.BIN")
-                        || name.equals("System Volume Information")
-        );
+        return HiddenPaths.isHiddenName(name);
     }
     private boolean matchesGrouping(
             FileItemDto item,
@@ -614,5 +623,13 @@ public class    FolderPrepareService {
         }
 
         return true;
+    }
+    public boolean folderCacheValid(Path folder) {
+        try {
+            FolderSignature currentSignature = buildFolderSignature(folder);
+            return readFolderItemsCache(folder, currentSignature) != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

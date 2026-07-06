@@ -556,9 +556,17 @@ public class FileController {
          * - заголовками
          * - телом ответа
          */
-        fileService.upload(path, files);
+        /*fileService.upload(path, files);
         folderPrepareService.invalidateFolderCache(path);
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
+
+        return ResponseEntity.ok(Map.of("message", "Uploaded"));*/
+        fileService.upload(path, files);
+
+        folderPrepareService.invalidateFolderCache(path);
+        folderPrepareService.refreshFolderCacheAsync(path);
+
+        fileService.invalidateFolderTreeCache();
+
         return ResponseEntity.ok(Map.of("message", "Uploaded"));
     }
 
@@ -572,11 +580,18 @@ public class FileController {
             @RequestParam(defaultValue = "") String path,
             @RequestParam String name
     ) throws IOException {
-        fileService.createFolder(path, name);
+        /*fileService.createFolder(path, name);
         fileService.rebuildFolderTreeCache();
         folderPrepareService.invalidateFolderCache(path);
-        /*metadataService.clearFolderCache();*/
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
+
+        return ResponseEntity.ok(Map.of("message", "Folder created"));*/
+        fileService.createFolder(path, name);
+
+        fileService.invalidateFolderTreeCache();
+
+        folderPrepareService.invalidateFolderCache(path);
+        folderPrepareService.refreshFolderCacheAsync(path);
+
         return ResponseEntity.ok(Map.of("message", "Folder created"));
     }
 
@@ -597,6 +612,8 @@ public class FileController {
         folderPrepareService.invalidateFolderCache(parent);
         /*metadataService.clearFolderCache();*/
         /*totalCacheService.rebuildStorageScanCacheAsync();*/
+        folderPrepareService.invalidateFolderCache(parent);
+        folderPrepareService.refreshFolderCacheAsync(parent);
         return ResponseEntity.ok(Map.of("message", "Deleted"));
     }
     @PostMapping("/rename")
@@ -615,7 +632,8 @@ public class FileController {
         }
         folderPrepareService.invalidateFolderCache(parent);
         /*totalCacheService.rebuildStorageScanCacheAsync();*/
-
+        folderPrepareService.refreshFolderCacheAsync(parent);
+        fileService.invalidateFolderTreeCache();
         return ResponseEntity.ok().build();
     }
 
@@ -888,9 +906,20 @@ public class FileController {
         if (wasDirectory) {
             fileService.rebuildFolderTreeCache();
         }
-        folderPrepareService.invalidateFolderCache(fileService.toRelative(sourceParent));
+        /*folderPrepareService.invalidateFolderCache(fileService.toRelative(sourceParent));
         folderPrepareService.invalidateFolderCache(targetPath);
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
+
+        return ResponseEntity.ok(Map.of("message", "Moved"));*/
+        String sourceParentRel = fileService.toRelative(sourceParent);
+
+        fileService.invalidateFolderTreeCache();
+
+        folderPrepareService.invalidateFolderCache(sourceParentRel);
+        folderPrepareService.invalidateFolderCache(targetPath);
+
+        folderPrepareService.refreshFolderCacheAsync(sourceParentRel);
+        folderPrepareService.refreshFolderCacheAsync(targetPath);
+
         return ResponseEntity.ok(Map.of("message", "Moved"));
     }
     @GetMapping("/properties")
@@ -1025,13 +1054,27 @@ public class FileController {
             return ResponseEntity.badRequest().body(Map.of("error", "Not all chunks uploaded"));
         }
 
-        Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
+        /*Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
+
         folderPrepareService.invalidateFolderCache(meta.getTargetPath());
         Files.deleteIfExists(getMetaFile(uploadId));
 
-        uploadLocks.remove(uploadId);
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
+        folderPrepareService.refreshFolderCacheAsync(targetPath);
+        fileService.invalidateFolderTreeCache();
 
+        uploadLocks.remove(uploadId);*/
+        /*totalCacheService.rebuildStorageScanCacheAsync();*/
+        Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
+
+        String targetPath = meta.getTargetPath();
+
+        folderPrepareService.invalidateFolderCache(targetPath);
+        folderPrepareService.refreshFolderCacheAsync(targetPath);
+
+        fileService.invalidateFolderTreeCache();
+
+        Files.deleteIfExists(getMetaFile(uploadId));
+        uploadLocks.remove(uploadId);
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
     @GetMapping("/download-selected")

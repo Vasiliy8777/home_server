@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.dto.FolderNodeDto;
+import ru.homeserver.photoshare.homeserver.util.HiddenPaths;
 
 import java.io.IOException;
 import java.net.URLConnection;
@@ -37,17 +38,7 @@ public class FileService {
     private final MetadataService metadataService;
     private final Path rootPath;
     private volatile FolderNodeDto cachedFolderTree;
-    private static final List<String> HIDDEN_DIRS = List.of(
-            ".thumbnails",
-            ".upload_tmp",
-            ".preview_journal",
-            ".metadata_cache",
-            ".folder_cache",
-            ".security",
-            "$RECYCLE.BIN",
-            ".previews",
-            "System Volume Information"
-    );
+
     public long countItems(String relativePath) throws IOException {
 
         Path current = resolveSafe(relativePath);
@@ -64,7 +55,7 @@ public class FileService {
                     String name =
                             path.getFileName().toString();
 
-                    if (HIDDEN_DIRS.contains(name)) {
+                    if (/*HIDDEN_DIRS.contains(name)*/HiddenPaths.isHiddenName(name)) {
                         continue;
                     }
 
@@ -85,6 +76,9 @@ public class FileService {
         this.metadataService = metadataService;
         this.rootPath = Paths.get(appProperties.getStorageRoot()).toAbsolutePath().normalize();
         Files.createDirectories(this.rootPath);
+    }
+    public void invalidateFolderTreeCache() {
+        cachedFolderTree = null;
     }
     public Path getRootPath() {
         return rootPath;
@@ -155,7 +149,7 @@ public class FileService {
                             return false;
                         }
                     })
-                    .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
+                    .filter(path -> !HiddenPaths.isHiddenName(path.getFileName().toString()))
                     .sorted(
                             Comparator
                                     .comparing((Path p) -> !Files.isDirectory(p))
@@ -285,13 +279,11 @@ public class FileService {
         ensureInsideRoot(target);
 
         Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        cachedFolderTree = null;
     }
     private void collectFolderPaths(FolderNodeDto node, List<Path> result) {
         String relativePath = node.relativePath();
 
-        /*Path path = relativePath == null || relativePath.isBlank()
-                ? rootPath
-                : rootPath.resolve(relativePath).normalize();*/
         Path path = resolveSafe(relativePath);
 
         result.add(path);
@@ -312,7 +304,7 @@ public class FileService {
             for (Path child : stream.toList()) {
                 String name = child.getFileName().toString();
 
-                if (HIDDEN_DIRS.contains(name)) {
+                if (/*HIDDEN_DIRS.contains(name)*/HiddenPaths.isHiddenName(name)) {
                     continue;
                 }
 
@@ -362,6 +354,7 @@ public class FileService {
         }
 
         Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        cachedFolderTree = null;
     }
     private FolderNodeDto buildFolderNode(Path folder) throws IOException {
 
@@ -369,7 +362,7 @@ public class FileService {
                 ? folder.getFileName().toString()
                 : "";
 
-        if (HIDDEN_DIRS.contains(folderName)) {
+        if (HiddenPaths.isHiddenName(folderName)) {
             return null;
         }
 
@@ -392,7 +385,7 @@ public class FileService {
                             return false;
                         }
                     })
-                    .filter(path -> !HIDDEN_DIRS.contains(path.getFileName().toString()))
+                    .filter(path -> !HiddenPaths.isHiddenName(path.getFileName().toString()))
                     .sorted(Comparator.comparing(path ->
                             path.getFileName().toString().toLowerCase(Locale.ROOT)))
                     .map(path -> {
@@ -454,6 +447,7 @@ public class FileService {
          * createDirectories создаст всю цепочку папок, если нужно.
          */
         Files.createDirectories(newFolder);
+        cachedFolderTree = null;
     }
 
     /*
@@ -513,6 +507,7 @@ public class FileService {
                 Files.copy(in, destination, StandardCopyOption.REPLACE_EXISTING);
             }
         }
+        cachedFolderTree = null;
     }
 
     /*
@@ -549,6 +544,7 @@ public class FileService {
         } else {
             Files.deleteIfExists(path);
         }
+        cachedFolderTree = null;
     }
 
     /*
