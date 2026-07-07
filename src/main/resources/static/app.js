@@ -272,6 +272,7 @@ function hideInPublicMode() {
         bulkMoveBtn
     ].forEach(e => e?.remove());
 }
+
 /*function hideInPublicMode() {
 
     if (!PUBLIC_SHARE_MODE) {
@@ -302,6 +303,7 @@ async function cancelHlsConversion(item) {
         method: "DELETE"
     });
 }
+
 function playHlsInViewer(playlistUrl, item) {
     destroyVideoOnly();
 
@@ -424,6 +426,7 @@ function playHlsInViewer(playlistUrl, item) {
     /*startHlsProgressPolling(item);*/
     video.play().catch(console.warn);
 }
+
 /*function playHlsInViewer(playlistUrl, item) {
     destroyCurrentVideo();
     viewerBody.innerHTML = `
@@ -496,6 +499,7 @@ function destroyVideoOnly() {
         }
     }
 }
+
 async function updateHlsProgress(item) {
     if (!item || !item.relativePath) return;
 
@@ -528,6 +532,7 @@ async function updateHlsProgress(item) {
         console.warn("HLS progress error", e);
     }
 }
+
 function startHlsProgressPolling(item) {
     stopHlsProgressPolling();
 
@@ -548,6 +553,7 @@ function stopHlsProgressPolling() {
 
     currentHlsProgressItem = null;
 }
+
 async function waitHlsReady(item, playlistUrl) {
     while (true) {
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -574,6 +580,7 @@ async function waitHlsReady(item, playlistUrl) {
         /*viewerBody.innerHTML = `<div>Подготавливаем HLS-видео...</div>`;*/
     }
 }
+
 let currentHls = null;
 
 /*function destroyCurrentVideo() {
@@ -634,6 +641,7 @@ function destroyCurrentVideo() {
         }
     }*/
 }
+
 function renderHlsProgressRing() {
     viewerBody.innerHTML = `
         <div class="hls-progress-ring" id="hlsProgressRing">
@@ -655,6 +663,7 @@ function renderHlsProgressRing() {
         <div class="hls-loading-text">Подготавливаем HLS-видео...</div>
     `;
 }
+
 async function openHlsViewer(item) {
     /*viewerBody.innerHTML = `<div>Подготавливаем HLS-видео...</div>`;*/
     renderHlsProgressRing();
@@ -683,6 +692,7 @@ async function openHlsViewer(item) {
 
     viewerBody.innerHTML = `<div>Ошибка подготовки HLS</div>`;
 }
+
 /*async function openInsvAsHls(item) {
     showVideoPreparingModal("Готовлю видео для просмотра...");
 
@@ -707,6 +717,7 @@ async function openHlsViewer(item) {
     hideVideoPreparingModal();
     alert("Не удалось подготовить видео");
 }*/
+
 /*async function waitUntilHlsReady(statusUrl, playlistUrl) {
     while (true) {
         await sleep(2000);
@@ -728,6 +739,7 @@ async function openHlsViewer(item) {
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
 async function openVideo(item) {
     const name = item.name.toLowerCase();
 
@@ -738,6 +750,7 @@ async function openVideo(item) {
 
     openRegularVideo(item);
 }
+
 /*function playHls(playlistUrl) {
     const video = document.getElementById("viewerVideo");
 
@@ -1055,6 +1068,7 @@ function hideLoadingGif() {
     loadingGifOverlay.classList.add("hidden");
     loadingGifOverlay.style.display = "none";
 }
+
 async function loadPreparedPage(jobId) {
     if (preparedAllLoaded || loading) return;
 
@@ -1324,6 +1338,7 @@ applyGroupingBtn.onclick = () => {
 
     loadFiles(currentPath);
 };
+
 function resetGroupingState() {
 
     groupingMode = "all";
@@ -1338,6 +1353,7 @@ function resetGroupingState() {
 
     groupingBtn.classList.remove("active");
 }
+
 resetGroupingBtn.onclick = () => {
     groupingMode = "all";
     periodFilterEnabled = false;
@@ -1645,6 +1661,7 @@ function updateBulkButtons() {
     clearSelectionBtn.textContent =
         count ? `Снять выбор (${count})` : "Снять";
 }
+
 const shareModal = document.getElementById("shareModal");
 const closeShareModalBtn = document.getElementById("closeShareModalBtn");
 const cancelShareBtn = document.getElementById("cancelShareBtn");
@@ -1670,6 +1687,7 @@ const disableShareUrlBtn = document.getElementById("disableShareUrlBtn");
 
 let shareTargetItem = null;
 let currentShareToken = null;
+
 //функция сортировки
 function sortItems(items) {
     return [...items].sort((a, b) => {
@@ -1892,11 +1910,16 @@ async function loadExistingShareForItem(item) {
 
 function getPermissionTitle(permission) {
     switch (permission) {
-        case "VIEW": return "Только просмотр";
-        case "DOWNLOAD": return "Просмотр и скачивание";
-        case "UPLOAD": return "Смотреть, скачивать, загружать";
-        case "MANAGE": return "Полный доступ";
-        default: return permission;
+        case "VIEW":
+            return "Только просмотр";
+        case "DOWNLOAD":
+            return "Просмотр и скачивание";
+        case "UPLOAD":
+            return "Смотреть, скачивать, загружать";
+        case "MANAGE":
+            return "Полный доступ";
+        default:
+            return permission;
     }
 }
 
@@ -2007,6 +2030,7 @@ function openBulkDeleteModal() {
 
     deleteModal.classList.remove("hidden");
 }
+
 let ignoreMoveConfirmBackdropUntil = 0;
 
 function openMoveConfirmModalSafe() {
@@ -2027,6 +2051,7 @@ function confirmMove() {
 
     openMoveConfirmModalSafe();
 }
+
 /*function confirmMove() {
     if (!selectedMovePath && selectedMovePath !== "") {
         return;
@@ -2077,6 +2102,7 @@ async function executeSingleMove() {
         hideLoadingGif();
     }
 }
+
 /*async function confirmMove() {
     showLoadingGif();
 
@@ -2571,6 +2597,7 @@ async function initUploadSession(file, targetPath, chunkSize) {
 
     return await response.json();
 }
+
 async function getUploadStatus(uploadId) {
     const response = await secureFetch(
         `/api/files/upload/status?uploadId=${encodeURIComponent(uploadId)}`
@@ -2582,6 +2609,7 @@ async function getUploadStatus(uploadId) {
 
     return await response.json();
 }
+
 function updateTopProgress() {
     if (!topProgressBar || !toggleTransfersBtn) return;
 
@@ -2978,8 +3006,9 @@ document.getElementById("clearTransfersBtn")?.addEventListener("click", async ()
     setTimeout(() => {
         cancelAllTransfers = false;
     }, 300);
-/*};*/
+    /*};*/
 });
+
 function applyMarqueeIfNeeded() {
     document.querySelectorAll(".transfer-name").forEach(el => {
         const span = el.querySelector("span");
@@ -3017,6 +3046,7 @@ function restoreTransferTasks() {
 
     renderTransferList();
 }
+
 async function downloadResumableManaged(task) {
     const item = task.item;
     const key = "download_" + item.name;
@@ -3542,6 +3572,7 @@ function updateGalleryScrollMode() {
 
     gallery.classList.toggle("gallery-scroll", needScroll);
 }
+
 function showFolderLoadingRing(percent = 0) {
     const ring = document.getElementById("folderLoadingRing");
     if (!ring) return;
@@ -3563,6 +3594,7 @@ function updateFolderLoadingRing(percent) {
     progress.setAttribute("stroke-dasharray", `${safePercent}, 100`);
     text.textContent = `${safePercent}%`;
 }
+
 function hideFolderLoadingRing() {
     const ring = document.getElementById("folderLoadingRing");
     if (!ring) return;
@@ -3826,9 +3858,24 @@ function createCard(item) {
         !PUBLIC_SHARE_MODE;
 
     if (item.directory) {
+        /*const openBtn = document.createElement("button");
+        openBtn.textContent = "Открыть";*/
         const openBtn = document.createElement("button");
-        openBtn.textContent = "Открыть";
+        openBtn.className = "card-open-btn";
+        openBtn.title = "Открыть";
 
+        openBtn.innerHTML = `
+<svg viewBox="0 0 24 24"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+    <path d="M5 12h14"/>
+    <path d="M13 5l7 7-7 7"/>
+</svg>
+`;
         openBtn.onclick = () => {
             if (groupingMode === "shared") {
                 resetGroupingState();
@@ -3836,22 +3883,73 @@ function createCard(item) {
 
             loadFiles(item.relativePath);
         };
-        actions.appendChild(openBtn);
+        /*actions.appendChild(openBtn);*/
+        card.appendChild(openBtn);
     } else {
         const lower = item.name.toLowerCase();
 
         if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
-            const downloadBtn = document.createElement("button");
+            /*const downloadBtn = document.createElement("button");
             downloadBtn.textContent = "Скачать";
             downloadBtn.onclick = () => openDownloadFormatModal(item);
-            actions.appendChild(downloadBtn);
+            actions.appendChild(downloadBtn);*/
+            const downloadBtn = document.createElement("button");
+            downloadBtn.className = "card-download-btn";
+            downloadBtn.title = "Скачать";
+
+            downloadBtn.innerHTML = `
+<svg viewBox="0 0 24 24"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+    <path d="M12 3v11"/>
+    <path d="M8 10l4 4 4-4"/>
+    <path d="M4 20h16"/>
+
+</svg>
+`;
+
+            downloadBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openDownloadFormatModal(item);
+            };
+
+            card.appendChild(downloadBtn);
         } else {
             if (item.downloadUrl) {
-                const downloadLink = document.createElement("a");
+                /*const downloadLink = document.createElement("a");
                 downloadLink.href = item.downloadUrl;
                 downloadLink.textContent = "Скачать";
                 downloadLink.setAttribute("download", item.name);
-                actions.appendChild(downloadLink);
+                actions.appendChild(downloadLink);*/
+                const downloadLink = document.createElement("a");
+
+                downloadLink.className = "card-download-btn";
+                downloadLink.title = "Скачать";
+
+                downloadLink.href = item.downloadUrl;
+                downloadLink.setAttribute("download", item.name);
+
+                downloadLink.innerHTML = `
+<svg viewBox="0 0 24 24"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+    <path d="M12 3v11"/>
+    <path d="M8 10l4 4 4-4"/>
+    <path d="M4 20h16"/>
+
+</svg>
+`;
+
+                card.appendChild(downloadLink);
             }
         }
     }
@@ -3880,15 +3978,46 @@ function createCard(item) {
     }
 
     if (!PUBLIC_SHARE_MODE) {
-        const shareBtn = document.createElement("button");
+        /*const shareBtn = document.createElement("button");
         shareBtn.textContent = "Поделиться";
         shareBtn.onclick = () => openShareModal(item);
-        actions.appendChild(shareBtn);
+        actions.appendChild(shareBtn);*/
+        const shareBtn = document.createElement("button");
+
+        shareBtn.className = "card-share-btn";
+        shareBtn.title = "Общий доступ";
+        shareBtn.innerHTML = `
+<svg viewBox="0 0 24 24"
+     width="18"
+     height="18"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+    <circle cx="18" cy="5" r="3"></circle>
+    <circle cx="6" cy="12" r="3"></circle>
+    <circle cx="18" cy="19" r="3"></circle>
+
+    <path d="M8.7 10.8L15.3 6.2"></path>
+    <path d="M8.7 13.2L15.3 17.8"></path>
+
+</svg>
+`;
+        shareBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openShareModal(item);
+        };
+
+        card.appendChild(shareBtn);
     }
 
     if (!PUBLIC_SHARE_MODE) {
-        const propertiesBtn = document.createElement("button");
+        /*const propertiesBtn = document.createElement("button");
         propertiesBtn.textContent = "Свойства";
+
 
         propertiesBtn.onclick = async () => {
             currentPropertiesPath = item.relativePath;
@@ -3896,8 +4025,43 @@ function createCard(item) {
 
             await openPropertiesModal(item.relativePath);
         };
+        propertiesBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
 
-        actions.appendChild(propertiesBtn);
+            currentPropertiesPath = item.relativePath;
+            currentPropertiesName = item.name;
+
+            await openPropertiesModal(item.relativePath);
+        };
+
+        actions.appendChild(propertiesBtn);*/
+        const propertiesBtn = document.createElement("button");
+        propertiesBtn.className = "card-properties-btn";
+        propertiesBtn.title = "Свойства";
+        propertiesBtn.innerHTML = `
+<svg viewBox="0 0 24 24"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="2"
+     stroke-linecap="round">
+    <line x1="5" y1="7" x2="19" y2="7"></line>
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+    <line x1="5" y1="17" x2="19" y2="17"></line>
+</svg>
+`;
+
+        propertiesBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            currentPropertiesPath = item.relativePath;
+            currentPropertiesName = item.name;
+
+            await openPropertiesModal(item.relativePath);
+        };
+
+        card.appendChild(propertiesBtn);
     }
 
     body.appendChild(actions);
@@ -3936,6 +4100,7 @@ async function openShareModal(item) {
     shareTargetLinks = await loadExistingShareForItem(item);
     renderExistingShareLinks();
 }
+
 function updateSharePermissionOptions(item) {
     const uploadRow = document.querySelector('input[name="sharePermission"][value="UPLOAD"]')?.closest(".share-permission-row");
     const manageRow = document.querySelector('input[name="sharePermission"][value="MANAGE"]')?.closest(".share-permission-row");
@@ -4021,7 +4186,7 @@ async function createShareLink() {
 
     showToast("Ссылка создана");
     await loadSharedLinksIndex();
-    await loadFiles(currentPath, { showPrepareModal: false });
+    await loadFiles(currentPath, {showPrepareModal: false});
 }
 
 async function deleteShareLinkByToken(token) {
@@ -4033,7 +4198,7 @@ async function deleteShareLinkByToken(token) {
 
     const response = await secureFetch(
         `/api/share/${encodeURIComponent(token)}`,
-        { method: "DELETE" }
+        {method: "DELETE"}
     );
 
     if (!response.ok) {
@@ -4052,7 +4217,7 @@ async function deleteShareLinkByToken(token) {
 
     showToast("Ссылка удалена");
     await loadSharedLinksIndex();
-    await loadFiles(currentPath, { showPrepareModal: false });
+    await loadFiles(currentPath, {showPrepareModal: false});
 }
 
 function showDuplicateShareModal(link) {
@@ -4360,6 +4525,7 @@ async function removeItem(path, name) {
 
     await loadFiles(currentPath);
 }
+
 async function uploadPublicShareFiles(files) {
     if (!files || !files.length) return;
 
@@ -4392,6 +4558,7 @@ async function uploadPublicShareFiles(files) {
         hideLoadingGif();
     }
 }
+
 fileInput.addEventListener("change", () => {
 
     for (const file of fileInput.files) {
@@ -4499,6 +4666,7 @@ function openViewerByPath(relativePath) {
     renderViewerItem();
     viewer.classList.remove("hidden");
 }
+
 function resetViewerZoom() {
     viewerZoom = 1;
     viewerPanX = 0;
@@ -5081,7 +5249,7 @@ confirmMoveBtn.addEventListener("pointerup", (e) => {
     e.stopImmediatePropagation();
 
     confirmMove();
-}, { passive: false });
+}, {passive: false});
 
 moveModal.addEventListener("click", (e) => {
     if (e.target.classList.contains("move-modal-backdrop")) {
@@ -5155,6 +5323,7 @@ function updateNavButtons() {
         homeBtn.style.display = "inline-flex";
     }
 }
+
 async function openMoveModal(sourcePath, sourceName) {
     bulkMoveMode = false;
 
@@ -5197,6 +5366,7 @@ async function sendChunk(formData) {
         }
     }
 }
+
 function selectMoveFolder(node, row) {
     selectedMovePath = node.relativePath || "";
 
@@ -5266,6 +5436,7 @@ function renderFolderTree(node) {
 
     return wrapper;
 }
+
 function closeMoveModal() {
     moveModal.classList.add("hidden");
 
