@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import ru.homeserver.photoshare.homeserver.config.VideoPreviewProperties;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
+import ru.homeserver.photoshare.homeserver.dto.FolderPrepareJob;
 import ru.homeserver.photoshare.homeserver.dto.UploadSessionDto;
 import ru.homeserver.photoshare.homeserver.service.FileService;
 import ru.homeserver.photoshare.homeserver.service.FolderPrepareService;
@@ -279,6 +280,22 @@ public class SharePublicController {
 
         if (!Files.exists(file) || Files.isDirectory(file)) {
             return ResponseEntity.notFound().build();
+        }
+
+        String fileName = file.getFileName().toString().toLowerCase();
+
+        if (fileName.endsWith(".heic") || fileName.endsWith(".heif")) {
+            Path jpgPreview = thumbnailService.getOrCreateHeicThumbnail(file);
+
+            if (jpgPreview == null || !Files.exists(jpgPreview) || Files.size(jpgPreview) == 0) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            }
+
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic())
+                    .contentType(MediaType.IMAGE_JPEG)
+                    .contentLength(Files.size(jpgPreview))
+                    .body(new FileSystemResource(jpgPreview));
         }
 
         String contentType = Files.probeContentType(file);
@@ -723,5 +740,80 @@ public class SharePublicController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"selected-files.zip\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(body);
+    }
+    @PostMapping("/prepare-folder")
+    public Map<String, String> prepareFolder(
+            @PathVariable String token,
+            @RequestParam(defaultValue = "") String path,
+            @RequestParam(defaultValue = "name") String sortField,
+            @RequestParam(defaultValue = "asc") String sortDirection,
+            @RequestParam(defaultValue = "all") String groupMode,
+            @RequestParam(defaultValue = "false") boolean periodEnabled,
+            @RequestParam(required = false) String periodFrom,
+            @RequestParam(required = false) String periodTo
+    ) throws IOException {
+
+        ShareLink link = shareService.requireActive(token);
+
+        String realPath = shareService.resolveInsideShare(link, path);
+
+        String jobId = folderPrepareService.start(
+                realPath,
+                sortField,
+                sortDirection,
+                groupMode,
+                periodEnabled,
+                periodFrom,
+                periodTo
+        );
+
+        return Map.of("jobId", jobId);
+    }
+    @GetMapping("/prepare-status")
+    public Map<String, Object> prepareStatus(@RequestParam String jobId) {
+
+        FolderPrepareJob job = folderPrepareService.get(jobId);
+
+        if (job == null) {
+            return Map.of("error", "not_found");
+        }
+
+        return Map.of(
+                "ready", job.ready,
+                "progress", job.progress,
+                "processed", job.processed,
+                "total", job.total,
+                "stage", job.stage,
+                "itemsTotal", job.items != null ? job.items.size() : 0
+        );
+    }
+    @GetMapping("/prepared-items")
+    public Map<String, Object> preparedItems(
+            @PathVariable String token,
+            @RequestParam String jobId,
+            @RequestParam int offset,
+            @RequestParam int limit
+    ) throws IOException {
+
+        ShareLink link = shareService.requireActive(token);
+
+        FolderPrepareJob job = folderPrepareService.get(jobId);
+
+        if (job == null || !job.ready) {
+            return Map.of("items", List.of());
+        }
+
+        int to = Math.min(offset + limit, job.items.size());
+
+        List<FileItemDto> items =
+                job.items.subList(offset, to)
+                        .stream()
+                        .map(item -> shareService.toPublicItem(link, item))
+                        .toList();
+
+        return Map.of(
+                "items", items,
+                "total", job.items.size()
+        );
     }
 }

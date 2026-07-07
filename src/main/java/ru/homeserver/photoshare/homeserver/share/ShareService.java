@@ -6,6 +6,8 @@ import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.service.FileService;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -297,7 +299,15 @@ public class ShareService {
         );
     }
 
-    private String encode(String value) {
+    /*private String encode(String value) {
         return value == null ? "" : value.replace(" ", "%20");
+    }*/
+    private String encode(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+
+        return URLEncoder.encode(value, StandardCharsets.UTF_8)
+                .replace("+", "%20");
     }
 }

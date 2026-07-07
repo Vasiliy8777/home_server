@@ -922,9 +922,9 @@ function updatePublicShareButtons(permission) {
 
 /*async function loadFilesPrepared(path = "") {*/
 async function loadFilesPrepared(path = "", options = {}) {
-    if (PUBLIC_SHARE_MODE) {
+    /*if (PUBLIC_SHARE_MODE) {
         return loadPublicShareFiles(path);
-    }
+    }*/
     showLoadingGif();
     try {
         const showPrepareModal = options.showPrepareModal !== false;
@@ -966,6 +966,15 @@ async function loadFilesPrepared(path = "", options = {}) {
         currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
         currentPathEl.classList.remove("path-expanded");
 
+        if (PUBLIC_SHARE_MODE) {
+            const infoRes = await secureFetch(`/share/${SHARE_TOKEN}/info`);
+
+            if (infoRes.ok) {
+                const info = await infoRes.json();
+                window.PUBLIC_SHARE_PERMISSION = info.permission;
+            }
+        }
+
         showFolderLoadingRing(0);
 
         if (showPrepareModal) {
@@ -980,6 +989,10 @@ async function loadFilesPrepared(path = "", options = {}) {
 
         const {jobId} = await res.json();
 
+        if (!res.ok) {
+            gallery.innerHTML = `<div class="empty-folder-message">Ссылка недоступна или срок действия истёк</div>`;
+            return;
+        }
         if (sessionId !== folderLoadSession) {
             hideLoadingGif();
             return;
@@ -1019,6 +1032,9 @@ async function loadFilesPrepared(path = "", options = {}) {
 
         await loadPreparedPage(jobId);
 
+        if (PUBLIC_SHARE_MODE) {
+            updatePublicShareButtons(window.PUBLIC_SHARE_PERMISSION);
+        }
 
         updateNavButtons();
     } finally {
@@ -3425,6 +3441,9 @@ function appendItems(items) {
         });
 
         updateBulkButtons();
+        if (PUBLIC_SHARE_MODE) {
+            updatePublicShareButtons(window.PUBLIC_SHARE_PERMISSION);
+        }
     });
 }
 
@@ -3691,7 +3710,8 @@ function createCard(item) {
     <img
         src="/image-placeholder.png"
         loading="lazy"
-        data-src="${buildImageThumbnailUrl(item.relativePath)}"
+        
+        data-src="${item.thumbnailUrl || buildImageThumbnailUrl(item.relativePath)}"
         alt="${escapeHtml(item.name)}"
         class="lazy-thumb image-thumb"
     >
@@ -4580,8 +4600,25 @@ function renderViewerItem() {
         currentPlayer.destroy();
         currentPlayer = null;
     }
-
     if (item.type === "image") {
+        const src =
+            item.previewUrl ||
+            item.thumbnailUrl ||
+            buildImagePreviewUrl(item.relativePath);
+
+        resetViewerZoom();
+
+        viewerBody.innerHTML = `
+        <img id="viewerImage"
+             class="viewer-image"
+             src="${src}"
+             alt="${escapeHtml(item.name)}">
+    `;
+
+        initViewerImageZoom();
+    }
+
+    /*if (item.type === "image") {
         const lower = item.name.toLowerCase();
 
         const src =
@@ -4600,15 +4637,8 @@ function renderViewerItem() {
 `;
 
         initViewerImageZoom();
-    } else if (item.type === "video") {
+    }*/ else if (item.type === "video") {
         const lower = item.name.toLowerCase();
-
-        /*if ((lower.endsWith(".lrv") || lower.endsWith(".insv"))) {
-            viewerBody.innerHTML = `<div>Подготовка HLS-видео...</div>`;
-
-            downloadViewerBtn.onclick = () => {
-                openDownloadFormatModal(item, null);
-            };*/
         if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
 
             item.hlsSupported = true;
