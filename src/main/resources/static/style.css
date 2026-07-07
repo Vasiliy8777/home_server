@@ -407,15 +407,30 @@ body {
 }
 
 .item-checkbox {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%; /* 🔥 круг */
     appearance: none;
     -webkit-appearance: none;
+
+    position: absolute;
+    right: 16px;
+    bottom: 86px;
+
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+
+    padding: 0;
+    margin: 0;
+
+    border-radius: 50%;
     border: 2px solid #ccc;
+
+    background: transparent;
+
     cursor: pointer;
-    position: relative;
-    transition: all 0.2s ease;
+    z-index: 70;
+
+    transition: all .2s ease;
 }
 
 
@@ -443,16 +458,14 @@ body {
 .meta-row {
     margin-top: auto;
     margin-bottom: 0;
+    padding-right: 34px; /* место под чекбокс */
 }
 
 .select-line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between; /* 🔥 ключевое */
-    gap: 10px;
-    cursor: pointer;
+    display: block;
+    margin-right: 0;
+    cursor: default;
 }
-
 @keyframes purpleGlow {
     0% {
         box-shadow:
@@ -1028,6 +1041,7 @@ button:hover,
     color: white;
 
     margin-bottom: 8px;
+    padding-right: 34px; /* место под чекбокс */
 
     word-break: break-word;
     overflow-wrap: anywhere;
@@ -1036,11 +1050,17 @@ button:hover,
 }
 
 .meta {
+    display: block;
+
     font-size: 12px;
     color: rgba(255, 255, 255, 0.72);
     margin-bottom: 10px;
 
-    flex-shrink: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+
+    line-height: 1.25;
 }
 
 
@@ -2053,6 +2073,18 @@ button:hover,
     #currentPath.path-expanded {
         max-height: 12em;
         overflow: auto;
+    }
+    .meta-row {
+        padding-right: 46px;
+    }
+
+    .file-name {
+        padding-right: 46px;
+    }
+
+    .item-checkbox {
+        right: 14px;
+        bottom: 124px;
     }
 }
 

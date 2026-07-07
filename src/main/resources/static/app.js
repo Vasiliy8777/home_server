@@ -3820,7 +3820,8 @@ function createCard(item) {
         </label>
     </div>
 `;
-    body.querySelector(".select-line").appendChild(selectBox);
+    /*body.querySelector(".select-line").appendChild(selectBox);*/
+    card.appendChild(selectBox);
     selectBox.addEventListener("click", (e) => {
         e.stopPropagation();
 
@@ -3838,7 +3839,7 @@ function createCard(item) {
         updateBulkButtons();
     });
 
-    const line = body.querySelector(".select-line");
+    /*const line = body.querySelector(".select-line");
 
     line.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -3847,7 +3848,7 @@ function createCard(item) {
 
         selectBox.checked = !selectBox.checked;
         selectBox.dispatchEvent(new Event("click"));
-    });
+    });*/
     const actions = document.createElement("div");
     actions.className = "card-actions";
 
