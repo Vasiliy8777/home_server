@@ -14,6 +14,9 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ShareService {
@@ -285,7 +288,28 @@ public class ShareService {
                 .withoutPadding()
                 .encodeToString(bytes);
     }
+    public Set<String> activeSharedPaths() throws IOException {
+        if (!Files.exists(shareDir)) {
+            return Set.of();
+        }
 
+        try (var stream = Files.list(shareDir)) {
+            return stream
+                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .map(path -> {
+                        try {
+                            return objectMapper.readValue(path.toFile(), ShareLink.class);
+                        } catch (Exception e) {
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .filter(ShareLink::isActive)
+                    .filter(link -> link.getExpiresAt() == null || Instant.now().isBefore(link.getExpiresAt()))
+                    .map(ShareLink::getPath)
+                    .collect(Collectors.toSet());
+        }
+    }
     private ShareInfoDto toDto(ShareLink link, String baseUrl) {
         return new ShareInfoDto(
                 link.getToken(),

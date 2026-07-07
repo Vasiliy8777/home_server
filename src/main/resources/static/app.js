@@ -3702,9 +3702,20 @@ function createCard(item) {
     const thumb = document.createElement("div");
     thumb.className = "thumb";
 
-    if (item.directory) {
+    /*if (item.directory) {
         thumb.innerHTML = `<div class="folder-thumb">📁</div>`;
         thumb.addEventListener("click", () => loadFiles(item.relativePath));
+    }*/
+    if (item.directory) {
+        thumb.innerHTML = `<div class="folder-thumb">📁</div>`;
+
+        thumb.addEventListener("click", () => {
+            if (groupingMode === "shared") {
+                resetGroupingState();
+            }
+
+            loadFiles(item.relativePath);
+        });
     } else if (item.type === "image") {
         thumb.innerHTML = `
     <img
@@ -3817,7 +3828,14 @@ function createCard(item) {
     if (item.directory) {
         const openBtn = document.createElement("button");
         openBtn.textContent = "Открыть";
-        openBtn.onclick = () => loadFiles(item.relativePath);
+
+        openBtn.onclick = () => {
+            if (groupingMode === "shared") {
+                resetGroupingState();
+            }
+
+            loadFiles(item.relativePath);
+        };
         actions.appendChild(openBtn);
     } else {
         const lower = item.name.toLowerCase();

@@ -59,9 +59,9 @@ public class FileService {
                         continue;
                     }
 
-                    if (Files.isSymbolicLink(path)) {
+                    /*if (Files.isSymbolicLink(path)) {
                         continue;
-                    }
+                    }*/
 
                     count++;
 
@@ -142,9 +142,16 @@ public class FileService {
          */
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> all = stream
-                    .filter(path -> {
+                    /*.filter(path -> {
                         try {
                             return !Files.isSymbolicLink(path);
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })*/
+                    .filter(path -> {
+                        try {
+                            return Files.exists(path);
                         } catch (Exception e) {
                             return false;
                         }
@@ -309,10 +316,12 @@ public class FileService {
                 }
 
                 /*if (Files.isDirectory(child)) {*/
-                if (Files.isSymbolicLink(child)) {
+                /*if (Files.isSymbolicLink(child)) {
+                    continue;
+                }*/
+                if (!Files.exists(child)) {
                     continue;
                 }
-
                 if (Files.isDirectory(child)) {
                     folders++;
                 } else {
@@ -378,8 +387,9 @@ public class FileService {
                     /*.filter(Files::isDirectory)*/
                     .filter(path -> {
                         try {
-                            return Files.isDirectory(path)
-                                    && !Files.isSymbolicLink(path);
+                            return Files.isDirectory(path);
+                            /*return Files.isDirectory(path)
+                                    && !Files.isSymbolicLink(path);*/
                                     /*&& !Files.isHidden(path);*/
                         } catch (Exception e) {
                             return false;
@@ -694,5 +704,88 @@ public class FileService {
 
     public synchronized void rebuildFolderTreeCache() throws IOException {
         this.cachedFolderTree = buildFolderTree();
+    }
+    public FileItemDto toItem(String relativePath) throws IOException {
+        Path path = resolveSafe(relativePath);
+
+        if (!Files.exists(path)) {
+            throw new NoSuchFileException(relativePath);
+        }
+
+        boolean isDir = Files.isDirectory(path);
+
+        String relStr = toRelative(path);
+
+        long size = isDir ? 0L : Files.size(path);
+        String type = detectType(path, isDir);
+
+        String previewUrl = null;
+        String downloadUrl = isDir ? null : "/api/files/download?path=" + encodePath(relStr);
+        String thumbnailUrl = null;
+        String hlsPrepareUrl = null;
+        String hlsStatusUrl = null;
+        boolean hlsSupported = false;
+
+        if (!isDir) {
+            if ("image".equals(type)) {
+                String lower = relStr.toLowerCase(Locale.ROOT);
+
+                thumbnailUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
+
+                if (lower.endsWith(".heic") || lower.endsWith(".heif")) {
+                    previewUrl = "/api/files/image-thumbnail?path=" + encodePath(relStr);
+                } else {
+                    previewUrl = "/api/files/raw?path=" + encodePath(relStr);
+                }
+            } else if ("video".equals(type)) {
+                String lower = relStr.toLowerCase(Locale.ROOT);
+
+                if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+                    hlsSupported = true;
+                    hlsPrepareUrl = "/api/video/hls/prepare?path=" + encodePath(relStr);
+                    hlsStatusUrl = "/api/video/hls/status?path=" + encodePath(relStr);
+                }
+
+                if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
+                    previewUrl = "/api/files/video-proxy?path=" + encodePath(relStr);
+                } else {
+                    previewUrl = "/api/files/stream?path=" + encodePath(relStr);
+                }
+
+                thumbnailUrl = "/api/files/video-thumbnail?path=" + encodePath(relStr);
+            } else {
+                previewUrl = "/api/files/raw?path=" + encodePath(relStr);
+            }
+        }
+
+        long modified = Files.getLastModifiedTime(path).toMillis();
+        long createdAt = isDir ? 0L : modified;
+
+        Long fileCount = null;
+        Long folderCount = null;
+
+        if (isDir) {
+            long[] counts = countDirectFolderChildren(path);
+            fileCount = counts[0];
+            folderCount = counts[1];
+        }
+
+        return new FileItemDto(
+                path.getFileName().toString(),
+                relStr,
+                isDir,
+                size,
+                type,
+                previewUrl,
+                thumbnailUrl,
+                downloadUrl,
+                modified,
+                createdAt,
+                fileCount,
+                folderCount,
+                hlsSupported,
+                hlsPrepareUrl,
+                hlsStatusUrl
+        );
     }
 }

@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.dto.FolderPrepareJob;
+import ru.homeserver.photoshare.homeserver.share.ShareService;
 import ru.homeserver.photoshare.homeserver.util.HiddenPaths;
 
 import java.io.IOException;
@@ -38,17 +39,20 @@ public class    FolderPrepareService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Path folderCacheRoot;
 
+    private final ShareService shareService;
+
     public FolderPrepareService(
             FileService fileService,
             MetadataService metadataService,
             ThumbnailService thumbnailService,
-            AppProperties appProperties
+            AppProperties appProperties, ShareService shareService
     ) {
         this.fileService = fileService;
         this.metadataService = metadataService;
         this.thumbnailService = thumbnailService;
 
         this.folderCacheRoot = Path.of(appProperties.getFolderCacheDir());
+        this.shareService = shareService;
         try {
             Files.createDirectories(this.folderCacheRoot);
         } catch (IOException e) {
@@ -145,25 +149,46 @@ public class    FolderPrepareService {
                 job.ready = true;
                 return;
             }
+            Set<String> sharedPaths = "shared".equals(groupMode)
+                    ? shareService.activeSharedPaths()
+                    : Set.of();
+            if ("shared".equals(groupMode)) {
+                List<FileItemDto> sharedItems = sharedPaths.stream()
+                        .map(pathValue -> {
+                            try {
+                                return fileService.toItem(pathValue);
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        })
+                        .filter(Objects::nonNull)
+                        .filter(item -> matchesGrouping(item, "all", periodEnabled, periodFrom, periodTo, Set.of()))
+                        .sorted(createComparator(job.sortField, job.sortDirection))
+                        .toList();
 
+                job.stage = "Общие файлы и папки";
+                job.items = sharedItems;
+                job.total = sharedItems.size();
+                job.processed = sharedItems.size();
+                job.progress = 100;
+                job.ready = true;
+                return;
+            }
             FolderSignature currentSignature = buildFolderSignature(folder);
 
             List<FileItemDto> cached = readFolderItemsCache(folder, currentSignature);
 
             if (cached != null) {
-                /*cached.sort(createComparator(job.sortField, job.sortDirection));*/
+
                 List<FileItemDto> filtered = cached.stream()
                         .filter(item -> !isHiddenDirName(item.name()))
-                        .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo))
+                        .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo, sharedPaths))
                         .toList();
 
                 filtered = new ArrayList<>(filtered);
                 filtered.sort(createComparator(job.sortField, job.sortDirection));
                 job.stage = "Чтение кеша папки";
-                /*job.items = cached;*/
                 job.items = filtered;
-                /*job.total = cached.size();
-                job.processed = cached.size();*/
                 job.total = filtered.size();
                 job.processed = filtered.size();
                 job.progress = 100;
@@ -258,7 +283,8 @@ public class    FolderPrepareService {
 
             List<FileItemDto> filtered = enriched.stream()
                     .filter(item -> !isHiddenDirName(item.name()))
-                    .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo))
+                    /*.filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo))*/
+                    .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo, sharedPaths))
                     .toList();
 
             filtered = new ArrayList<>(filtered);
@@ -347,9 +373,9 @@ public class    FolderPrepareService {
 
                 try {
 
-                    if (Files.isSymbolicLink(child)) {
+                    /*if (Files.isSymbolicLink(child)) {
                         continue;
-                    }
+                    }*/
 
                     String name =
                             child.getFileName().toString();
@@ -568,7 +594,7 @@ public class    FolderPrepareService {
     private boolean isHiddenDirName(String name) {
         return HiddenPaths.isHiddenName(name);
     }
-    private boolean matchesGrouping(
+    /*private boolean matchesGrouping(
             FileItemDto item,
             String groupMode,
             boolean periodEnabled,
@@ -576,6 +602,83 @@ public class    FolderPrepareService {
             String periodTo
     ) {
         if (item == null) return false;
+
+        if ("photo".equals(groupMode)) {
+            if (!"image".equals(item.type())) {
+                return false;
+            }
+        }
+
+        if ("video".equals(groupMode)) {
+            if (!"video".equals(item.type())) {
+                return false;
+            }
+        }
+
+        if (!periodEnabled) {
+            return true;
+        }
+
+        long date = item.createdAt() > 0
+                ? item.createdAt()
+                : item.lastModified();
+
+        if (date <= 0) {
+            return false;
+        }
+
+        LocalDate fileDate = java.time.Instant
+                .ofEpochMilli(date)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate();
+
+        if (periodFrom != null && !periodFrom.isBlank()) {
+            LocalDate from = LocalDate.parse(periodFrom);
+
+            if (fileDate.isBefore(from)) {
+                return false;
+            }
+        }
+
+        if (periodTo != null && !periodTo.isBlank()) {
+            LocalDate to = LocalDate.parse(periodTo);
+
+            if (fileDate.isAfter(to)) {
+                return false;
+            }
+        }
+
+        return true;
+    }*/
+    private boolean matchesGrouping(
+            FileItemDto item,
+            String groupMode,
+            boolean periodEnabled,
+            String periodFrom,
+            String periodTo,
+            Set<String> sharedPaths
+    ) {
+        if (item == null) return false;
+
+        /*if ("shared".equals(groupMode)) {
+            String itemPath = item.relativePath();
+
+            boolean exactShared = sharedPaths.contains(itemPath);
+
+            boolean containsSharedInside = item.directory()
+                    && sharedPaths.stream()
+                    .anyMatch(sharedPath -> sharedPath.startsWith(itemPath + "/"));
+
+            if (!exactShared && !containsSharedInside) {
+                return false;
+            }
+        }*/
+
+        if ("shared".equals(groupMode)) {
+            if (!sharedPaths.contains(item.relativePath())) {
+                return false;
+            }
+        }
 
         if ("photo".equals(groupMode)) {
             if (!"image".equals(item.type())) {
