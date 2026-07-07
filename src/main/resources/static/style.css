@@ -3152,3 +3152,45 @@ button[hidden] {
     background: rgba(0, 255, 150, 0.32) !important;
     transform: scale(1.08);
 }
+.card-delete-btn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+
+    padding: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25);
+
+    background: rgba(220,38,38,0.88);
+    color: white;
+
+    font-size: 17px;
+    line-height: 1;
+
+    cursor: pointer;
+
+    z-index: 60;
+
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+
+    transition: all .2s ease;
+}
+
+.card-delete-btn:hover {
+    background: rgb(220,38,38);
+    transform: scale(1.08);
+
+    box-shadow:
+            0 0 12px rgba(220,38,38,.45);
+}

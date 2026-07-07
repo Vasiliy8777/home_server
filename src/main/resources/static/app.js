@@ -3838,13 +3838,27 @@ function createCard(item) {
         }
     }
 
-    if (!PUBLIC_SHARE_MODE || window.PUBLIC_SHARE_PERMISSION === "MANAGE") {
+    /*if (!PUBLIC_SHARE_MODE || window.PUBLIC_SHARE_PERMISSION === "MANAGE") {
         const deleteBtn = document.createElement("button");
         deleteBtn.className = "danger";
         deleteBtn.textContent = "Удалить";
 
         deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
         actions.appendChild(deleteBtn);
+    }*/
+    if (!PUBLIC_SHARE_MODE || window.PUBLIC_SHARE_PERMISSION === "MANAGE") {
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "card-delete-btn";
+        deleteBtn.title = "Удалить";
+        deleteBtn.textContent = "🗑";
+
+        deleteBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openDeleteModal(item.relativePath, item.name);
+        };
+
+        card.appendChild(deleteBtn);
     }
 
     if (!PUBLIC_SHARE_MODE) {
