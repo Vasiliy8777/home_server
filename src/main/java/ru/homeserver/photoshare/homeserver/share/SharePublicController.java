@@ -1,5 +1,6 @@
 package ru.homeserver.photoshare.homeserver.share;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
@@ -15,6 +16,7 @@ import ru.homeserver.photoshare.homeserver.dto.UploadSessionDto;
 import ru.homeserver.photoshare.homeserver.service.FileService;
 import ru.homeserver.photoshare.homeserver.service.FolderPrepareService;
 import ru.homeserver.photoshare.homeserver.service.ThumbnailService;
+import ru.homeserver.photoshare.homeserver.util.CloudAccessLogService;
 import ru.homeserver.photoshare.homeserver.video.HlsConversionService;
 
 import java.io.IOException;
@@ -31,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 @RequestMapping("/share/{token}")
 public class SharePublicController {
 
+    private final CloudAccessLogService cloudAccessLogService;
     private final ShareService shareService;
     private final FileService fileService;
     private final ThumbnailService thumbnailService;
@@ -41,11 +44,12 @@ public class SharePublicController {
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
     private final ru.homeserver.photoshare.homeserver.config.AppProperties appProperties;
     public SharePublicController(
-            ShareService shareService,
+            CloudAccessLogService cloudAccessLogService, ShareService shareService,
             FileService fileService,
             ThumbnailService thumbnailService,
             FolderPrepareService folderPrepareService, HlsConversionService hlsConversionService, VideoPreviewProperties videoPreviewProperties, ru.homeserver.photoshare.homeserver.config.AppProperties appProperties
     ) {
+        this.cloudAccessLogService = cloudAccessLogService;
         this.shareService = shareService;
         this.fileService = fileService;
         this.thumbnailService = thumbnailService;
@@ -197,10 +201,12 @@ public class SharePublicController {
             @PathVariable String token,
             @RequestParam(defaultValue = "") String path,
             @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "100") int limit
+            @RequestParam(defaultValue = "100") int limit,
+            HttpServletRequest request
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
-
+        cloudAccessLogService.event("SHARE_LIST", request,
+                "token=" + token + " path=" + path + " offset=" + offset + " limit=" + limit);
         if (!link.isDirectory()) {
             Path file = fileService.resolveSafe(link.getPath());
 
@@ -245,7 +251,8 @@ public class SharePublicController {
     @GetMapping("/download")
     public ResponseEntity<Resource> download(
             @PathVariable String token,
-            @RequestParam(defaultValue = "") String path
+            @RequestParam(defaultValue = "") String path,
+            HttpServletRequest request
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
 
@@ -259,7 +266,8 @@ public class SharePublicController {
         if (!Files.exists(file) || Files.isDirectory(file)) {
             return ResponseEntity.notFound().build();
         }
-
+        cloudAccessLogService.event("SHARE_DOWNLOAD_START", request,
+                "token=" + token + " publicPath=" + path + " realPath=" + realPath + " size=" + Files.size(file));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + file.getFileName() + "\"")
@@ -271,7 +279,8 @@ public class SharePublicController {
     @GetMapping("/raw")
     public ResponseEntity<Resource> raw(
             @PathVariable String token,
-            @RequestParam(defaultValue = "") String path
+            @RequestParam(defaultValue = "") String path,
+            HttpServletRequest request
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
 
@@ -281,7 +290,8 @@ public class SharePublicController {
         if (!Files.exists(file) || Files.isDirectory(file)) {
             return ResponseEntity.notFound().build();
         }
-
+        cloudAccessLogService.event("SHARE_RAW_OPEN", request,
+                "token=" + token + " publicPath=" + path + " realPath=" + realPath + " size=" + Files.size(file));
         String fileName = file.getFileName().toString().toLowerCase();
 
         if (fileName.endsWith(".heic") || fileName.endsWith(".heif")) {
@@ -314,7 +324,8 @@ public class SharePublicController {
     public ResponseEntity<ResourceRegion> stream(
             @PathVariable String token,
             @RequestParam(defaultValue = "") String path,
-            @RequestHeader HttpHeaders headers
+            @RequestHeader HttpHeaders headers,
+            HttpServletRequest request
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
 
@@ -327,7 +338,8 @@ public class SharePublicController {
 
         FileSystemResource video = new FileSystemResource(file);
         long fileSize = video.contentLength();
-
+        cloudAccessLogService.event("SHARE_STREAM", request,
+                "token=" + token + " publicPath=" + path + " realPath=" + realPath + " size=" + fileSize + " range=" + headers.getRange());
         String contentType = Files.probeContentType(file);
 
         MediaType mediaType = contentType != null
@@ -396,7 +408,8 @@ public class SharePublicController {
     public ResponseEntity<?> upload(
             @PathVariable String token,
             @RequestParam(defaultValue = "") String path,
-            @RequestParam("files") MultipartFile[] files
+            @RequestParam("files") MultipartFile[] files,
+            HttpServletRequest request
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
 
@@ -407,6 +420,8 @@ public class SharePublicController {
         String realPath = shareService.resolveInsideShare(link, path);
 
         fileService.upload(realPath, files);
+        cloudAccessLogService.event("SHARE_UPLOAD", request,
+                "token=" + token + " path=" + path + " realPath=" + realPath + " files=" + files.length);
         folderPrepareService.invalidateFolderCache(realPath);
 
         return ResponseEntity.ok(Map.of("message", "Uploaded"));
@@ -415,7 +430,8 @@ public class SharePublicController {
     @DeleteMapping
     public ResponseEntity<?> delete(
             @PathVariable String token,
-            @RequestParam(defaultValue = "") String path
+            @RequestParam(defaultValue = "") String path,
+            HttpServletRequest request
     ) throws IOException {
         ShareLink link = shareService.requireActive(token);
 
@@ -426,6 +442,8 @@ public class SharePublicController {
         String realPath = shareService.resolveInsideShare(link, path);
 
         fileService.delete(realPath);
+        cloudAccessLogService.event("SHARE_DELETE", request,
+                "token=" + token + " path=" + path + " realPath=" + realPath);
         folderPrepareService.invalidateFolderCache(realPath);
 
         return ResponseEntity.ok(Map.of("message", "Deleted"));

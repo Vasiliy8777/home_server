@@ -16,6 +16,7 @@ server:
         secure: true
 
 app:
+  log-dir: ${LOG_DIR:G:/arc_Y_disc/.logs}
   upload-temp-dir: ${APP_UPLOAD_TEMP_DIR:G:/arc_Y_disc/.upload_tmp}
   storage-root: ${APP_STORAGE_ROOT:G:/arc_Y_disc}
   metadata-cache-dir: ${APP_METADATA_CACHE_DIR:G:/arc_Y_disc/.metadata_cache}
@@ -46,7 +47,11 @@ logging:
     org.apache.coyote: ERROR
     org.springframework.web.context.request.async: ERROR
 
+
 spring:
+  mvc:
+    async:
+      request-timeout: 3600000
   servlet:
     multipart:
       max-file-size: 500MB

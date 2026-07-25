@@ -14,6 +14,7 @@ public final class HiddenPaths {
             ".folder_cache",
             ".upload_tmp",
             ".security",
+            ".logs",
             "$recycle.bin",
             "system volume information"
     );

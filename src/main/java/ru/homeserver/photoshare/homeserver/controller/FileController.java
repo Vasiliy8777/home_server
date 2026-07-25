@@ -1,11 +1,13 @@
 package ru.homeserver.photoshare.homeserver.controller;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.ResourceRegion;
+
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.*;
@@ -17,6 +19,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ru.homeserver.photoshare.homeserver.util.CloudAccessLogService;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,6 +47,12 @@ import java.util.stream.Stream;
  */
 @RequestMapping("/api/files")
 public class FileController {
+    private final Map<String, Path> bulkDownloadFiles =
+            new ConcurrentHashMap<>();
+
+    private final Map<String, BulkDownloadStatus> bulkDownloadStatuses =
+            new ConcurrentHashMap<>();
+    private final CloudAccessLogService cloudAccessLogService;
     private final Map<String, Object> uploadLocks = new ConcurrentHashMap<>();
     private final FileService fileService;
     private final ThumbnailService thumbnailService;
@@ -61,7 +70,7 @@ public class FileController {
     private final Map<String, Path> previewFiles = new ConcurrentHashMap<>();
     private final MetadataService metadataService;
     public FileController(
-            FileService fileService,
+            CloudAccessLogService cloudAccessLogService, FileService fileService,
             ThumbnailService thumbnailService,
             AppProperties appProperties,
             @Value("${app.ffmpeg-path:ffmpeg}") String ffmpegPath,
@@ -69,6 +78,7 @@ public class FileController {
             MetadataService metadataService,
             TotalCacheService totalCacheService
     ) {
+        this.cloudAccessLogService = cloudAccessLogService;
         this.fileService = fileService;
         this.thumbnailService = thumbnailService;
         this.appProperties = appProperties;
@@ -427,7 +437,8 @@ public class FileController {
     public Map<String, Object> list(
             @RequestParam(defaultValue = "") String path,
             @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "100") int limit
+            @RequestParam(defaultValue = "100") int limit,
+            HttpServletRequest request
     ) throws IOException {
         /*
          * @RequestParam читает query parameter из URL.
@@ -440,6 +451,8 @@ public class FileController {
          */
         Path current = fileService.resolveSafe(path);
         long total = fileService.countItems(path);
+        cloudAccessLogService.event("CLOUD_LIST", request,
+                "path=" + path + " offset=" + offset + " limit=" + limit + " total=" + total);
         /*
          * normalized — текущий путь в удобном для фронтенда виде.
          * Если это rootPath, то возвращаем пустую строку.
@@ -678,13 +691,14 @@ public class FileController {
      * чтобы браузер предложил скачать его.
      */
     @GetMapping("/download")
-    public ResponseEntity<Resource> download(@RequestParam String path) throws IOException {
+    public ResponseEntity<Resource> download(@RequestParam String path, HttpServletRequest request) throws IOException {
         Path file = fileService.resolveSafe(path);
 
         if (!Files.exists(file) || Files.isDirectory(file)) {
             return ResponseEntity.notFound().build();
         }
-
+        cloudAccessLogService.event("CLOUD_DOWNLOAD_START", request,
+                "path=" + path + " size=" + Files.size(file));
         /*
          * FileSystemResource — оболочка Spring над обычным файлом на диске.
          */
@@ -710,12 +724,16 @@ public class FileController {
      * Нужно для картинок и видео.
      */
     @GetMapping("/raw")
-    public ResponseEntity<Resource> raw(@RequestParam String path) throws IOException {
+    public ResponseEntity<Resource> raw(@RequestParam String path,
+                                        HttpServletRequest request
+    ) throws IOException {
         Path file = fileService.resolveSafe(path);
 
         if (!Files.exists(file) || Files.isDirectory(file)) {
             return ResponseEntity.notFound().build();
         }
+        cloudAccessLogService.event("CLOUD_RAW_OPEN", request,
+                "path=" + path + " size=" + Files.size(file));
         String fileName = file.getFileName().toString().toLowerCase();
 
         if (fileName.endsWith(".heic") || fileName.endsWith(".heif")) {
@@ -756,7 +774,8 @@ public class FileController {
     @GetMapping("/stream")
     public ResponseEntity<ResourceRegion> stream(
             @RequestParam String path,
-            @RequestHeader HttpHeaders requestHeaders
+            @RequestHeader HttpHeaders requestHeaders,
+            HttpServletRequest request
     ) throws IOException {
 
         Path file = fileService.resolveSafe(path);
@@ -767,7 +786,8 @@ public class FileController {
 
         FileSystemResource video = new FileSystemResource(file);
         long fileSize = video.contentLength();
-
+        cloudAccessLogService.event("CLOUD_STREAM", request,
+                "path=" + path + " size=" + fileSize + " range=" + requestHeaders.getRange());
         String contentType = Files.probeContentType(file);
         MediaType mediaType = contentType != null
                 ? MediaType.parseMediaType(contentType)
@@ -1077,48 +1097,433 @@ public class FileController {
         uploadLocks.remove(uploadId);
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
-    @GetMapping("/download-selected")
-    public ResponseEntity<StreamingResponseBody> downloadSelected(
-            @RequestParam List<String> paths
-    ) {
-        StreamingResponseBody body = outputStream -> {
-            try (java.util.zip.ZipOutputStream zipOut = new java.util.zip.ZipOutputStream(outputStream)) {
-                for (String path : paths) {
-                    Path source = fileService.resolveSafe(path);
+    private void createSelectedZip(
+            List<String> paths,
+            Path zipFile,
+            BulkDownloadStatus status
+    ) throws IOException {
 
-                    if (!Files.exists(source)) {
-                        continue;
-                    }
+        try (
+                OutputStream fileOut = Files.newOutputStream(
+                        zipFile,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING
+                );
 
-                    if (Files.isDirectory(source)) {
-                        try (Stream<Path> walk = Files.walk(source)) {
-                            for (Path file : walk.filter(Files::isRegularFile).toList()) {
-                                /*Path relative = source.getParent().relativize(file);
-                                zipOut.putNextEntry(new java.util.zip.ZipEntry(relative.toString().replace("\\\\", "/")));*/
-                                Path relative = source.relativize(file);
+                java.io.BufferedOutputStream bufferedOut =
+                        new java.io.BufferedOutputStream(
+                                fileOut,
+                                1024 * 1024
+                        );
 
-                                String entryName = source.getFileName().toString()
-                                        + "/"
-                                        + relative.toString().replace("\\", "/");
+                java.util.zip.ZipOutputStream zipOut =
+                        new java.util.zip.ZipOutputStream(bufferedOut)
+        ) {
+            zipOut.setLevel(
+                    java.util.zip.Deflater.NO_COMPRESSION
+            );
 
-                                zipOut.putNextEntry(new java.util.zip.ZipEntry(entryName));
-                                Files.copy(file, zipOut);
-                                zipOut.closeEntry();
-                            }
+            byte[] buffer = new byte[1024 * 1024];
+
+            for (String selectedPath : paths) {
+                Path source =
+                        fileService.resolveSafe(selectedPath);
+
+                if (!Files.exists(source)) {
+                    status.processed++;
+                    continue;
+                }
+
+                if (Files.isDirectory(source)) {
+                    try (Stream<Path> walk = Files.walk(source)) {
+                        List<Path> files = walk
+                                .filter(Files::isRegularFile)
+                                .toList();
+
+                        for (Path file : files) {
+                            Path relative =
+                                    source.relativize(file);
+
+                            String entryName =
+                                    source.getFileName()
+                                            .toString()
+                                            + "/"
+                                            + relative.toString()
+                                            .replace("\\", "/");
+
+                            writeZipEntry(
+                                    zipOut,
+                                    file,
+                                    entryName,
+                                    buffer,
+                                    status
+                            );
                         }
-                    } else {
-                        zipOut.putNextEntry(new java.util.zip.ZipEntry(source.getFileName().toString()));
-                        Files.copy(source, zipOut);
-                        zipOut.closeEntry();
+                    }
+                } else {
+                    String entryName = selectedPath
+                            .replace("\\", "/");
+
+                    writeZipEntry(
+                            zipOut,
+                            source,
+                            entryName,
+                            buffer,
+                            status
+                    );
+                }
+
+                status.processed++;
+            }
+        }
+    }
+    private void scheduleBulkDownloadCleanup(
+            String downloadId,
+            Path zipFile
+    ) {
+        Thread.ofVirtual().start(() -> {
+            try {
+                Thread.sleep(
+                        TimeUnit.HOURS.toMillis(2)
+                );
+
+                Files.deleteIfExists(zipFile);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+
+            } catch (IOException e) {
+                System.out.println(
+                        "Не удалось удалить временный ZIP: "
+                                + zipFile
+                );
+
+            } finally {
+                bulkDownloadFiles.remove(downloadId);
+                bulkDownloadStatuses.remove(downloadId);
+            }
+        });
+    }
+    private void writeZipEntry(
+            java.util.zip.ZipOutputStream zipOut,
+            Path file,
+            String entryName,
+            byte[] buffer,
+            BulkDownloadStatus status
+    ) throws IOException {
+
+        java.util.zip.ZipEntry entry =
+                new java.util.zip.ZipEntry(entryName);
+
+        zipOut.putNextEntry(entry);
+
+        try (InputStream input = Files.newInputStream(file)) {
+            int read;
+
+            while ((read = input.read(buffer)) != -1) {
+                zipOut.write(buffer, 0, read);
+                status.processedBytes += read;
+            }
+        } finally {
+            zipOut.closeEntry();
+        }
+    }
+    @GetMapping("/download-selected/status")
+    public ResponseEntity<?> selectedDownloadStatus(
+            @RequestParam String downloadId
+    ) throws IOException {
+
+        BulkDownloadStatus status =
+                bulkDownloadStatuses.get(downloadId);
+
+        if (status == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path file = bulkDownloadFiles.get(downloadId);
+
+        long zipSize =
+                file != null && Files.exists(file)
+                        ? Files.size(file)
+                        : 0;
+
+        int progress;
+
+        if ("READY".equals(status.status)) {
+            progress = 100;
+        } else if (status.totalBytes > 0) {
+            progress = (int) Math.min(
+                    99,
+                    status.processedBytes * 100
+                            / status.totalBytes
+            );
+        } else {
+            progress = status.total > 0
+                    ? status.processed * 100 / status.total
+                    : 0;
+        }
+
+        Map<String, Object> result = new HashMap<>();
+
+        result.put("status", status.status);
+        result.put("progress", progress);
+        result.put("processed", status.processed);
+        result.put("total", status.total);
+        result.put("processedBytes", status.processedBytes);
+        result.put("totalBytes", status.totalBytes);
+        result.put("zipSize", zipSize);
+
+        if (status.error != null) {
+            result.put("error", status.error);
+        }
+
+        return ResponseEntity.ok(result);
+    }
+    @GetMapping("/download-selected/file")
+    public ResponseEntity<StreamingResponseBody> downloadSelectedFile(
+            @RequestParam String downloadId
+    ) throws IOException {
+
+        BulkDownloadStatus status =
+                bulkDownloadStatuses.get(downloadId);
+
+        Path zipFile =
+                bulkDownloadFiles.get(downloadId);
+
+        if (status == null
+                || !"READY".equals(status.status)
+                || zipFile == null
+                || !Files.exists(zipFile)) {
+
+            return ResponseEntity.notFound().build();
+        }
+
+        long zipSize = Files.size(zipFile);
+
+        StreamingResponseBody body = outputStream -> {
+            boolean downloadCompleted = false;
+
+            try (InputStream inputStream =
+                         Files.newInputStream(zipFile)) {
+
+                byte[] buffer =
+                        new byte[1024 * 1024];
+
+                int read;
+
+                while ((read = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, read);
+                }
+
+                outputStream.flush();
+
+                downloadCompleted = true;
+
+            } catch (IOException e) {
+                System.out.println(
+                        "Скачивание ZIP прервано: "
+                                + downloadId
+                                + ", причина: "
+                                + e.getMessage()
+                );
+
+                throw e;
+
+            } finally {
+                if (downloadCompleted) {
+                    try {
+                        Files.deleteIfExists(zipFile);
+
+                        bulkDownloadFiles.remove(downloadId);
+                        bulkDownloadStatuses.remove(downloadId);
+
+                        System.out.println(
+                                "Временный ZIP удалён после скачивания: "
+                                        + zipFile
+                        );
+
+                    } catch (IOException e) {
+                        System.out.println(
+                                "Не удалось удалить временный ZIP: "
+                                        + zipFile
+                        );
+
+                        e.printStackTrace();
                     }
                 }
             }
         };
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"selected-files.zip\"")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"selected-files.zip\""
+                )
+                .contentType(
+                        MediaType.parseMediaType("application/zip")
+                )
+                .contentLength(zipSize)
                 .body(body);
+    }
+    /*@GetMapping("/download-selected/file")
+    public ResponseEntity<Resource> downloadSelectedFile(
+            @RequestParam String downloadId
+    ) throws IOException {
+
+        BulkDownloadStatus status =
+                bulkDownloadStatuses.get(downloadId);
+
+        Path zipFile =
+                bulkDownloadFiles.get(downloadId);
+
+        if (status == null
+                || !"READY".equals(status.status)
+                || zipFile == null
+                || !Files.exists(zipFile)) {
+
+            return ResponseEntity.notFound().build();
+        }
+
+        long zipSize = Files.size(zipFile);
+
+        Resource resource =
+                new FileSystemResource(zipFile);
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"selected-files.zip\""
+                )
+                .contentType(
+                        MediaType.parseMediaType("application/zip")
+                )
+                .contentLength(zipSize)
+                .body(resource);
+    }*/
+    private long calculateSelectedSize(List<String> paths) {
+
+        long total = 0;
+
+        for (String path : paths) {
+            try {
+                Path source = fileService.resolveSafe(path);
+
+                if (!Files.exists(source)) {
+                    continue;
+                }
+
+                if (Files.isDirectory(source)) {
+                    try (Stream<Path> walk = Files.walk(source)) {
+                        total += walk
+                                .filter(Files::isRegularFile)
+                                .mapToLong(file -> {
+                                    try {
+                                        return Files.size(file);
+                                    } catch (IOException e) {
+                                        return 0;
+                                    }
+                                })
+                                .sum();
+                    }
+                } else {
+                    total += Files.size(source);
+                }
+
+            } catch (Exception e) {
+                System.out.println(
+                        "Не удалось определить размер: " + path
+                );
+            }
+        }
+
+        return total;
+    }
+    @PostMapping(
+            value = "/download-selected/prepare",
+            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE
+    )
+    public ResponseEntity<?> prepareSelectedDownload(
+            @RequestParam("paths") List<String> paths
+    ) throws IOException {
+
+        if (paths == null || paths.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "No paths selected"));
+        }
+
+        String downloadId = UUID.randomUUID().toString();
+
+        Path tempDir = Path.of(appProperties.getUploadTempDir())
+                .resolve("bulk-downloads");
+
+        Files.createDirectories(tempDir);
+
+        Path zipFile = tempDir.resolve(downloadId + ".zip");
+
+        long totalBytes = calculateSelectedSize(paths);
+        FileStore fileStore =
+                Files.getFileStore(tempDir);
+
+        long usableSpace =
+                fileStore.getUsableSpace();
+
+// Небольшой запас для структуры ZIP
+        long requiredSpace =
+                totalBytes + 200L * 1024 * 1024;
+
+        if (usableSpace < requiredSpace) {
+            return ResponseEntity.status(
+                    HttpStatus.INSUFFICIENT_STORAGE
+            ).body(Map.of(
+                    "error",
+                    "Недостаточно свободного места для создания ZIP",
+                    "requiredBytes",
+                    requiredSpace,
+                    "availableBytes",
+                    usableSpace
+            ));
+        }
+        BulkDownloadStatus status =
+                new BulkDownloadStatus(paths.size(), totalBytes);
+
+        bulkDownloadStatuses.put(downloadId, status);
+        bulkDownloadFiles.put(downloadId, zipFile);
+
+        Thread.ofVirtual().start(() -> {
+            try {
+                createSelectedZip(
+                        paths,
+                        zipFile,
+                        status
+                );
+
+                status.status = "READY";
+
+                scheduleBulkDownloadCleanup(
+                        downloadId,
+                        zipFile
+                );
+
+            } catch (Exception e) {
+                status.status = "ERROR";
+                status.error = e.getMessage();
+
+                try {
+                    Files.deleteIfExists(zipFile);
+                } catch (IOException ignored) {
+                }
+
+                bulkDownloadFiles.remove(downloadId);
+
+                e.printStackTrace();
+            }
+        });
+
+        return ResponseEntity.ok(Map.of(
+                "downloadId", downloadId,
+                "totalBytes", totalBytes,
+                "totalItems", paths.size()
+        ));
     }
     @GetMapping("/video-proxy")
     public void streamVideoProxy(@RequestParam String path, HttpServletResponse response) throws IOException {
@@ -1366,5 +1771,19 @@ public class FileController {
             e.printStackTrace();
         }
     }
+    private static class BulkDownloadStatus {
 
+        public volatile String status;
+        public volatile int processed;
+        public volatile int total;
+        public volatile long processedBytes;
+        public volatile long totalBytes;
+        public volatile String error;
+
+        public BulkDownloadStatus(int total, long totalBytes) {
+            this.status = "PREPARING";
+            this.total = total;
+            this.totalBytes = totalBytes;
+        }
+    }
 }

@@ -138,6 +138,9 @@ let estimatedTotalItems = 0;
 let loading = false;
 let allLoaded = false;
 
+let activeBulkDownloadId = null;
+let bulkDownloadPollingCancelled = false;
+
 const groupingBtn =
     document.getElementById("groupingBtn");
 
@@ -1976,18 +1979,141 @@ async function copyText(text) {
     }
 }
 
-function executeBulkDownload() {
-    if (!selectedItems.size) return;
-
-    const params = new URLSearchParams();
-
-    for (const item of selectedItems.values()) {
-        params.append("paths", item.path);
+async function executeBulkDownload() {
+    if (!selectedItems.size) {
+        return;
     }
 
-    const url = shareApi(`/api/files/download-selected?${params.toString()}`);
+    bulkDownloadPollingCancelled = false;
+    activeBulkDownloadId = null;
+
+    const formData = new URLSearchParams();
+
+    for (const item of selectedItems.values()) {
+        formData.append("paths", item.path);
+    }
+
+    bulkDownloadText.textContent =
+        "Определяем размер и подготавливаем архив...";
+
+    confirmBulkDownloadBtn.disabled = true;
+
+    // Кнопку отмены не блокируем
+    cancelBulkDownloadBtn.disabled = false;
+
+    try {
+        const response = await secureFetch(
+            "/api/files/download-selected/prepare",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/x-www-form-urlencoded"
+                },
+                body: formData
+            }
+        );
+
+        if (!response.ok) {
+            const errorText = await response.text();
+
+            throw new Error(
+                errorText
+                || `Ошибка подготовки: ${response.status}`
+            );
+        }
+
+        const data = await response.json();
+
+        const downloadId = data.downloadId;
+        activeBulkDownloadId = downloadId;
+
+        bulkDownloadText.textContent =
+            `Подготавливаем архив из `
+            + `${data.totalItems} объектов. `
+            + `Размер файлов: `
+            + `${formatFileSize(data.totalBytes)}`;
+
+        await waitBulkDownloadReady(downloadId);
+
+    } catch (error) {
+        console.error(
+            "Ошибка подготовки ZIP:",
+            error
+        );
+
+        // При обычном закрытии окна не показываем ошибку
+        if (bulkDownloadPollingCancelled) {
+            return;
+        }
+
+        bulkDownloadText.textContent =
+            "Не удалось подготовить архив";
+
+        confirmBulkDownloadBtn.disabled = false;
+        cancelBulkDownloadBtn.disabled = false;
+
+        showToast(
+            error.message || "Ошибка подготовки архива"
+        );
+    }
+}
+async function waitBulkDownloadReady(downloadId) {
+    while (!bulkDownloadPollingCancelled) {
+        await new Promise(resolve =>
+            setTimeout(resolve, 1000)
+        );
+
+        // За время ожидания пользователь мог нажать отмену
+        if (bulkDownloadPollingCancelled) {
+            return;
+        }
+
+        const response = await secureFetch(
+            `/api/files/download-selected/status`
+            + `?downloadId=${encodeURIComponent(downloadId)}`
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                "Ошибка проверки подготовки архива"
+            );
+        }
+
+        const status = await response.json();
+
+        bulkDownloadText.textContent =
+            `Подготовка архива: ${status.progress}%`
+            + ` · ${formatFileSize(status.processedBytes)}`
+            + ` из ${formatFileSize(status.totalBytes)}`;
+
+        if (status.status === "ERROR") {
+            throw new Error(
+                status.error
+                || "Не удалось сформировать архив"
+            );
+        }
+
+        if (status.status === "READY") {
+            bulkDownloadText.textContent =
+                `Архив готов: `
+                + `${formatFileSize(status.zipSize)}`;
+
+            activeBulkDownloadId = null;
+
+            startPreparedZipDownload(downloadId);
+            return;
+        }
+    }
+}
+function startPreparedZipDownload(downloadId) {
+    const url = shareApi(
+        `/api/files/download-selected/file`
+        + `?downloadId=${encodeURIComponent(downloadId)}`
+    );
 
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "selected-files.zip";
 
@@ -1995,29 +2121,14 @@ function executeBulkDownload() {
     link.click();
     link.remove();
 
+    activeBulkDownloadId = null;
+    bulkDownloadPollingCancelled = false;
+
     bulkDownloadModal.classList.add("hidden");
+
+    confirmBulkDownloadBtn.disabled = false;
+    cancelBulkDownloadBtn.disabled = false;
 }
-
-/*function executeBulkDownload() {
-    if (!selectedItems.size) return;
-
-    const params = new URLSearchParams();
-
-    for (const item of selectedItems.values()) {
-        params.append("paths", item.path);
-    }
-
-    const link = document.createElement("a");
-    link.href = `/api/files/download-selected?${params.toString()}`;
-    link.download = "selected-files.zip";
-
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    bulkDownloadModal.classList.add("hidden");
-}*/
-
 function openBulkDeleteModal() {
     if (!selectedItems.size) return;
 
@@ -5151,12 +5262,24 @@ bulkDownloadBtn.onclick = openBulkDownloadModal;
 confirmBulkDownloadBtn.onclick = executeBulkDownload;
 
 cancelBulkDownloadBtn.onclick = () => {
+    bulkDownloadPollingCancelled = true;
+    activeBulkDownloadId = null;
+
     bulkDownloadModal.classList.add("hidden");
+
+    confirmBulkDownloadBtn.disabled = false;
+    cancelBulkDownloadBtn.disabled = false;
 };
 
 bulkDownloadModal.addEventListener("click", (e) => {
     if (e.target.classList.contains("delete-modal-backdrop")) {
+        bulkDownloadPollingCancelled = true;
+        activeBulkDownloadId = null;
+
         bulkDownloadModal.classList.add("hidden");
+
+        confirmBulkDownloadBtn.disabled = false;
+        cancelBulkDownloadBtn.disabled = false;
     }
 });
 bulkMoveBtn.onclick = () => {

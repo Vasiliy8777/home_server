@@ -1,0 +1,43 @@
+<configuration>
+
+    <property name="LOG_DIR"
+              value="G:/arc_Y_disc/.logs"/>
+
+    <appender name="CLOUD_ACCESS_FILE"
+              class="ch.qos.logback.core.rolling.RollingFileAppender">
+
+        <file>${LOG_DIR}/cloud-access.txt</file>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/cloud-access.%d{yyyy-MM-dd}.txt</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %msg%n</pattern>
+        </encoder>
+
+    </appender>
+
+    <logger name="CLOUD_ACCESS"
+            level="INFO"
+            additivity="false">
+
+        <appender-ref ref="CLOUD_ACCESS_FILE"/>
+
+    </logger>
+    <appender name="CONSOLE"
+              class="ch.qos.logback.core.ConsoleAppender">
+
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger - %msg%n</pattern>
+        </encoder>
+
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>
