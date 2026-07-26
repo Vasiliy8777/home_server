@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.ResourceRegion;
 
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
 import ru.homeserver.photoshare.homeserver.dto.*;
 import ru.homeserver.photoshare.homeserver.service.*;
@@ -1280,8 +1279,9 @@ public class FileController {
         return ResponseEntity.ok(result);
     }
     @GetMapping("/download-selected/file")
-    public ResponseEntity<StreamingResponseBody> downloadSelectedFile(
-            @RequestParam String downloadId
+    public void downloadSelectedFile(
+            @RequestParam String downloadId,
+            HttpServletResponse response
     ) throws IOException {
 
         BulkDownloadStatus status =
@@ -1295,75 +1295,104 @@ public class FileController {
                 || zipFile == null
                 || !Files.exists(zipFile)) {
 
-            return ResponseEntity.notFound().build();
+            response.sendError(
+                    HttpServletResponse.SC_NOT_FOUND
+            );
+
+            return;
         }
 
         long zipSize = Files.size(zipFile);
 
-        StreamingResponseBody body = outputStream -> {
-            boolean downloadCompleted = false;
+        response.setStatus(
+                HttpServletResponse.SC_OK
+        );
 
-            try (InputStream inputStream =
-                         Files.newInputStream(zipFile)) {
+        response.setContentType(
+                "application/zip"
+        );
 
-                byte[] buffer =
-                        new byte[1024 * 1024];
+        response.setHeader(
+                HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"selected-files.zip\""
+        );
 
-                int read;
+        response.setHeader(
+                HttpHeaders.ACCEPT_RANGES,
+                "none"
+        );
 
-                while ((read = inputStream.read(buffer)) != -1) {
-                    outputStream.write(buffer, 0, read);
-                }
+        response.setContentLengthLong(zipSize);
 
-                outputStream.flush();
+        boolean downloadCompleted = false;
 
-                downloadCompleted = true;
+        try (
+                InputStream inputStream =
+                        Files.newInputStream(zipFile);
 
-            } catch (IOException e) {
-                System.out.println(
-                        "Скачивание ZIP прервано: "
-                                + downloadId
-                                + ", причина: "
-                                + e.getMessage()
+                OutputStream outputStream =
+                        response.getOutputStream()
+        ) {
+            byte[] buffer =
+                    new byte[1024 * 1024];
+
+            int read;
+
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(
+                        buffer,
+                        0,
+                        read
                 );
+            }
 
-                throw e;
+            outputStream.flush();
 
-            } finally {
-                if (downloadCompleted) {
-                    try {
-                        Files.deleteIfExists(zipFile);
+            downloadCompleted = true;
 
-                        bulkDownloadFiles.remove(downloadId);
-                        bulkDownloadStatuses.remove(downloadId);
+            System.out.println(
+                    "ZIP полностью передан клиенту: "
+                            + downloadId
+            );
 
-                        System.out.println(
-                                "Временный ZIP удалён после скачивания: "
-                                        + zipFile
-                        );
+        } catch (IOException e) {
+            System.out.println(
+                    "Скачивание ZIP прервано: "
+                            + downloadId
+                            + ", причина: "
+                            + e.getMessage()
+            );
 
-                    } catch (IOException e) {
-                        System.out.println(
-                                "Не удалось удалить временный ZIP: "
-                                        + zipFile
-                        );
+            /*
+             * Архив не удаляем.
+             * Пользователь сможет повторить скачивание,
+             * пока не сработает резервная очистка.
+             */
+            return;
 
-                        e.printStackTrace();
-                    }
+        } finally {
+            if (downloadCompleted) {
+                try {
+                    Files.deleteIfExists(zipFile);
+
+                    bulkDownloadFiles.remove(downloadId);
+                    bulkDownloadStatuses.remove(downloadId);
+
+                    System.out.println(
+                            "Временный ZIP удалён после успешного скачивания: "
+                                    + zipFile
+                    );
+
+                } catch (IOException e) {
+                    System.out.println(
+                            "Не удалось удалить временный ZIP: "
+                                    + zipFile
+                                    + ", причина: "
+                                    + e.getMessage()
+                    );
                 }
             }
-        };
-
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"selected-files.zip\""
-                )
-                .contentType(
-                        MediaType.parseMediaType("application/zip")
-                )
-                .contentLength(zipSize)
-                .body(body);
+        }
     }
     /*@GetMapping("/download-selected/file")
     public ResponseEntity<Resource> downloadSelectedFile(

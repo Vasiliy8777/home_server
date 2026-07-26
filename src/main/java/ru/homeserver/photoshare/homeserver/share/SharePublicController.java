@@ -1,6 +1,7 @@
 package ru.homeserver.photoshare.homeserver.share;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
@@ -8,7 +9,6 @@ import org.springframework.http.*;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import ru.homeserver.photoshare.homeserver.config.VideoPreviewProperties;
 import ru.homeserver.photoshare.homeserver.dto.FileItemDto;
 import ru.homeserver.photoshare.homeserver.dto.FolderPrepareJob;
@@ -20,14 +20,17 @@ import ru.homeserver.photoshare.homeserver.util.CloudAccessLogService;
 import ru.homeserver.photoshare.homeserver.video.HlsConversionService;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 @RestController
 @RequestMapping("/share/{token}")
@@ -41,6 +44,11 @@ public class SharePublicController {
     private final HlsConversionService hlsConversionService;
     private final VideoPreviewProperties videoPreviewProperties;
     private final Map<String, Object> uploadLocks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Path> sharedBulkDownloadFiles =
+            new ConcurrentHashMap<>();
+
+    private final Map<String, SharedBulkDownloadStatus> sharedBulkDownloadStatuses =
+            new ConcurrentHashMap<>();
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
     private final ru.homeserver.photoshare.homeserver.config.AppProperties appProperties;
     public SharePublicController(
@@ -701,63 +709,543 @@ public class SharePublicController {
 
         return ResponseEntity.ok().build();
     }
-    @GetMapping("/download-selected")
-    public ResponseEntity<StreamingResponseBody> downloadSelected(
+    @PostMapping(
+            value = "/download-selected/prepare",
+            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE
+    )
+    public ResponseEntity<?> prepareSharedSelectedDownload(
             @PathVariable String token,
-            @RequestParam List<String> paths
+            @RequestParam("paths") List<String> paths
     ) throws IOException {
-        ShareLink link = shareService.requireActive(token);
+
+        ShareLink link =
+                shareService.requireActive(token);
 
         if (!link.getPermission().canDownload()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            return ResponseEntity.status(
+                    HttpStatus.FORBIDDEN
+            ).build();
         }
 
-        StreamingResponseBody body = outputStream -> {
-            try (java.util.zip.ZipOutputStream zipOut =
-                         new java.util.zip.ZipOutputStream(outputStream)) {
+        if (paths == null || paths.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of(
+                            "error",
+                            "No paths selected"
+                    ));
+        }
 
-                for (String publicPath : paths) {
-                    try {
-                        String realPath = shareService.resolveInsideShare(link, publicPath);
-                        Path source = fileService.resolveSafe(realPath);
+        List<SharedDownloadItem> items =
+                resolveSharedDownloadItems(
+                        link,
+                        paths
+                );
 
-                        if (!Files.exists(source)) {
-                            continue;
-                        }
+        if (items.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of(
+                            "error",
+                            "No accessible files selected"
+                    ));
+        }
 
-                        if (Files.isDirectory(source)) {
-                            try (java.util.stream.Stream<Path> walk = Files.walk(source)) {
-                                for (Path file : walk.filter(Files::isRegularFile).toList()) {
-                                    Path relative = source.relativize(file);
+        String downloadId =
+                UUID.randomUUID().toString();
 
-                                    String entryName = source.getFileName().toString()
-                                            + "/"
-                                            + relative.toString().replace("\\", "/");
+        Path tempDir =
+                Path.of(appProperties.getUploadTempDir())
+                        .resolve("shared-bulk-downloads");
 
-                                    zipOut.putNextEntry(new java.util.zip.ZipEntry(entryName));
-                                    Files.copy(file, zipOut);
-                                    zipOut.closeEntry();
-                                }
-                            }
-                        } else {
-                            zipOut.putNextEntry(
-                                    new java.util.zip.ZipEntry(source.getFileName().toString())
-                            );
-                            Files.copy(source, zipOut);
-                            zipOut.closeEntry();
-                        }
+        Files.createDirectories(tempDir);
 
-                    } catch (Exception e) {
-                        System.out.println("Skip shared zip item: " + publicPath + " / " + e.getMessage());
-                    }
+        Path zipFile =
+                tempDir.resolve(
+                        downloadId + ".zip"
+                );
+
+        long totalBytes =
+                calculateSharedSelectedSize(items);
+
+        FileStore fileStore =
+                Files.getFileStore(tempDir);
+
+        long usableSpace =
+                fileStore.getUsableSpace();
+
+        long requiredSpace =
+                totalBytes + 200L * 1024 * 1024;
+
+        if (usableSpace < requiredSpace) {
+            return ResponseEntity.status(
+                    HttpStatus.INSUFFICIENT_STORAGE
+            ).body(Map.of(
+                    "error",
+                    "Недостаточно свободного места для создания ZIP",
+                    "requiredBytes",
+                    requiredSpace,
+                    "availableBytes",
+                    usableSpace
+            ));
+        }
+
+        SharedBulkDownloadStatus status =
+                new SharedBulkDownloadStatus(
+                        token,
+                        items.size(),
+                        totalBytes
+                );
+
+        sharedBulkDownloadStatuses.put(
+                downloadId,
+                status
+        );
+
+        sharedBulkDownloadFiles.put(
+                downloadId,
+                zipFile
+        );
+
+        Thread.ofVirtual().start(() -> {
+            try {
+                createSharedSelectedZip(
+                        items,
+                        zipFile,
+                        status
+                );
+
+                status.status = "READY";
+
+                scheduleSharedBulkDownloadCleanup(
+                        downloadId,
+                        zipFile
+                );
+
+            } catch (Exception e) {
+                status.status = "ERROR";
+
+                status.error =
+                        e.getMessage() != null
+                                ? e.getMessage()
+                                : e.getClass().getSimpleName();
+
+                try {
+                    Files.deleteIfExists(zipFile);
+                } catch (IOException ignored) {
+                }
+
+                sharedBulkDownloadFiles.remove(
+                        downloadId
+                );
+
+                e.printStackTrace();
+            }
+        });
+
+        return ResponseEntity.ok(Map.of(
+                "downloadId",
+                downloadId,
+                "totalBytes",
+                totalBytes,
+                "totalItems",
+                items.size()
+        ));
+    }
+    @GetMapping("/download-selected/status")
+    public ResponseEntity<?> sharedSelectedDownloadStatus(
+            @PathVariable String token,
+            @RequestParam String downloadId
+    ) throws IOException {
+
+        ShareLink link =
+                shareService.requireActive(token);
+
+        if (!link.getPermission().canDownload()) {
+            return ResponseEntity.status(
+                    HttpStatus.FORBIDDEN
+            ).build();
+        }
+
+        SharedBulkDownloadStatus status =
+                sharedBulkDownloadStatuses.get(
+                        downloadId
+                );
+
+        if (!isSharedDownloadOwner(status, token)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path file =
+                sharedBulkDownloadFiles.get(
+                        downloadId
+                );
+
+        long zipSize =
+                file != null && Files.exists(file)
+                        ? Files.size(file)
+                        : 0;
+
+        int progress;
+
+        if ("READY".equals(status.status)) {
+            progress = 100;
+
+        } else if (status.totalBytes > 0) {
+            progress = (int) Math.min(
+                    99,
+                    status.processedBytes * 100
+                            / status.totalBytes
+            );
+
+        } else {
+            progress = status.total > 0
+                    ? status.processed * 100
+                    / status.total
+                    : 0;
+        }
+
+        Map<String, Object> result =
+                new HashMap<>();
+
+        result.put("status", status.status);
+        result.put("progress", progress);
+
+        result.put(
+                "processed",
+                status.processed
+        );
+
+        result.put(
+                "total",
+                status.total
+        );
+
+        result.put(
+                "processedBytes",
+                status.processedBytes
+        );
+
+        result.put(
+                "totalBytes",
+                status.totalBytes
+        );
+
+        result.put("zipSize", zipSize);
+
+        if (status.error != null) {
+            result.put(
+                    "error",
+                    status.error
+            );
+        }
+
+        return ResponseEntity.ok(result);
+    }
+    @GetMapping("/download-selected/file")
+    public void downloadSharedSelectedFile(
+            @PathVariable String token,
+            @RequestParam String downloadId,
+            @RequestHeader(
+                    value = HttpHeaders.RANGE,
+                    required = false
+            ) String rangeHeader,
+            HttpServletResponse response
+    ) throws IOException {
+
+        ShareLink link =
+                shareService.requireActive(token);
+
+        if (!link.getPermission().canDownload()) {
+            response.sendError(
+                    HttpServletResponse.SC_FORBIDDEN
+            );
+            return;
+        }
+
+        SharedBulkDownloadStatus status =
+                sharedBulkDownloadStatuses.get(downloadId);
+
+        Path zipFile =
+                sharedBulkDownloadFiles.get(downloadId);
+
+        if (!isSharedDownloadOwner(status, token)
+                || !"READY".equals(status.status)
+                || zipFile == null
+                || !Files.exists(zipFile)) {
+
+            response.sendError(
+                    HttpServletResponse.SC_NOT_FOUND
+            );
+            return;
+        }
+
+        long fileSize = Files.size(zipFile);
+
+        long start = 0;
+        long end = fileSize - 1;
+
+        /*
+         * Пример заголовка:
+         * Range: bytes=1048576-
+         */
+        if (rangeHeader != null
+                && rangeHeader.startsWith("bytes=")) {
+
+            String rangeValue =
+                    rangeHeader.substring("bytes=".length());
+
+            String[] parts =
+                    rangeValue.split("-", 2);
+
+            try {
+                if (!parts[0].isBlank()) {
+                    start = Long.parseLong(parts[0]);
+                }
+
+                if (parts.length > 1
+                        && !parts[1].isBlank()) {
+
+                    end = Long.parseLong(parts[1]);
+                }
+
+            } catch (NumberFormatException e) {
+                response.setStatus(
+                        HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE
+                );
+
+                response.setHeader(
+                        HttpHeaders.CONTENT_RANGE,
+                        "bytes */" + fileSize
+                );
+
+                return;
+            }
+        }
+
+        if (start < 0
+                || start >= fileSize
+                || end < start) {
+
+            response.setStatus(
+                    HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE
+            );
+
+            response.setHeader(
+                    HttpHeaders.CONTENT_RANGE,
+                    "bytes */" + fileSize
+            );
+
+            return;
+        }
+
+        end = Math.min(end, fileSize - 1);
+
+        long contentLength =
+                end - start + 1;
+
+        boolean partialRequest =
+                rangeHeader != null;
+
+        response.setContentType(
+                "application/zip"
+        );
+
+        response.setHeader(
+                HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"selected-files.zip\""
+        );
+
+        /*
+         * Разрешаем продолжение скачивания.
+         */
+        response.setHeader(
+                HttpHeaders.ACCEPT_RANGES,
+                "bytes"
+        );
+
+        if (partialRequest) {
+            response.setStatus(
+                    HttpServletResponse.SC_PARTIAL_CONTENT
+            );
+
+            response.setHeader(
+                    HttpHeaders.CONTENT_RANGE,
+                    "bytes "
+                            + start
+                            + "-"
+                            + end
+                            + "/"
+                            + fileSize
+            );
+
+        } else {
+            response.setStatus(
+                    HttpServletResponse.SC_OK
+            );
+        }
+
+        response.setContentLengthLong(
+                contentLength
+        );
+
+        boolean transferCompleted = false;
+
+        OutputStream output =
+                response.getOutputStream();
+
+        try (RandomAccessFile input =
+                     new RandomAccessFile(
+                             zipFile.toFile(),
+                             "r"
+                     )) {
+
+            input.seek(start);
+
+            byte[] buffer =
+                    new byte[64 * 1024];
+
+            long remaining =
+                    contentLength;
+
+            while (remaining > 0) {
+                int requested =
+                        (int) Math.min(
+                                buffer.length,
+                                remaining
+                        );
+
+                int read =
+                        input.read(
+                                buffer,
+                                0,
+                                requested
+                        );
+
+                if (read == -1) {
+                    break;
+                }
+
+                output.write(
+                        buffer,
+                        0,
+                        read
+                );
+
+                remaining -= read;
+            }
+
+            output.flush();
+
+            transferCompleted =
+                    remaining == 0;
+
+            if (transferCompleted) {
+                System.out.println(
+                        "Публичный ZIP передан: "
+                                + downloadId
+                                + ", диапазон "
+                                + start
+                                + "-"
+                                + end
+                                + " из "
+                                + fileSize
+                );
+            }
+
+        } catch (IOException e) {
+            if (isClientDisconnect(e)) {
+                System.out.println(
+                        "Соединение при скачивании ZIP прервано или истёк timeout: "
+                                + downloadId
+                                + ", диапазон "
+                                + start
+                                + "-"
+                                + end
+                );
+            } else {
+                System.out.println(
+                        "Ошибка передачи публичного ZIP: "
+                                + downloadId
+                                + ", причина: "
+                                + e.getMessage()
+                );
+
+                e.printStackTrace();
+            }
+
+            return;
+        }
+
+        /*
+         * Удаляем только после успешной передачи
+         * последнего диапазона файла.
+         */
+        boolean lastRangeTransferred =
+                transferCompleted
+                        && end == fileSize - 1;
+
+        if (lastRangeTransferred) {
+            try {
+                Files.deleteIfExists(zipFile);
+
+                sharedBulkDownloadFiles.remove(
+                        downloadId
+                );
+
+                sharedBulkDownloadStatuses.remove(
+                        downloadId
+                );
+
+                System.out.println(
+                        "Публичный ZIP удалён после успешного скачивания: "
+                                + zipFile
+                );
+
+            } catch (IOException e) {
+                System.out.println(
+                        "Не удалось удалить публичный ZIP: "
+                                + zipFile
+                                + ", причина: "
+                                + e.getMessage()
+                );
+            }
+        }
+    }
+    private boolean isClientDisconnect(
+            Throwable error
+    ) {
+        Throwable current = error;
+
+        while (current != null) {
+            if (current instanceof java.net.SocketTimeoutException) {
+                return true;
+            }
+
+            String message =
+                    current.getMessage();
+
+            if (message != null) {
+                String lower =
+                        message.toLowerCase();
+
+                if (lower.contains("connection reset")
+                        || lower.contains("broken pipe")
+                        || lower.contains("clientabortexception")
+                        || lower.contains("sockettimeoutexception")
+                        || lower.contains("socket timeout")
+                        || lower.contains("response not usable")
+                        || lower.contains("async request not usable")
+                        || lower.contains("forcibly closed")
+                        || lower.contains("разорвала установленное подключение")
+                        || lower.contains("connection aborted")) {
+
+                    return true;
                 }
             }
-        };
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"selected-files.zip\"")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(body);
+            current = current.getCause();
+        }
+
+        return false;
     }
     @PostMapping("/prepare-folder")
     public Map<String, String> prepareFolder(
@@ -833,5 +1321,299 @@ public class SharePublicController {
                 "items", items,
                 "total", job.items.size()
         );
+    }
+    private List<SharedDownloadItem> resolveSharedDownloadItems(
+            ShareLink link,
+            List<String> publicPaths
+    ) {
+
+        List<SharedDownloadItem> result =
+                new java.util.ArrayList<>();
+
+        for (String publicPath : publicPaths) {
+            try {
+                String normalizedPublicPath =
+                        publicPath == null
+                                ? ""
+                                : publicPath.replace("\\", "/");
+
+                String realPath =
+                        shareService.resolveInsideShare(
+                                link,
+                                normalizedPublicPath
+                        );
+
+                Path source =
+                        fileService.resolveSafe(realPath);
+
+                if (!Files.exists(source)) {
+                    continue;
+                }
+
+                result.add(
+                        new SharedDownloadItem(
+                                normalizedPublicPath,
+                                source
+                        )
+                );
+
+            } catch (Exception e) {
+                System.out.println(
+                        "Публичный путь пропущен: "
+                                + publicPath
+                                + ", причина: "
+                                + e.getMessage()
+                );
+            }
+        }
+
+        return result;
+    }
+    private long calculateSharedSelectedSize(
+            List<SharedDownloadItem> items
+    ) {
+        long total = 0;
+
+        for (SharedDownloadItem item : items) {
+            Path source = item.source();
+
+            try {
+                if (Files.isDirectory(source)) {
+                    try (Stream<Path> walk =
+                                 Files.walk(source)) {
+
+                        total += walk
+                                .filter(Files::isRegularFile)
+                                .mapToLong(file -> {
+                                    try {
+                                        return Files.size(file);
+                                    } catch (IOException e) {
+                                        return 0;
+                                    }
+                                })
+                                .sum();
+                    }
+
+                } else {
+                    total += Files.size(source);
+                }
+
+            } catch (Exception e) {
+                System.out.println(
+                        "Не удалось определить размер: "
+                                + item.publicPath()
+                );
+            }
+        }
+
+        return total;
+    }
+    private void writeSharedZipEntry(
+            java.util.zip.ZipOutputStream zipOut,
+            Path file,
+            String entryName,
+            byte[] buffer,
+            SharedBulkDownloadStatus status
+    ) throws IOException {
+
+        String normalizedEntryName =
+                entryName.replace("\\", "/");
+
+        while (normalizedEntryName.startsWith("/")) {
+            normalizedEntryName =
+                    normalizedEntryName.substring(1);
+        }
+
+        if (normalizedEntryName.isBlank()) {
+            normalizedEntryName =
+                    file.getFileName().toString();
+        }
+
+        java.util.zip.ZipEntry entry =
+                new java.util.zip.ZipEntry(
+                        normalizedEntryName
+                );
+
+        zipOut.putNextEntry(entry);
+
+        try (InputStream input =
+                     Files.newInputStream(file)) {
+
+            int read;
+
+            while ((read = input.read(buffer)) != -1) {
+                zipOut.write(buffer, 0, read);
+                status.processedBytes += read;
+            }
+
+        } finally {
+            zipOut.closeEntry();
+        }
+    }
+    private boolean isSharedDownloadOwner(
+            SharedBulkDownloadStatus status,
+            String token
+    ) {
+        return status != null
+                && status.token != null
+                && status.token.equals(token);
+    }
+    private record SharedDownloadItem(
+            String publicPath,
+            Path source
+    ) {
+    }
+    private void createSharedSelectedZip(
+            List<SharedDownloadItem> items,
+            Path zipFile,
+            SharedBulkDownloadStatus status
+    ) throws IOException {
+
+        try (
+                OutputStream fileOut =
+                        Files.newOutputStream(
+                                zipFile,
+                                StandardOpenOption.CREATE,
+                                StandardOpenOption.TRUNCATE_EXISTING
+                        );
+
+                java.io.BufferedOutputStream bufferedOut =
+                        new java.io.BufferedOutputStream(
+                                fileOut,
+                                1024 * 1024
+                        );
+
+                java.util.zip.ZipOutputStream zipOut =
+                        new java.util.zip.ZipOutputStream(
+                                bufferedOut
+                        )
+        ) {
+            zipOut.setLevel(
+                    java.util.zip.Deflater.NO_COMPRESSION
+            );
+
+            byte[] buffer =
+                    new byte[1024 * 1024];
+
+            for (SharedDownloadItem item : items) {
+                Path source = item.source();
+
+                if (!Files.exists(source)) {
+                    status.processed++;
+                    continue;
+                }
+
+                if (Files.isDirectory(source)) {
+                    try (Stream<Path> walk =
+                                 Files.walk(source)) {
+
+                        List<Path> files = walk
+                                .filter(Files::isRegularFile)
+                                .toList();
+
+                        for (Path file : files) {
+                            Path relative =
+                                    source.relativize(file);
+
+                            String directoryName =
+                                    source.getFileName()
+                                            .toString();
+
+                            String entryName =
+                                    directoryName
+                                            + "/"
+                                            + relative.toString()
+                                            .replace("\\", "/");
+
+                            writeSharedZipEntry(
+                                    zipOut,
+                                    file,
+                                    entryName,
+                                    buffer,
+                                    status
+                            );
+                        }
+                    }
+
+                } else {
+                    String entryName =
+                            item.publicPath();
+
+                    if (entryName == null
+                            || entryName.isBlank()) {
+
+                        entryName =
+                                source.getFileName()
+                                        .toString();
+                    }
+
+                    writeSharedZipEntry(
+                            zipOut,
+                            source,
+                            entryName,
+                            buffer,
+                            status
+                    );
+                }
+
+                status.processed++;
+            }
+        }
+    }
+    private void scheduleSharedBulkDownloadCleanup(
+            String downloadId,
+            Path zipFile
+    ) {
+        Thread.ofVirtual().start(() -> {
+            try {
+                Thread.sleep(
+                        TimeUnit.HOURS.toMillis(2)
+                );
+
+                Files.deleteIfExists(zipFile);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+
+            } catch (IOException e) {
+                System.out.println(
+                        "Не удалось удалить временный публичный ZIP: "
+                                + zipFile
+                );
+
+            } finally {
+                sharedBulkDownloadFiles.remove(
+                        downloadId
+                );
+
+                sharedBulkDownloadStatuses.remove(
+                        downloadId
+                );
+            }
+        });
+    }
+    private static class SharedBulkDownloadStatus {
+
+        public final String token;
+
+        public volatile String status;
+        public volatile int processed;
+        public volatile int total;
+
+        public volatile long processedBytes;
+        public volatile long totalBytes;
+
+        public volatile String error;
+
+        public SharedBulkDownloadStatus(
+                String token,
+                int total,
+                long totalBytes
+        ) {
+            this.token = token;
+            this.status = "PREPARING";
+            this.total = total;
+            this.totalBytes = totalBytes;
+        }
     }
 }
