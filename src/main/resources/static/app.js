@@ -53,7 +53,6 @@ function getCookie(name) {
 function csrfHeaders(extraHeaders = {}) {
 
     const token = getCookie("XSRF-TOKEN");
-    //console.log("CSRF TOKEN:", token);
     return {
         ...extraHeaders,
 
@@ -85,12 +84,6 @@ async function secureFetch(url, options = {}) {
     });
 }
 
-/*function onClick(element, handler) {
-    if (element) {
-        element.addEventListener("click", handler);
-    }
-}*/
-
 let parentPath = "";
 let currentPlayer = null;
 
@@ -118,7 +111,6 @@ let bulkMoveMode = false;
 const selectedItems = new Map();
 
 let currentPreviewId = null;
-let previewStatusTimer = null;
 
 let sortField = localStorage.getItem("sortField") || "name";
 let sortDirection = localStorage.getItem("sortDirection") || "asc";
@@ -258,11 +250,125 @@ let selectedDownloadFormat = "original";
 let metadataTotal = 0;
 let metadataProcessed = 0;
 const METADATA_QUEUE = [];
-let metadataRunning = 0;
 const MAX_METADATA_REQUESTS = window.innerWidth <= 768 ? 2 : 4; // 🔥 для телефона критично
 const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20 : 80;
 let currentPreparedTotal = 0;
 const PAGE_LIMIT = 1000;
+
+function startSequentialPolling(callback, delay, onError = console.error) {
+    const controller = new AbortController();
+    const polling = {controller, timer: null};
+    const tick = async () => {
+        if (controller.signal.aborted) return;
+        try {
+            await callback(controller.signal);
+        } catch (error) {
+            if (!controller.signal.aborted) onError(error);
+        }
+        if (!controller.signal.aborted) {
+            polling.timer = setTimeout(tick, document.hidden ? Math.max(delay, 5000) : delay);
+        }
+    };
+    polling.timer = setTimeout(tick, delay);
+    return polling;
+}
+
+function stopPolling(polling) {
+    if (!polling) return;
+    polling.controller.abort();
+    clearTimeout(polling.timer);
+}
+
+let metadataContext = {session: 0, running: 0, controller: new AbortController()};
+const metadataPending = new Set();
+const metadataRetries = new Map();
+const cardByPath = new Map();
+let viewerInputController = null;
+let hlsViewerController = null;
+let previewWaitController = null;
+let transferSaveTimer = null;
+const transferFrames = new Map();
+
+function resetFolderRequests() {
+    folderLoadAbortController?.abort();
+    folderLoadAbortController = new AbortController();
+    metadataContext.controller.abort();
+    metadataContext = {session: folderLoadSession, running: 0, controller: new AbortController()};
+    METADATA_QUEUE.length = 0;
+    metadataPending.clear();
+    metadataRetries.clear();
+    metadataCache.clear();
+    metadataLoaded.clear();
+    metadataTotal = 0;
+    metadataProcessed = 0;
+    window.thumbObserver?.disconnect();
+    window.metadataObserver?.disconnect();
+    window.thumbObserver = null;
+    window.metadataObserver = null;
+    thumbSession++;
+    cardByPath.clear();
+    return folderLoadAbortController.signal;
+}
+
+function cleanupViewerInput() {
+    viewerInputController?.abort();
+    viewerInputController = null;
+    viewerDragging = false;
+}
+
+function queueTransferProgress(task) {
+    if (!transferFrames.has(task.id)) {
+        transferFrames.set(task.id, requestAnimationFrame(() => {
+            transferFrames.delete(task.id);
+            if (transferTasks.has(task.id)) updateTransferTaskUI(task);
+        }));
+    }
+    if (transferSaveTimer === null) {
+        transferSaveTimer = setTimeout(() => {
+            transferSaveTimer = null;
+            saveTransferTasks();
+        }, 500);
+    }
+}
+
+function triggerBrowserDownload(url, name) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
+async function waitForPreview(previewId, delay, onStatus = () => {}) {
+    previewWaitController?.abort();
+    const controller = new AbortController();
+    previewWaitController = controller;
+    try {
+        while (true) {
+            const response = await secureFetch(
+                `/api/files/preview/status?previewId=${encodeURIComponent(previewId)}`,
+                {signal: controller.signal}
+            );
+            if (!response.ok) throw new Error("Preview status error");
+            const status = await response.json();
+            controller.signal.throwIfAborted();
+            if (status.progress < 0) throw new Error("Preview creation failed");
+            onStatus(status);
+            if (status.ready) return `/api/files/preview/file?previewId=${encodeURIComponent(previewId)}`;
+            await new Promise((resolve, reject) => {
+                const abort = () => { clearTimeout(timer); reject(controller.signal.reason); };
+                const timer = setTimeout(() => {
+                    controller.signal.removeEventListener("abort", abort);
+                    resolve();
+                }, delay);
+                controller.signal.addEventListener("abort", abort, {once: true});
+            });
+        }
+    } finally {
+        if (previewWaitController === controller) previewWaitController = null;
+    }
+}
 
 function hideInPublicMode() {
     if (!PUBLIC_SHARE_MODE) {
@@ -275,25 +381,6 @@ function hideInPublicMode() {
         bulkMoveBtn
     ].forEach(e => e?.remove());
 }
-
-/*function hideInPublicMode() {
-
-    if (!PUBLIC_SHARE_MODE) {
-        return;
-    }
-
-    [
-        newFolderBtn,
-        folderListBtn,
-        totalCacheBtn,
-        selectAllBtn,
-        clearSelectionBtn,
-        bulkMoveBtn,
-        bulkDeleteBtn,
-        bulkDownloadBtn
-    ].forEach(e => e?.remove());
-
-}*/
 
 async function cancelHlsConversion(item) {
     if (!item || !item.relativePath) return;
@@ -326,7 +413,7 @@ function playHlsInViewer(playlistUrl, item) {
         </svg>
         <div class="hls-progress-text" id="hlsProgressText">0%</div>
     </div>
-    
+
         <video id="player"
                controls
                playsinline
@@ -376,7 +463,7 @@ function playHlsInViewer(playlistUrl, item) {
         });
 
         currentHls.on(Hls.Events.MANIFEST_PARSED, () => {
-            /*currentPlayer = new Plyr(video);*/
+
             video.play().catch(console.warn);
         });
 
@@ -426,49 +513,10 @@ function playHlsInViewer(playlistUrl, item) {
 
     video.src = playlistUrl;
     currentPlayer = new Plyr(video);
-    /*startHlsProgressPolling(item);*/
+
     video.play().catch(console.warn);
 }
 
-/*function playHlsInViewer(playlistUrl, item) {
-    destroyCurrentVideo();
-    viewerBody.innerHTML = `
-        <video id="player"
-               controls
-               preload="auto"
-               poster="${buildVideoThumbnailUrl(item.relativePath)}"
-               style="width:100%; max-height:75vh;">
-        </video>
-    `;
-
-    const video = document.getElementById("player");
-
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = playlistUrl;
-        currentPlayer = new Plyr(video);
-        video.play();
-        return;
-    }
-
-    if (window.Hls && Hls.isSupported()) {
-        const hls = new Hls({
-            enableWorker: true,
-            lowLatencyMode: false
-        });
-
-        hls.loadSource(playlistUrl);
-        hls.attachMedia(video);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            currentPlayer = new Plyr(video);
-            video.play();
-        });
-
-        return;
-    }
-
-    viewerBody.innerHTML = `<div>Этот браузер не поддерживает HLS</div>`;
-}*/
 function destroyVideoOnly() {
     if (currentHls) {
         try {
@@ -483,7 +531,7 @@ function destroyVideoOnly() {
 
     if (currentPlayer) {
         try {
-            currentPlayer.destroy();
+            currentPlayer?.destroy();
         } catch (e) {
             console.warn("Plyr destroy warning", e);
         }
@@ -503,7 +551,7 @@ function destroyVideoOnly() {
     }
 }
 
-async function updateHlsProgress(item) {
+async function updateHlsProgress(item, signal) {
     if (!item || !item.relativePath) return;
 
     const ring = document.getElementById("hlsProgressRing");
@@ -514,12 +562,14 @@ async function updateHlsProgress(item) {
 
     try {
         const response = await secureFetch(
-            `/api/video/hls/progress?path=${encodeURIComponent(item.relativePath)}`
+            `/api/video/hls/progress?path=${encodeURIComponent(item.relativePath)}`,
+            {signal}
         );
 
         if (!response.ok) return;
 
         const state = await response.json();
+        if (signal?.aborted || currentHlsProgressItem !== item) return;
 
         const progress = Math.max(0, Math.min(100, state.progress || 0));
 
@@ -541,27 +591,24 @@ function startHlsProgressPolling(item) {
 
     currentHlsProgressItem = item;
 
-    updateHlsProgress(item);
-
-    hlsProgressTimer = setInterval(() => {
-        updateHlsProgress(item);
-    }, 1000);
+    hlsProgressTimer = startSequentialPolling(signal => updateHlsProgress(item, signal), 1000);
 }
 
 function stopHlsProgressPolling() {
     if (hlsProgressTimer) {
-        clearInterval(hlsProgressTimer);
+        stopPolling(hlsProgressTimer);
         hlsProgressTimer = null;
     }
 
     currentHlsProgressItem = null;
 }
 
-async function waitHlsReady(item, playlistUrl) {
+async function waitHlsReady(item, playlistUrl, signal) {
     while (true) {
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        const response = await secureFetch(item.hlsStatusUrl);
+        signal?.throwIfAborted();
+        const response = await secureFetch(item.hlsStatusUrl, {signal});
 
         if (!response.ok) {
             viewerBody.innerHTML = `<div>Ошибка проверки статуса HLS</div>`;
@@ -569,6 +616,7 @@ async function waitHlsReady(item, playlistUrl) {
         }
 
         const status = await response.text();
+        signal?.throwIfAborted();
 
         if (status.includes("READY") || status.includes("PLAYABLE")) {
             playHlsInViewer(playlistUrl, item);
@@ -580,69 +628,17 @@ async function waitHlsReady(item, playlistUrl) {
             return;
         }
 
-        /*viewerBody.innerHTML = `<div>Подготавливаем HLS-видео...</div>`;*/
     }
 }
 
 let currentHls = null;
 
-/*function destroyCurrentVideo() {
-    const video = document.getElementById("player");
-
-    if (video) {
-        try {
-            video.pause();
-            video.removeAttribute("src");
-            video.load();
-        } catch (e) {
-            console.warn("Video cleanup warning", e);
-        }
-    }
-
-    if (currentPlayer) {
-        currentPlayer.destroy();
-        currentPlayer = null;
-    }
-
-    if (currentHls) {
-        currentHls.destroy();
-        currentHls = null;
-    }
-}*/
 function destroyCurrentVideo() {
+    hlsViewerController?.abort();
+    hlsViewerController = null;
     stopHlsProgressPolling();
     destroyVideoOnly();
-    /*if (currentHls) {
-        try {
-            currentHls.stopLoad();
-            currentHls.detachMedia();
-            currentHls.destroy();
-        } catch (e) {
-            console.warn("HLS destroy warning", e);
-        }
-        currentHls = null;
-    }
 
-    if (currentPlayer) {
-        try {
-            currentPlayer.destroy();
-        } catch (e) {
-            console.warn("Plyr destroy warning", e);
-        }
-        currentPlayer = null;
-    }
-
-    const video = document.getElementById("player");
-
-    if (video) {
-        try {
-            video.pause();
-            video.src = "";
-            video.removeAttribute("src");
-        } catch (e) {
-            console.warn("Video cleanup warning", e);
-        }
-    }*/
 }
 
 function renderHlsProgressRing() {
@@ -668,76 +664,31 @@ function renderHlsProgressRing() {
 }
 
 async function openHlsViewer(item) {
-    /*viewerBody.innerHTML = `<div>Подготавливаем HLS-видео...</div>`;*/
+    hlsViewerController?.abort();
+    const controller = new AbortController();
+    hlsViewerController = controller;
+    const signal = controller.signal;
     renderHlsProgressRing();
     startHlsProgressPolling(item);
-
-    const response = await secureFetch(item.hlsPrepareUrl, {
-        method: "POST"
-    });
-
-    if (!response.ok) {
-        viewerBody.innerHTML = `<div>Не удалось запустить подготовку HLS</div>`;
-        return;
+    try {
+        const response = await secureFetch(item.hlsPrepareUrl, {method: "POST", signal});
+        if (!response.ok) throw new Error("HLS preparation failed");
+        const state = await response.json();
+        signal.throwIfAborted();
+        if (state.status === "READY" || state.status === "PLAYABLE") {
+            playHlsInViewer(state.playlistUrl, item);
+        } else if (state.status === "RUNNING") {
+            await waitHlsReady(item, state.playlistUrl, signal);
+        } else {
+            throw new Error("HLS preparation failed");
+        }
+    } catch (error) {
+        if (!signal.aborted) {
+            viewerBody.textContent = "Не удалось подготовить HLS-видео";
+            stopHlsProgressPolling();
+        }
     }
-
-    const state = await response.json();
-
-    if (state.status === "READY" || state.status === "PLAYABLE") {
-        playHlsInViewer(state.playlistUrl, item);
-        return;
-    }
-
-    if (state.status === "RUNNING") {
-        await waitHlsReady(item, state.playlistUrl);
-        return;
-    }
-
-    viewerBody.innerHTML = `<div>Ошибка подготовки HLS</div>`;
 }
-
-/*async function openInsvAsHls(item) {
-    showVideoPreparingModal("Готовлю видео для просмотра...");
-
-    const prepareResponse = await secureFetch(item.hlsPrepareUrl, {
-        method: "POST"
-    });
-
-    const state = await prepareResponse.json();
-
-    if (state.status === "READY") {
-        playHls(state.playlistUrl);
-        hideVideoPreparingModal();
-        return;
-    }
-
-    if (state.status === "RUNNING") {
-        await waitUntilHlsReady(item.hlsStatusUrl, state.playlistUrl);
-        hideVideoPreparingModal();
-        return;
-    }
-
-    hideVideoPreparingModal();
-    alert("Не удалось подготовить видео");
-}*/
-
-/*async function waitUntilHlsReady(statusUrl, playlistUrl) {
-    while (true) {
-        await sleep(2000);
-
-        const response = await secureFetch(statusUrl);
-        const status = await response.text();
-
-        if (status.includes("READY")) {
-            playHls(playlistUrl);
-            return;
-        }
-
-        if (status.includes("FAILED")) {
-            throw new Error("HLS conversion failed");
-        }
-    }
-}*/
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -754,33 +705,6 @@ async function openVideo(item) {
     openRegularVideo(item);
 }
 
-/*function playHls(playlistUrl) {
-    const video = document.getElementById("viewerVideo");
-
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = playlistUrl;
-        video.play();
-        return;
-    }
-
-    if (Hls.isSupported()) {
-        const hls = new Hls({
-            enableWorker: true,
-            lowLatencyMode: false
-        });
-
-        hls.loadSource(playlistUrl);
-        hls.attachMedia(video);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play();
-        });
-
-        return;
-    }
-
-    alert("Ваш браузер не поддерживает HLS");
-}*/
 function closePropertiesModal() {
     if (!propertiesModal) return;
 
@@ -899,62 +823,17 @@ function updatePublicShareButtons(permission) {
     }
 }
 
-/*function updatePublicShareButtons(permission) {
-    if (!PUBLIC_SHARE_MODE) return;
-
-    const canUpload = permission === "UPLOAD" || permission === "MANAGE";
-    const canDelete = permission === "MANAGE";
-    const canDownload = permission === "DOWNLOAD" || permission === "MANAGE";
-
-    if (newFolderBtn) newFolderBtn.style.display = "none";
-    if (folderListBtn) folderListBtn.style.display = "none";
-    if (totalCacheBtn) totalCacheBtn.style.display = "none";
-
-    if (selectAllBtn) selectAllBtn.style.display = "none";
-    if (clearSelectionBtn) clearSelectionBtn.style.display = "none";
-    if (bulkMoveBtn) bulkMoveBtn.style.display = "none";
-    if (bulkDownloadBtn) bulkDownloadBtn.style.display = "none";
-    if (bulkDeleteBtn) bulkDeleteBtn.style.display = "none";
-
-    if (fileInput) {
-        const uploadLabel = fileInput.closest(".upload-label");
-        if (uploadLabel) {
-            uploadLabel.style.display = canUpload ? "inline-flex" : "none";
-        }
-    }
-
-    document.querySelectorAll(".card-actions .danger").forEach(btn => {
-        btn.style.display = canDelete ? "inline-flex" : "none";
-    });
-
-    document.querySelectorAll(".card-actions a").forEach(link => {
-        link.style.display = canDownload ? "inline-flex" : "none";
-    });
-
-    if (downloadViewerBtn) {
-        downloadViewerBtn.style.display = canDownload ? "inline-flex" : "none";
-    }
-}*/
-
-/*async function loadFilesPrepared(path = "") {*/
 async function loadFilesPrepared(path = "", options = {}) {
-    /*if (PUBLIC_SHARE_MODE) {
-        return loadPublicShareFiles(path);
-    }*/
+
+    const sessionId = ++folderLoadSession;
+    const signal = resetFolderRequests();
     showLoadingGif();
     try {
         const showPrepareModal = options.showPrepareModal !== false;
-        thumbSession++; // 🔥 убиваем старые загрузки
-
-// остановка метаданных
-        METADATA_QUEUE.length = 0;
-        metadataRunning = 0;
 
 // сброс модалок
         hideThumbLoadingModal();
-        const sessionId = ++folderLoadSession;
         const pathForLoading = path || "";
-
 
         currentPath = pathForLoading;
         activeFolderPath = pathForLoading;
@@ -977,16 +856,18 @@ async function loadFilesPrepared(path = "", options = {}) {
         gallery.innerHTML = "";
         gallery.scrollTop = 0;
 
-        await loadSharedLinksIndex();
+        await loadSharedLinksIndex(signal);
+        if (sessionId !== folderLoadSession) return;
 
         currentPathEl.textContent = currentPath ? "/" + currentPath : "/";
         currentPathEl.classList.remove("path-expanded");
 
         if (PUBLIC_SHARE_MODE) {
-            const infoRes = await secureFetch(`/share/${SHARE_TOKEN}/info`);
+            const infoRes = await secureFetch(`/share/${SHARE_TOKEN}/info`, {signal});
 
             if (infoRes.ok) {
                 const info = await infoRes.json();
+                if (sessionId !== folderLoadSession) return;
                 window.PUBLIC_SHARE_PERMISSION = info.permission;
             }
         }
@@ -998,31 +879,25 @@ async function loadFilesPrepared(path = "", options = {}) {
         }
 
         const res = await secureFetch(
-            /*`/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}`,*/
+
             `/api/files/prepare-folder?path=${encodeURIComponent(pathForLoading)}&sortField=${encodeURIComponent(sortField)}&sortDirection=${encodeURIComponent(sortDirection)}&groupMode=${encodeURIComponent(groupingMode)}&periodEnabled=${periodFilterEnabled}&periodFrom=${encodeURIComponent(periodFromValue)}&periodTo=${encodeURIComponent(periodToValue)}`,
-            {method: "POST"}
+            {method: "POST", signal}
         );
 
-        const {jobId} = await res.json();
-
+        if (sessionId !== folderLoadSession) return;
         if (!res.ok) {
             gallery.innerHTML = `<div class="empty-folder-message">Ссылка недоступна или срок действия истёк</div>`;
             return;
         }
-        if (sessionId !== folderLoadSession) {
-            hideLoadingGif();
-            return;
-        }
+        const {jobId} = await res.json();
+        if (sessionId !== folderLoadSession) return;
         let ready = false;
 
         while (!ready) {
-            const statusRes = await secureFetch(`/api/files/prepare-status?jobId=${encodeURIComponent(jobId)}`);
+            const statusRes = await secureFetch(`/api/files/prepare-status?jobId=${encodeURIComponent(jobId)}`, {signal});
+            if (!statusRes.ok) throw new Error("Folder preparation failed");
             const status = await statusRes.json();
-            if (sessionId !== folderLoadSession) {
-                hideMetadataLoadingModal();
-                hideLoadingGif();
-                return;
-            }
+            if (sessionId !== folderLoadSession) return;
             currentPreparedTotal = status.total || 0;
             ready = status.ready;
             updateMetadataLoadingModal(
@@ -1037,24 +912,29 @@ async function loadFilesPrepared(path = "", options = {}) {
                 await new Promise(r => setTimeout(r, 300));
             }
         }
-        if (sessionId !== folderLoadSession) {
-            hideMetadataLoadingModal();
-
-            return;
-        }
+        if (sessionId !== folderLoadSession) return;
         hideMetadataLoadingModal();
 
         currentPreparedJobId = jobId;
 
         await loadPreparedPage(jobId);
 
+        if (sessionId !== folderLoadSession) return;
         if (PUBLIC_SHARE_MODE) {
             updatePublicShareButtons(window.PUBLIC_SHARE_PERMISSION);
         }
 
         updateNavButtons();
+    } catch (error) {
+        if (!signal.aborted && sessionId === folderLoadSession) {
+            console.error("Folder loading failed", error);
+            gallery.textContent = "Не удалось загрузить папку. Попробуйте ещё раз.";
+        }
     } finally {
-        hideLoadingGif();
+        if (sessionId === folderLoadSession) {
+            hideLoadingGif();
+            hideMetadataLoadingModal();
+        }
     }
 }
 
@@ -1075,21 +955,25 @@ function hideLoadingGif() {
 async function loadPreparedPage(jobId) {
     if (preparedAllLoaded || loading) return;
 
+    const sessionId = folderLoadSession;
+    const signal = folderLoadAbortController?.signal;
+    const isCurrent = () => sessionId === folderLoadSession && jobId === currentPreparedJobId;
+    if (!isCurrent()) return;
     loading = true;
 
     try {
         const res = await secureFetch(
-            `/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${PAGE_LIMIT}`
+            `/api/files/prepared-items?jobId=${encodeURIComponent(jobId)}&offset=${offset}&limit=${PAGE_LIMIT}`,
+            {signal}
         );
 
+        if (!isCurrent()) return;
         if (!res.ok) {
-            preparedAllLoaded = true;
-            hideFolderLoadingRing();
-            hideLoadingGif();
-            return;
+            throw new Error("Folder page failed");
         }
 
         const data = await res.json();
+        if (!isCurrent()) return;
         const items = data.items || [];
 
         estimatedTotalItems = data.total || 0;
@@ -1126,8 +1010,10 @@ async function loadPreparedPage(jobId) {
             );
         }
 
+    } catch (error) {
+        if (!signal?.aborted && isCurrent()) console.error("Page loading failed", error);
     } finally {
-        loading = false;
+        if (isCurrent()) loading = false;
     }
 }
 
@@ -1136,7 +1022,7 @@ async function openTotalCacheModal() {
     totalCacheModal.classList.remove("hidden");
 
     if (totalCacheTimer) {
-        clearInterval(totalCacheTimer);
+        stopPolling(totalCacheTimer);
     }
 
     // просто читаем текущий status
@@ -1150,7 +1036,7 @@ async function openTotalCacheModal() {
 
     // polling только если процесс уже идёт
     if (status.running || status.stage?.includes("Анализ")) {
-        totalCacheTimer = setInterval(updateTotalCacheStatus, 1000);
+        totalCacheTimer = startSequentialPolling(updateTotalCacheStatus, 1000);
     }
 }
 
@@ -1163,10 +1049,10 @@ async function showTotalCacheStatus() {
     await secureFetch("/api/files/total-cache/status");
 
     if (totalCacheTimer) {
-        clearInterval(totalCacheTimer);
+        stopPolling(totalCacheTimer);
     }
 
-    totalCacheTimer = setInterval(updateTotalCacheStatus, 1000);
+    totalCacheTimer = startSequentialPolling(updateTotalCacheStatus, 1000);
 }
 
 async function pauseTotalCache() {
@@ -1179,7 +1065,7 @@ async function pauseTotalCache() {
 
 async function cancelTotalCache() {
     if (totalCacheTimer) {
-        clearInterval(totalCacheTimer);
+        stopPolling(totalCacheTimer);
         totalCacheTimer = null;
     }
 
@@ -1201,12 +1087,10 @@ async function resumeTotalCache() {
 
 function startTotalCachePolling() {
     if (totalCacheTimer) {
-        clearInterval(totalCacheTimer);
+        stopPolling(totalCacheTimer);
     }
 
-    updateTotalCacheStatus();
-
-    totalCacheTimer = setInterval(updateTotalCacheStatus, 1000);
+    totalCacheTimer = startSequentialPolling(updateTotalCacheStatus, 1000);
 }
 
 function renderTotalCacheStatus(status) {
@@ -1240,14 +1124,15 @@ function renderTotalCacheStatus(status) {
     resumeTotalCacheBtn.disabled = !!status.running;
 }
 
-async function updateTotalCacheStatus() {
+async function updateTotalCacheStatus(signal) {
 
-    const response = await secureFetch("/api/files/total-cache/raw-status");
+    const response = await secureFetch("/api/files/total-cache/raw-status", {signal});
 
     if (!response.ok) return;
 
     const status = await response.json();
 
+    if (signal?.aborted) return;
     renderTotalCacheStatus(status);
 
     // остановить polling если всё завершилось
@@ -1255,7 +1140,7 @@ async function updateTotalCacheStatus() {
         !status.running
         && !status.stage?.includes("Анализ")
     ) {
-        clearInterval(totalCacheTimer);
+        stopPolling(totalCacheTimer);
         totalCacheTimer = null;
     }
 }
@@ -1307,17 +1192,10 @@ function closeRenameModal() {
     renameInput.value = "";
 }
 
-/*groupingBtn.onclick = () => {
-    groupingModal.classList.remove("hidden");
-};*/
 groupingBtn?.addEventListener("click", () => {
     groupingModal?.classList.remove("hidden");
 });
 
-
-/*closeGroupingBtn.onclick = () => {
-    groupingModal.classList.add("hidden");
-};*/
 closeGroupingBtn?.addEventListener("click", () => {
     groupingModal?.classList.add("hidden");
 });
@@ -1464,7 +1342,7 @@ async function fetchMetadataBulk(paths) {
     const data = await response.json();
 
     Object.entries(data).forEach(([path, meta]) => {
-        const card = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
+        const card = cardByPath.get(path);
         if (!card || !meta) return;
 
         const metaEl = card.querySelector(".meta");
@@ -1487,7 +1365,7 @@ async function fetchMetadataBulk(paths) {
 }
 
 function applyCardMetadata(path, meta) {
-    const card = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
+    const card = cardByPath.get(path);
     if (!card || !meta) return;
 
     const metaEl = card.querySelector(".meta");
@@ -1518,74 +1396,59 @@ function applyCardMetadata(path, meta) {
     }
 }
 
-async function processMetadataQueue() {
-    if (metadataRunning >= MAX_METADATA_REQUESTS) return;
-    if (!METADATA_QUEUE.length) return;
-
-    const batch = METADATA_QUEUE.splice(0, METADATA_BATCH_SIZE);
-    metadataRunning++;
-
-    try {
-        const response = await secureFetch("/api/files/metadata/card-bulk", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(batch)
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-
-            Object.entries(data).forEach(([path, meta]) => {
-                metadataCache.set(path, meta);
-                applyCardMetadata(path, meta);
-            });
-
-            metadataProcessed += batch.length;
-
-            if (metadataProcessed >= metadataTotal && METADATA_QUEUE.length === 0) {
-                metadataTotal = 0;
-                metadataProcessed = 0;
+async function processMetadataQueue(context = metadataContext) {
+    while (context === metadataContext && context.running < MAX_METADATA_REQUESTS && METADATA_QUEUE.length) {
+        const batch = METADATA_QUEUE.splice(0, METADATA_BATCH_SIZE);
+        context.running++;
+        (async () => {
+            try {
+                const response = await secureFetch("/api/files/metadata/card-bulk", {
+                    method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(batch), signal: context.controller.signal
+                });
+                if (!response.ok) throw new Error("Metadata request failed");
+                const data = await response.json();
+                if (context !== metadataContext) return;
+                for (const path of batch) {
+                    if (data[path]) {
+                        metadataCache.set(path, data[path]);
+                        metadataLoaded.add(path);
+                        applyCardMetadata(path, data[path]);
+                    }
+                    metadataPending.delete(path);
+                }
+                metadataProcessed += batch.length;
+            } catch (error) {
+                if (context !== metadataContext || context.controller.signal.aborted) return;
+                for (const path of batch) {
+                    metadataPending.delete(path);
+                    const attempts = metadataRetries.get(path) || 0;
+                    if (attempts < 2) {
+                        metadataRetries.set(path, attempts + 1);
+                        metadataPending.add(path);
+                        METADATA_QUEUE.push(path);
+                    }
+                }
+                console.warn("Metadata request failed", error);
+            } finally {
+                context.running--;
+                if (context === metadataContext) processMetadataQueue(context);
             }
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 10));
-
-    } catch (e) {
-        console.error("Metadata queue failed", e);
-    } finally {
-        metadataRunning--;
-        processMetadataQueue();
+        })();
     }
 }
 
 function enqueueMetadata(paths) {
-    const newPaths = paths.filter(path =>
-        path &&
-        !metadataLoaded.has(path + "_queued") &&
-        !metadataCache.has(path)
-    );
-
-    if (!newPaths.length) return;
-
-    for (const path of newPaths) {
-        metadataLoaded.add(path + "_queued");
-    }
-
-    metadataTotal += newPaths.length;
-
-    for (const path of newPaths) {
+    for (const path of paths) {
         if (!path) continue;
-
         if (metadataCache.has(path)) {
             applyCardMetadata(path, metadataCache.get(path));
-            continue;
-        }
-
-        if (!METADATA_QUEUE.includes(path)) {
+        } else if (!metadataLoaded.has(path) && !metadataPending.has(path)) {
+            metadataPending.add(path);
             METADATA_QUEUE.push(path);
+            metadataTotal++;
         }
     }
-
     processMetadataQueue();
 }
 
@@ -1624,7 +1487,6 @@ function openDownloadFormatModal(item, previewId = null) {
 
     downloadFormatModal.classList.remove("hidden");
 }
-
 
 function closeDownloadFormatModal() {
     downloadFormatModal.classList.add("hidden");
@@ -1705,9 +1567,9 @@ function sortItems(items) {
         }
 
         if (sortField === "lastModified") {
-            /*result = (a.lastModified || 0) - (b.lastModified || 0);*/
+
             result = (a.createdAt || a.lastModified || 0) - (b.createdAt || b.lastModified || 0);
-            /* result = (a.createdAt || 0) - (b.createdAt || 0);*/
+
         }
 
         if (sortField === "size") {
@@ -1804,7 +1666,7 @@ async function preparePreviewVideo(item) {
     previewBuildModal.classList.remove("hidden");
 
     previewBuildSize.textContent = "Обработано: 0 MB";
-    /*previewBuildText.textContent = "Создание варианта просмотра...";*/
+
     previewBuildTime.textContent = "Это может занять время для длинных видео";
 
     const form = new URLSearchParams();
@@ -1827,51 +1689,31 @@ async function preparePreviewVideo(item) {
     const data = await startResponse.json();
     currentPreviewId = data.previewId;
 
-    return new Promise((resolve, reject) => {
-        previewStatusTimer = setInterval(async () => {
-            const statusResponse = await secureFetch(`/api/files/preview/status?previewId=${encodeURIComponent(currentPreviewId)}`);
+    try {
+        return await waitForPreview(currentPreviewId, 1000, status => {
+            previewBuildSize.textContent = `Обработано: ${formatFileSize(status.size || 0)}`;
+        });
+    } finally {
+        previewBuildModal.classList.add("hidden");
+    }
 
-            if (!statusResponse.ok) {
-                clearInterval(previewStatusTimer);
-                previewBuildModal.classList.add("hidden");
-                reject(new Error("Preview status error"));
-                return;
-            }
-
-            const status = await statusResponse.json();
-
-            if (status.progress < 0) {
-                clearInterval(previewStatusTimer);
-                previewBuildModal.classList.add("hidden");
-                reject(new Error("Preview creation failed"));
-                return;
-            }
-
-
-            previewBuildSize.textContent =
-                `Обработано: ${formatFileSize(status.size || 0)}`;
-            if (status.ready) {
-                clearInterval(previewStatusTimer);
-                previewBuildModal.classList.add("hidden");
-
-                resolve(`/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`);
-            }
-        }, 1000);
-    });
 }
 
-async function loadSharedLinksIndex() {
+async function loadSharedLinksIndex(signal) {
+    const session = folderLoadSession;
     if (PUBLIC_SHARE_MODE) return;
 
     try {
-        const response = await secureFetch("/api/share");
+        const response = await secureFetch("/api/share", {signal});
 
+        if (session !== folderLoadSession || signal?.aborted) return;
         if (!response.ok) {
             sharedLinksByPath = new Map();
             return;
         }
 
         const links = await response.json();
+        if (session !== folderLoadSession || signal?.aborted) return;
 
         sharedLinksByPath = new Map();
 
@@ -1886,6 +1728,7 @@ async function loadSharedLinksIndex() {
         }
 
     } catch (e) {
+        if (session !== folderLoadSession || signal?.aborted) return;
         console.warn("Share index load failed", e);
         sharedLinksByPath = new Map();
     }
@@ -2163,23 +2006,6 @@ function confirmMove() {
     openMoveConfirmModalSafe();
 }
 
-/*function confirmMove() {
-    if (!selectedMovePath && selectedMovePath !== "") {
-        return;
-    }
-
-    const targetText = selectedMovePath ? "/" + selectedMovePath : "/";
-
-    if (bulkMoveMode) {
-        bulkMoveConfirmText.textContent =
-            `Переместить ${selectedItems.size} выбранных объектов в папку ${targetText}?`;
-    } else {
-        bulkMoveConfirmText.textContent =
-            `Переместить "${moveSourceName}" в папку ${targetText}?`;
-    }
-
-    bulkMoveConfirmModal.classList.remove("hidden");
-}*/
 async function executeSingleMove() {
     showLoadingGif();
 
@@ -2213,48 +2039,6 @@ async function executeSingleMove() {
         hideLoadingGif();
     }
 }
-
-/*async function confirmMove() {
-    showLoadingGif();
-
-    try {
-    if (bulkMoveMode) {
-        const count = selectedItems.size;
-        const targetText = selectedMovePath ? "/" + selectedMovePath : "/";
-
-        bulkMoveConfirmText.textContent =
-            `Переместить ${count} выбранных объектов в папку ${targetText}?`;
-
-        bulkMoveConfirmModal.classList.remove("hidden");
-        return;
-    }
-    if (moveSourcePath == null) return;
-
-    const formData = new URLSearchParams();
-    formData.append("sourcePath", moveSourcePath);
-    formData.append("targetPath", selectedMovePath);
-
-    const response = await secureFetch("/api/files/move", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: formData
-    });
-
-    if (!response.ok) {
-        const text = await response.text();
-        alert("Не удалось переместить:\n" + text);
-        return;
-    }
-
-    closeMoveModal();
-    await loadFiles(currentPath);
-    } finally {
-
-        hideLoadingGif();
-    }
-}*/
 
 async function executeBulkMove() {
     showLoadingGif();
@@ -2312,6 +2096,7 @@ transferList.addEventListener("click", (e) => {
         if (!task) return;
 
         // помечаем как отменённую
+        task.controller?.abort();
         task.status = "cancelled";
 
         // убираем из очередей
@@ -2340,9 +2125,12 @@ transferList.addEventListener("click", (e) => {
         // если задача в очереди — ставим на паузу
         if (task.status === "queued") {
             task.status = "paused";
+            task.controller?.abort();
 
             const index = uploadQueue.findIndex(t => t.id === id);
             if (index >= 0) uploadQueue.splice(index, 1);
+            const downloadIndex = downloadQueue.findIndex(t => t.id === id);
+            if (downloadIndex >= 0) downloadQueue.splice(downloadIndex, 1);
 
             saveTransferTasks();
             renderTransferList();
@@ -2352,6 +2140,7 @@ transferList.addEventListener("click", (e) => {
         // если задача уже грузится — ставим на паузу
         if (task.status === "uploading") {
             task.status = "paused";
+            task.controller?.abort();
 
             saveTransferTasks();
             renderTransferList();
@@ -2369,19 +2158,17 @@ transferList.addEventListener("click", (e) => {
                 uploadQueue.push(task);
             }
 
+            if (task.kind === "download" && !downloadQueue.includes(task)) downloadQueue.push(task);
             saveTransferTasks();
             renderTransferList();
             processUploadQueue();
+            processDownloadQueue();
             return;
         }
     }
 });
-/*totalCacheBtn.onclick = openTotalCacheModal;*/
-totalCacheBtn?.addEventListener("click", openTotalCacheModal);
 
-/*statusTotalCacheBtn.onclick = showTotalCacheStatus;
-pauseTotalCacheBtn.onclick = pauseTotalCache;
-resumeTotalCacheBtn.onclick = resumeTotalCache;*/
+totalCacheBtn?.addEventListener("click", openTotalCacheModal);
 
 statusTotalCacheBtn?.addEventListener("click", showTotalCacheStatus);
 pauseTotalCacheBtn?.addEventListener("click", pauseTotalCache);
@@ -2390,7 +2177,7 @@ resumeTotalCacheBtn?.addEventListener("click", resumeTotalCache);
 // СКРЫТЬ — только закрывает модалку, процессы продолжаются
 closeTotalCacheModalBtn.onclick = () => {
     if (totalCacheTimer) {
-        clearInterval(totalCacheTimer);
+        stopPolling(totalCacheTimer);
         totalCacheTimer = null;
     }
 
@@ -2400,7 +2187,7 @@ closeTotalCacheModalBtn.onclick = () => {
 // ✕ — аварийно останавливает кеширование + анализ и закрывает модалку
 abortTotalCacheBtn.onclick = () => {
     if (totalCacheTimer) {
-        clearInterval(totalCacheTimer);
+        stopPolling(totalCacheTimer);
         totalCacheTimer = null;
     }
 
@@ -2473,6 +2260,7 @@ resumeAllTransfersBtn.onclick = () => {
         for (const task of transferTasks.values()) {
             if (task.status === "uploading" || task.status === "queued") {
                 task.status = "paused";
+                task.controller?.abort();
             }
         }
 
@@ -2514,7 +2302,6 @@ const uploadQueue = [];
 const downloadQueue = [];
 const transferTasks = new Map();
 const TRANSFERS_STORAGE_KEY = "gallery_transfer_tasks_v1";
-
 
 let activeUploads = 0;
 let activeDownloads = 0;
@@ -2567,22 +2354,6 @@ const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
 
 const gallery = document.getElementById("gallery");
 
-async function handleLoadMoreScroll() {
-    if (!currentPreparedJobId || preparedAllLoaded || loading) return;
-
-    const galleryBottom =
-        gallery.scrollTop + gallery.clientHeight >= gallery.scrollHeight - 1200;
-
-    const pageBottom =
-        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1200;
-
-    if (galleryBottom || pageBottom) {
-        await loadPreparedPage(currentPreparedJobId);
-    }
-}
-
-window.addEventListener("scroll", handleLoadMoreScroll);
-gallery.addEventListener("scroll", handleLoadMoreScroll);
 const currentPathEl = document.getElementById("currentPath");
 currentPathEl.onclick = () => {
     currentPathEl.classList.toggle("path-expanded");
@@ -2626,7 +2397,7 @@ function updateViewerSelectButton() {
 }
 
 function syncSelectionToGallery(path, selected) {
-    const card = document.querySelector(`.card[data-path="${CSS.escape(path)}"]`);
+    const card = cardByPath.get(path);
     if (!card) return;
 
     const checkbox = card.querySelector(".item-checkbox");
@@ -2639,6 +2410,10 @@ function syncSelectionToGallery(path, selected) {
 }
 
 function saveTransferTasks() {
+    if (transferSaveTimer !== null) {
+        clearTimeout(transferSaveTimer);
+        transferSaveTimer = null;
+    }
     const plain = Array.from(transferTasks.values()).map(task => ({
         id: task.id,
         kind: task.kind,
@@ -2668,7 +2443,7 @@ function loadTransferTasksFromStorage() {
     }
 }
 
-async function completeUploadSession(uploadId) {
+async function completeUploadSession(uploadId, signal) {
     const form = new URLSearchParams();
     form.append("uploadId", uploadId);
 
@@ -2677,7 +2452,7 @@ async function completeUploadSession(uploadId) {
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
         },
-        body: form
+        body: form, signal
     });
 
     if (!response.ok) {
@@ -2686,7 +2461,7 @@ async function completeUploadSession(uploadId) {
     }
 }
 
-async function initUploadSession(file, targetPath, chunkSize) {
+async function initUploadSession(file, targetPath, chunkSize, signal) {
     const form = new URLSearchParams();
     form.append("fileName", file.name);
     form.append("fileSize", file.size);
@@ -2699,7 +2474,7 @@ async function initUploadSession(file, targetPath, chunkSize) {
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
         },
-        body: form
+        body: form, signal
     });
 
     if (!response.ok) {
@@ -2709,9 +2484,9 @@ async function initUploadSession(file, targetPath, chunkSize) {
     return await response.json();
 }
 
-async function getUploadStatus(uploadId) {
+async function getUploadStatus(uploadId, signal) {
     const response = await secureFetch(
-        `/api/files/upload/status?uploadId=${encodeURIComponent(uploadId)}`
+        `/api/files/upload/status?uploadId=${encodeURIComponent(uploadId)}`, {signal}
     );
 
     if (!response.ok) {
@@ -2764,7 +2539,7 @@ function createTransferItem(name) {
 
 function addUpload(file) {
     const task = {
-        id: `upload_${file.name}_${file.size}_${file.lastModified}`,
+        id: `upload_${currentPath}_${file.name}_${file.size}_${file.lastModified}`,
         kind: "upload",
         file,
         name: file.name,
@@ -2802,6 +2577,8 @@ async function processUploadQueue() {
             continue;
         }
 
+        if (task.status === "done") continue;
+        if (task.running) { uploadQueue.push(task); break; }
         runUploadTask(task);
     }
 }
@@ -2811,6 +2588,8 @@ async function runUploadTask(task) {
 
     activeUploads++;
     task.running = true;
+    const controller = new AbortController();
+    task.controller = controller;
     task.status = "uploading";
 
     saveTransferTasks();
@@ -2821,11 +2600,11 @@ async function runUploadTask(task) {
     try {
         await uploadFileResumableManaged(task, isPaused);
 
-        if (currentPath === targetPath) {
+        if (task.status === "done" && currentPath === targetPath) {
             await loadFiles(currentPath);
         }
     } catch (e) {
-        if (e.message !== "Upload cancelled") {
+        if (!controller.signal.aborted && e.message !== "Upload cancelled") {
             console.error("Upload error", e);
             task.status = "error";
             saveTransferTasks();
@@ -2833,6 +2612,7 @@ async function runUploadTask(task) {
         }
     } finally {
         task.running = false;
+        delete task.controller;
         activeUploads--;
 
         saveTransferTasks();
@@ -2847,22 +2627,14 @@ async function uploadFileResumableManaged(task, isPaused) {
     const targetPath = task.targetPath;
     const CHUNK_SIZE = 1024 * 1024;
 
-    /*const initData = await initUploadSession(file, targetPath, CHUNK_SIZE);
-
-    const uploadId = initData.uploadId;
-    task.uploadId = uploadId;
-    task.totalChunks = initData.totalChunks;
-
-    const totalChunks = initData.totalChunks;
-    const uploadedChunks = new Set(initData.uploadedChunks || []);*/
     let initData = null;
 
     if (task.uploadId) {
-        initData = await getUploadStatus(task.uploadId);
+        initData = await getUploadStatus(task.uploadId, task.controller?.signal);
     }
 
     if (!initData) {
-        initData = await initUploadSession(file, targetPath, CHUNK_SIZE);
+        initData = await initUploadSession(file, targetPath, CHUNK_SIZE, task.controller?.signal);
         task.uploadId = initData.uploadId;
     }
 
@@ -2874,31 +2646,16 @@ async function uploadFileResumableManaged(task, isPaused) {
 
     saveTransferTasks();
     for (let i = 0; i < totalChunks; i++) {
+        if (cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id)) {
+            throw new Error("Upload cancelled");
+        }
+        if (isPaused()) return;
         if (uploadedChunks.has(i)) {
             const percent = Math.round(((i + 1) / totalChunks) * 100);
             task.progress = percent;
             task.status = "uploading";
-            saveTransferTasks();
-            updateTopProgress();
+            queueTransferProgress(task);
             continue;
-        }
-        if (cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id)) {
-            throw new Error("Upload cancelled");
-        }
-        /*if (isPaused()) {
-            return;
-        }*/
-        if (isPaused()) {
-            task.status = "paused";
-            saveTransferTasks();
-            return;
-        }
-
-// 🔥 ВАЖНО — пауза ДО отправки чанка
-        if (isPaused()) {
-            while (isPaused()) {
-                await new Promise(r => setTimeout(r, 200));
-            }
         }
         const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
 
@@ -2907,7 +2664,7 @@ async function uploadFileResumableManaged(task, isPaused) {
         formData.append("uploadId", uploadId);
         formData.append("chunkIndex", i);
 
-        await sendChunk(formData);
+        await sendChunk(formData, task.controller?.signal);
         if (!task.uploadedChunks) {
             task.uploadedChunks = [];
         }
@@ -2923,12 +2680,15 @@ async function uploadFileResumableManaged(task, isPaused) {
             task.status = "uploading";
         }
 
-        saveTransferTasks();
-        updateTransferTaskUI(task);
+        queueTransferProgress(task);
 
     }
 
-    await completeUploadSession(uploadId);
+    if (cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id)) {
+        throw new Error("Upload cancelled");
+    }
+    if (isPaused()) return;
+    await completeUploadSession(uploadId, task.controller?.signal);
 
     task.progress = 100;
     task.status = "done";
@@ -2941,6 +2701,7 @@ function removeTransferTask(id) {
     const task = transferTasks.get(id);
     if (!task) return;
 
+    task.controller?.abort();
     task.status = "cancelled";
 
     const uploadIndex = uploadQueue.findIndex(t => t.id === id);
@@ -2960,6 +2721,7 @@ function removeTransferTask(id) {
 }
 
 function getStatusText(status) {
+    if (status === "browser") return "Передано браузеру";
     switch (status) {
         case "queued":
             return "в очереди";
@@ -3002,7 +2764,7 @@ function renderTransferList() {
             <div class="transfer-row">
                <div class="transfer-name"><span>${escapeHtml(task.name)}</span></div>
                 <div class="transfer-status">${statusText}</div>
-                <button class="transfer-remove" data-id="${task.id}">✕</button>
+                <button class="transfer-remove" data-id="${escapeHtml(task.id)}">✕</button>
             </div>
 
             <div class="progress">
@@ -3015,9 +2777,9 @@ function renderTransferList() {
     </div>
 
     ${
-            task.status === "done" || task.status === "error"
+            task.status === "done" || task.status === "browser" || task.status === "error"
                 ? ""
-                : `<button class="control ${task.status === "paused" ? "paused" : "playing"}" data-id="${task.id}">
+                : `<button class="control ${task.status === "paused" ? "paused" : "playing"}" data-id="${escapeHtml(task.id)}">
                     ${task.status === "paused" ? "⏸" : "▶"}
                </button>`
         }
@@ -3073,7 +2835,12 @@ async function processDownloadQueue() {
     if (!downloadQueue.length) return;
 
     const task = downloadQueue.shift();
+    if (task.status === "paused" || task.status === "cancelled" || !transferTasks.has(task.id)) {
+        return processDownloadQueue();
+    }
+    if (task.running) { downloadQueue.push(task); return; }
     activeDownloads++;
+    task.running = true;
 
     task.status = "uploading";
     saveTransferTasks();
@@ -3090,16 +2857,17 @@ async function processDownloadQueue() {
         }
     }
 
+    task.running = false;
     activeDownloads--;
     processDownloadQueue();
 }
 
-/*document.getElementById("clearTransfersBtn").onclick = async () => {*/
 document.getElementById("clearTransfersBtn")?.addEventListener("click", async () => {
     cancelAllTransfers = true;
 
     uploadQueue.length = 0;
     downloadQueue.length = 0;
+    for (const task of transferTasks.values()) task.controller?.abort();
     transferTasks.clear();
 
     renderTransferList();
@@ -3117,7 +2885,7 @@ document.getElementById("clearTransfersBtn")?.addEventListener("click", async ()
     setTimeout(() => {
         cancelAllTransfers = false;
     }, 300);
-    /*};*/
+
 });
 
 function applyMarqueeIfNeeded() {
@@ -3147,8 +2915,8 @@ function restoreTransferTasks() {
         }
 
         if (task.kind === "download") {
-            if (task.status !== "done") {
-                task.status = "queued";
+            if (task.status !== "done" && task.status !== "browser") {
+                task.status = "paused";
             }
         }
 
@@ -3160,79 +2928,59 @@ function restoreTransferTasks() {
 
 async function downloadResumableManaged(task) {
     const item = task.item;
-    const key = "download_" + item.name;
-
-    let start = Number(localStorage.getItem(key)) || 0;
-
-    const response = await secureFetch(item.downloadUrl, {
-        headers: {"Range": `bytes=${start}-`}
-    });
-
-    if (!response.ok && response.status !== 206) {
-        throw new Error("Download failed");
-    }
-
-    if (!response.body) {
-        throw new Error("ReadableStream is not available");
-    }
-
-    const reader = response.body.getReader();
-    const chunks = [];
-    let received = start;
-
-    while (true) {
-
-        if (cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id)) {
-            throw new Error("Download cancelled");
-        }
-
-        const {done, value} = await reader.read();
-        if (done) break;
-
-        chunks.push(value);
-        received += value.length;
-
-        localStorage.setItem(key, received);
-
-        const contentLength = Number(response.headers.get("Content-Length") || 0);
-        const total = contentLength + start;
-        const percent = total > 0 ? Math.round((received / total) * 100) : 0;
-
-        task.progress = percent;
-        task.status = "uploading";
+    const cancelled = () => cancelAllTransfers || task.status === "cancelled" || !transferTasks.has(task.id);
+    if (cancelled()) throw new Error("Download cancelled");
+    if (task.status === "paused") return;
+    // Large downloads are streamed to disk by the browser, without a second fetch or Blob.
+    if (item.type === "video" || !Number.isFinite(item.size) || item.size > 50 * 1024 * 1024) {
+        triggerBrowserDownload(shareApi(item.downloadUrl), item.name);
+        task.status = "browser";
         saveTransferTasks();
         renderTransferList();
-        updateTopProgress();
+        return;
     }
-
-    if (item.type === "video" || (item.size && item.size > 50 * 1024 * 1024)) {
-        const link = document.createElement("a");
-        link.href = item.downloadUrl;
-        link.download = item.name;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    } else {
-        const blob = new Blob(chunks);
-        const objectUrl = URL.createObjectURL(blob);
-
-        const link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = item.name;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-
+    const controller = new AbortController();
+    task.controller = controller;
+    let reader;
+    try {
+        // Restart from zero: no persisted file bytes exist to support Range resume.
+        const response = await secureFetch(item.downloadUrl, {signal: controller.signal});
+        if (!response.ok || response.status === 206) throw new Error("Download failed");
+        if (!response.body) throw new Error("ReadableStream is not available");
+        reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+        const total = Number(response.headers.get("Content-Length")) || item.size;
+        while (true) {
+            if (cancelled()) throw new Error("Download cancelled");
+            const {done, value} = await reader.read();
+            if (cancelled()) throw new Error("Download cancelled");
+            if (done) break;
+            received += value.byteLength;
+            if (received > 50 * 1024 * 1024) throw new Error("File is too large for in-app download");
+            chunks.push(value);
+            task.progress = total > 0 ? Math.min(100, Math.round(received / total * 100)) : 0;
+            queueTransferProgress(task);
+        }
+        const objectUrl = URL.createObjectURL(new Blob(chunks));
+        triggerBrowserDownload(objectUrl, item.name);
         setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+        task.progress = 100;
+        task.status = "done";
+        saveTransferTasks();
+        renderTransferList();
+    } catch (error) {
+        if (task.status === "paused" || (task.status === "queued" && controller.signal.aborted)) return;
+        if (cancelled() || controller.signal.aborted) throw new Error("Download cancelled");
+        throw error;
+    } finally {
+        controller.abort();
+        if (reader) {
+            await reader.cancel().catch(() => {});
+            reader.releaseLock();
+        }
+        delete task.controller;
     }
-
-    task.progress = 100;
-    task.status = "done";
-    saveTransferTasks();
-    renderTransferList();
-    updateTopProgress();
-
-    localStorage.removeItem(key);
 }
 
 function setTopbarCollapsed(collapsed) {
@@ -3329,6 +3077,7 @@ function renderFolderListTree(node) {
 }
 
 async function cleanupCurrentPreview() {
+    previewWaitController?.abort();
     if (currentPreviewId) {
         const id = currentPreviewId;
         currentPreviewId = null;
@@ -3342,10 +3091,6 @@ async function cleanupCurrentPreview() {
         }
     }
 
-    if (previewStatusTimer) {
-        clearInterval(previewStatusTimer);
-        previewStatusTimer = null;
-    }
 }
 
 async function openRenamePreview(item) {
@@ -3368,36 +3113,8 @@ async function openRenamePreview(item) {
     const data = await resp.json();
     currentPreviewId = data.previewId;
 
-    return new Promise((resolve, reject) => {
-        previewStatusTimer = setInterval(async () => {
-            const statusResponse = await secureFetch(
-                `/api/files/preview/status?previewId=${encodeURIComponent(currentPreviewId)}`
-            );
+    return waitForPreview(currentPreviewId, 500);
 
-            if (!statusResponse.ok) {
-                clearInterval(previewStatusTimer);
-                previewStatusTimer = null;
-                reject(new Error("Ошибка статуса preview"));
-                return;
-            }
-
-            const status = await statusResponse.json();
-
-            if (status.progress < 0) {
-                clearInterval(previewStatusTimer);
-                previewStatusTimer = null;
-                reject(new Error("Ошибка подготовки preview"));
-                return;
-            }
-
-            if (status.ready) {
-                clearInterval(previewStatusTimer);
-                previewStatusTimer = null;
-
-                resolve(`/api/files/preview/file?previewId=${encodeURIComponent(currentPreviewId)}`);
-            }
-        }, 500);
-    });
 }
 
 function expandAllTreeNodes(container) {
@@ -3517,8 +3234,9 @@ function enablePreviewPan(img) {
 
         startDrag(e.clientX, e.clientY);
 
-        window.addEventListener("mousemove", moveHandler);
-        window.addEventListener("mouseup", upHandler);
+        const signal = folderLoadAbortController?.signal;
+        window.addEventListener("mousemove", moveHandler, {signal});
+        window.addEventListener("mouseup", upHandler, {signal});
     });
 
     img.addEventListener("touchstart", (e) => {
@@ -3554,37 +3272,31 @@ function enablePreviewPan(img) {
 }
 
 function appendItems(items) {
-    if (activeFolderPath !== currentPath) return;
-    if (!items || items.length === 0) return;
-
+    if (activeFolderPath !== currentPath || !items?.length) return;
+    const session = folderLoadSession;
     currentItems.push(...items);
-
-    viewerItems = currentItems.filter(item =>
-        !item.directory && (item.type === "image" || item.type === "video")
-    );
-
+    viewerItems.push(...items.filter(item => !item.directory && (item.type === "image" || item.type === "video")));
     const fragment = document.createDocumentFragment();
-
+    const cards = [];
+    const images = [];
     for (const item of items) {
-        fragment.appendChild(createCard(item));
+        const card = createCard(item);
+        cardByPath.set(item.relativePath, card);
+        cards.push(card);
+        card.querySelectorAll("img.lazy-thumb[data-src]").forEach(img => {
+            images.push(img);
+            img.dataset.panEnabled = "1";
+            enablePreviewPan(img);
+        });
+        fragment.appendChild(card);
     }
-
     gallery.appendChild(fragment);
     requestAnimationFrame(() => {
-        initLazyThumbs();
-        initLazyMetadata();
-
-        gallery.querySelectorAll("img.image-thumb, img.video-thumb-img").forEach(img => {
-            if (!img.dataset.panEnabled) {
-                img.dataset.panEnabled = "1";
-                enablePreviewPan(img);
-            }
-        });
-
+        if (session !== folderLoadSession) return;
+        initLazyThumbs(images);
+        initLazyMetadata(cards);
         updateBulkButtons();
-        if (PUBLIC_SHARE_MODE) {
-            updatePublicShareButtons(window.PUBLIC_SHARE_PERMISSION);
-        }
+        if (PUBLIC_SHARE_MODE) updatePublicShareButtons(window.PUBLIC_SHARE_PERMISSION);
     });
 }
 
@@ -3606,7 +3318,6 @@ function showMetadataLoadingModal() {
 function updateMetadataLoadingModal(progress, processed, total, stage = "Подготовка папки") {
     metadataLoadingBar.style.width = `${progress || 0}%`;
     metadataLoadingCount.textContent = `${processed || 0} из ${total || 0} файлов`;
-    //metadataLoadingText.textContent = `Подготовка папки: ${progress || 0}%`;
     if (metadataLoadingTitle) {
         metadataLoadingTitle.textContent = stage;
     }
@@ -3792,7 +3503,6 @@ function loadVisibleMetadata() {
 
             if (!metadataLoaded.has(path)) {
                 visible.push(path);
-                metadataLoaded.add(path);
             }
         }
     });
@@ -3845,10 +3555,6 @@ function createCard(item) {
     const thumb = document.createElement("div");
     thumb.className = "thumb";
 
-    /*if (item.directory) {
-        thumb.innerHTML = `<div class="folder-thumb">📁</div>`;
-        thumb.addEventListener("click", () => loadFiles(item.relativePath));
-    }*/
     if (item.directory) {
         thumb.innerHTML = `<div class="folder-thumb">📁</div>`;
 
@@ -3864,7 +3570,7 @@ function createCard(item) {
     <img
         src="/image-placeholder.png"
         loading="lazy"
-        
+
         data-src="${item.thumbnailUrl || buildImageThumbnailUrl(item.relativePath)}"
         alt="${escapeHtml(item.name)}"
         class="lazy-thumb image-thumb"
@@ -3875,7 +3581,7 @@ function createCard(item) {
         thumb.innerHTML = `
     <div class="video-thumb-wrap">
         <img
-            src="/video-placeholder.png" 
+            src="/video-placeholder.png"
             loading="lazy"
             data-src="${buildVideoThumbnailUrl(item.relativePath)}"
             alt="${escapeHtml(item.name)}"
@@ -3892,10 +3598,6 @@ function createCard(item) {
     const body = document.createElement("div");
     body.className = "card-body";
 
-    /*let sizeText;
-    if (item.directory) {
-        sizeText = "Папка";
-    }*/
     let sizeText;
 
     if (item.directory) {
@@ -3915,8 +3617,7 @@ function createCard(item) {
     } else {
         sizeText = formatBytes(item.size);
     }
-    /*const dateText = "";*/
-    /*const dateText = item.createdAt*/
+
     const dateText = !item.directory && item.createdAt
         ? " · " + formatDateTime(item.createdAt)
         : "";
@@ -3931,7 +3632,7 @@ function createCard(item) {
         </label>
     </div>
 `;
-    /*body.querySelector(".select-line").appendChild(selectBox);*/
+
     card.appendChild(selectBox);
     selectBox.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -3950,16 +3651,6 @@ function createCard(item) {
         updateBulkButtons();
     });
 
-    /*const line = body.querySelector(".select-line");
-
-    line.addEventListener("click", (e) => {
-        e.stopPropagation();
-
-        if (e.target === selectBox) return;
-
-        selectBox.checked = !selectBox.checked;
-        selectBox.dispatchEvent(new Event("click"));
-    });*/
     const actions = document.createElement("div");
     actions.className = "card-actions";
 
@@ -3970,8 +3661,7 @@ function createCard(item) {
         !PUBLIC_SHARE_MODE;
 
     if (item.directory) {
-        /*const openBtn = document.createElement("button");
-        openBtn.textContent = "Открыть";*/
+
         const openBtn = document.createElement("button");
         openBtn.className = "card-open-btn";
         openBtn.title = "Открыть";
@@ -3995,16 +3685,13 @@ function createCard(item) {
 
             loadFiles(item.relativePath);
         };
-        /*actions.appendChild(openBtn);*/
+
         card.appendChild(openBtn);
     } else {
         const lower = item.name.toLowerCase();
 
         if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
-            /*const downloadBtn = document.createElement("button");
-            downloadBtn.textContent = "Скачать";
-            downloadBtn.onclick = () => openDownloadFormatModal(item);
-            actions.appendChild(downloadBtn);*/
+
             const downloadBtn = document.createElement("button");
             downloadBtn.className = "card-download-btn";
             downloadBtn.title = "Скачать";
@@ -4033,11 +3720,7 @@ function createCard(item) {
             card.appendChild(downloadBtn);
         } else {
             if (item.downloadUrl) {
-                /*const downloadLink = document.createElement("a");
-                downloadLink.href = item.downloadUrl;
-                downloadLink.textContent = "Скачать";
-                downloadLink.setAttribute("download", item.name);
-                actions.appendChild(downloadLink);*/
+
                 const downloadLink = document.createElement("a");
 
                 downloadLink.className = "card-download-btn";
@@ -4066,14 +3749,6 @@ function createCard(item) {
         }
     }
 
-    /*if (!PUBLIC_SHARE_MODE || window.PUBLIC_SHARE_PERMISSION === "MANAGE") {
-        const deleteBtn = document.createElement("button");
-        deleteBtn.className = "danger";
-        deleteBtn.textContent = "Удалить";
-
-        deleteBtn.onclick = () => openDeleteModal(item.relativePath, item.name);
-        actions.appendChild(deleteBtn);
-    }*/
     if (!PUBLIC_SHARE_MODE || window.PUBLIC_SHARE_PERMISSION === "MANAGE") {
         const deleteBtn = document.createElement("button");
         deleteBtn.className = "card-delete-btn";
@@ -4090,10 +3765,7 @@ function createCard(item) {
     }
 
     if (!PUBLIC_SHARE_MODE) {
-        /*const shareBtn = document.createElement("button");
-        shareBtn.textContent = "Поделиться";
-        shareBtn.onclick = () => openShareModal(item);
-        actions.appendChild(shareBtn);*/
+
         const shareBtn = document.createElement("button");
 
         shareBtn.className = "card-share-btn";
@@ -4127,27 +3799,7 @@ function createCard(item) {
     }
 
     if (!PUBLIC_SHARE_MODE) {
-        /*const propertiesBtn = document.createElement("button");
-        propertiesBtn.textContent = "Свойства";
 
-
-        propertiesBtn.onclick = async () => {
-            currentPropertiesPath = item.relativePath;
-            currentPropertiesName = item.name;
-
-            await openPropertiesModal(item.relativePath);
-        };
-        propertiesBtn.onclick = async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            currentPropertiesPath = item.relativePath;
-            currentPropertiesName = item.name;
-
-            await openPropertiesModal(item.relativePath);
-        };
-
-        actions.appendChild(propertiesBtn);*/
         const propertiesBtn = document.createElement("button");
         propertiesBtn.className = "card-properties-btn";
         propertiesBtn.title = "Свойства";
@@ -4418,29 +4070,20 @@ function buildVideoThumbnailUrl(path) {
 }
 
 function renderItems(items) {
+    const copy = [...(items || [])];
+    window.thumbObserver?.disconnect();
+    window.metadataObserver?.disconnect();
+    window.thumbObserver = window.metadataObserver = null;
+    thumbSession++;
+    cardByPath.clear();
     gallery.innerHTML = "";
-
-    if (!items || items.length === 0) {
-        gallery.innerHTML = `<div>Папка пуста</div>`;
+    currentItems = [];
+    viewerItems = [];
+    if (!copy.length) {
+        gallery.textContent = "Папка пуста";
         return;
     }
-    currentItems = items;
-    viewerItems = items.filter(item => !item.directory && (item.type === "image" || item.type === "video"));
-
-    for (const item of items) {
-        const card = createCard(item);
-        gallery.appendChild(card);
-    }
-
-    initLazyThumbs();
-    if (!PUBLIC_SHARE_MODE) {
-        initLazyMetadata();
-    }
-    const imageThumbs = gallery.querySelectorAll("img.image-thumb");
-    imageThumbs.forEach(img => enablePreviewPan(img));
-    const videoThumbs = gallery.querySelectorAll("img.video-thumb-img");
-    videoThumbs.forEach(img => enablePreviewPan(img));
-    updateBulkButtons();
+    appendItems(copy);
 }
 
 async function openPropertiesModal(path) {
@@ -4482,38 +4125,19 @@ function renderBasicProperties(data) {
     `;
 }
 
-function initLazyMetadata() {
-    const els = document.querySelectorAll(".card[data-path]");
-    if (window.metadataObserver) {
-        window.metadataObserver.disconnect();
-    }
-    const observer = new IntersectionObserver((entries, obs) => {
-
-        const paths = [];
-
-        for (const entry of entries) {
-            if (!entry.isIntersecting) continue;
-
-            const card = entry.target;
-            const path = card.dataset.path;
-
-            obs.unobserve(card);
-
-            if (!path || metadataLoaded.has(path)) continue;
-
-            metadataLoaded.add(path);
-            paths.push(path);
-        }
-
-        if (paths.length) {
+function initLazyMetadata(cards = gallery.querySelectorAll(".card[data-path]")) {
+    if (!window.metadataObserver) {
+        window.metadataObserver = new IntersectionObserver((entries, observer) => {
+            const paths = [];
+            for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                observer.unobserve(entry.target);
+                paths.push(entry.target.dataset.path);
+            }
             enqueueMetadata(paths);
-        }
-    }, {
-        root: gallery,
-        rootMargin: "300px"
-    });
-    window.metadataObserver = observer;
-    els.forEach(el => observer.observe(el));
+        }, {root: null, rootMargin: "300px"});
+    }
+    cards.forEach(card => window.metadataObserver.observe(card));
 }
 
 function renderFullProperties(data) {
@@ -4542,85 +4166,28 @@ function propRow(label, value) {
     return `<div><b>${label}:</b> ${escapeHtml(String(value))}</div>`;
 }
 
-function initLazyThumbs() {
-    const images = document.querySelectorAll("img.lazy-thumb[data-src]");
-    if (!images.length) return;
-
-    const session = ++thumbSession;
-
-    let loadedThumbs = 0;
-    let loadingThumbs = 0;
-
-    function onThumbLoaded() {
-        if (session !== thumbSession) return;
-
-        loadedThumbs++;
-
-        if (loadingThumbs >= 3) {
-            updateFolderLoadingRing(Math.round(loadedThumbs * 100 / loadingThumbs));
-        }
-
-        if (loadedThumbs >= loadingThumbs) {
-            hideFolderLoadingRing();
-        }
-    }
-
-    // 🔥 если много — показываем кольцо
-
-    if (window.thumbObserver) {
-        window.thumbObserver.disconnect();
-    }
-
-    const observer = new IntersectionObserver((entries, obs) => {
-        for (const entry of entries) {
-            if (!entry.isIntersecting) continue;
-
-            const img = entry.target;
-            const src = img.getAttribute("data-src");
-
-            if (!src) {
-                obs.unobserve(img);
-                continue;
-            }
-            img.onload = () => {
-                img.onload = null;
-                img.onerror = null;
-                onThumbLoaded();
-            };
-
-            img.onerror = () => {
-                img.onload = null;
-                img.onerror = null;
-
-                img.src = img.classList.contains("video-thumb-img")
-                    ? "/video-placeholder.png"
-                    : "/image-placeholder.png";
-
+function initLazyThumbs(images = gallery.querySelectorAll("img.lazy-thumb[data-src]")) {
+    if (!window.thumbObserver) {
+        const session = thumbSession;
+        window.thumbObserver = new IntersectionObserver((entries, observer) => {
+            for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                const img = entry.target;
+                observer.unobserve(img);
+                const src = img.dataset.src;
+                if (!src || session !== thumbSession) continue;
+                img.onload = img.onerror = null;
+                img.onerror = () => {
+                    img.onerror = null;
+                    img.src = img.classList.contains("video-thumb-img")
+                        ? "/video-placeholder.png" : "/image-placeholder.png";
+                };
                 img.removeAttribute("data-src");
-
-                onThumbLoaded();
-            };
-            loadingThumbs++;
-
-            if (loadingThumbs === 3) {
-                showFolderLoadingRing(0);
+                img.src = src;
             }
-            img.src = src;
-            img.removeAttribute("data-src");
-            if (session !== thumbSession) {
-                obs.unobserve(img);
-                return;
-            }
-
-            obs.unobserve(img);
-        }
-    }, {
-        root: gallery,
-        rootMargin: "500px"
-    });
-
-    window.thumbObserver = observer;
-    images.forEach(img => observer.observe(img));
+        }, {root: null, rootMargin: "500px"});
+    }
+    images.forEach(img => window.thumbObserver.observe(img));
 }
 
 async function removeItem(path, name) {
@@ -4703,18 +4270,11 @@ fileInput.addEventListener("change", () => {
 });
 newFolderBtn.addEventListener("click", openCreateFolderModal);
 
-/*upBtn.addEventListener("click", () => loadFiles(parentPath || ""));*/
 upBtn.addEventListener("click", async () => {
     const targetPath = parentPath || "";
 
-    thumbSession++;
-    folderLoadSession++;
-
     if (window.thumbObserver) window.thumbObserver.disconnect();
     if (window.metadataObserver) window.metadataObserver.disconnect();
-
-    METADATA_QUEUE.length = 0;
-    metadataRunning = 0;
 
     hideMetadataLoadingModal();
     hideThumbLoadingModal();
@@ -4771,7 +4331,6 @@ async function confirmCreateFolder() {
     }
 }
 
-
 function openViewerByPath(relativePath) {
     viewerIndex = viewerItems.findIndex(item => item.relativePath === relativePath);
     if (viewerIndex === -1) return;
@@ -4805,6 +4364,9 @@ function getTouchDistance(touches) {
 }
 
 function initViewerImageZoom() {
+    cleanupViewerInput();
+    viewerInputController = new AbortController();
+    const signal = viewerInputController.signal;
     const img = document.getElementById("viewerImage");
     if (!img) return;
 
@@ -4821,7 +4383,7 @@ function initViewerImageZoom() {
         }
 
         applyViewerZoom();
-    }, {passive: false});
+    }, {passive: false, signal});
 
     img.addEventListener("dblclick", () => {
         if (viewerZoom === 1) {
@@ -4831,7 +4393,7 @@ function initViewerImageZoom() {
         }
 
         applyViewerZoom();
-    });
+    }, {signal});
 
     img.addEventListener("mousedown", (e) => {
         if (viewerZoom <= 1) return;
@@ -4839,7 +4401,7 @@ function initViewerImageZoom() {
         viewerDragging = true;
         viewerDragStartX = e.clientX - viewerPanX;
         viewerDragStartY = e.clientY - viewerPanY;
-    });
+    }, {signal});
 
     window.addEventListener("mousemove", (e) => {
         if (!viewerDragging) return;
@@ -4848,11 +4410,11 @@ function initViewerImageZoom() {
         viewerPanY = e.clientY - viewerDragStartY;
 
         applyViewerZoom();
-    });
+    }, {signal});
 
     window.addEventListener("mouseup", () => {
         viewerDragging = false;
-    });
+    }, {signal});
 
     img.addEventListener("touchstart", (e) => {
         if (e.touches.length === 2) {
@@ -4864,7 +4426,7 @@ function initViewerImageZoom() {
             viewerDragStartX = e.touches[0].clientX - viewerPanX;
             viewerDragStartY = e.touches[0].clientY - viewerPanY;
         }
-    }, {passive: false});
+    }, {passive: false, signal});
 
     img.addEventListener("touchmove", (e) => {
         if (e.touches.length === 2) {
@@ -4890,7 +4452,7 @@ function initViewerImageZoom() {
 
             applyViewerZoom();
         }
-    }, {passive: false});
+    }, {passive: false, signal});
 
     img.addEventListener("touchend", () => {
         viewerDragging = false;
@@ -4900,16 +4462,18 @@ function initViewerImageZoom() {
             resetViewerZoom();
             applyViewerZoom();
         }
-    });
+    }, {signal});
 }
 
 function renderViewerItem() {
+    cleanupViewerInput();
+    destroyCurrentVideo();
     if (viewerIndex < 0 || viewerIndex >= viewerItems.length) return;
 
     const item = viewerItems[viewerIndex];
     updateViewerSelectButton();
     if (currentPlayer) {
-        currentPlayer.destroy();
+        currentPlayer?.destroy();
         currentPlayer = null;
     }
     if (item.type === "image") {
@@ -4930,26 +4494,7 @@ function renderViewerItem() {
         initViewerImageZoom();
     }
 
-    /*if (item.type === "image") {
-        const lower = item.name.toLowerCase();
-
-        const src =
-            lower.endsWith(".heic") || lower.endsWith(".heif")
-                ? `/api/files/image-thumbnail?path=${encodeURIComponent(item.relativePath)}`
-                : item.previewUrl;
-
-
-        resetViewerZoom();
-
-        viewerBody.innerHTML = `
-    <img id="viewerImage"
-         class="viewer-image"
-         src="${src}"
-         alt="${escapeHtml(item.name)}">
-`;
-
-        initViewerImageZoom();
-    }*/ else if (item.type === "video") {
+     else if (item.type === "video") {
         const lower = item.name.toLowerCase();
         if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
 
@@ -4992,7 +4537,7 @@ function renderViewerItem() {
 
         // если это insv/lrv и открыт preview
         if (lower.endsWith(".insv") || lower.endsWith(".lrv")) {
-            /* openDownloadFormatModal(item);*/
+
             openDownloadFormatModal(item, currentPreviewId);
             return;
         }
@@ -5046,7 +4591,6 @@ downloadFormatModal.addEventListener("click", (e) => {
 });
 confirmDownloadFormatBtn.onclick = async () => {
     if (!pendingDownloadItem) return;
-
 
     const item = pendingDownloadItem;
     const format = selectedDownloadFormat;
@@ -5113,10 +4657,7 @@ sortDirectionBtn.onclick = () => {
     loadFiles(currentPath);
 };
 cancelPreviewBuildBtn.onclick = async () => {
-    if (previewStatusTimer) {
-        clearInterval(previewStatusTimer);
-        previewStatusTimer = null;
-    }
+    previewWaitController?.abort();
 
     if (currentPreviewId) {
         await secureFetch(`/api/files/preview/cancel?previewId=${encodeURIComponent(currentPreviewId)}`, {
@@ -5183,6 +4724,8 @@ function toggleFullscreen() {
 }
 
 async function closeViewerModal() {
+    cleanupViewerInput();
+    previewWaitController?.abort();
     const currentViewerItem =
         viewerIndex >= 0 && viewerItems[viewerIndex]
             ? viewerItems[viewerIndex]
@@ -5244,7 +4787,7 @@ selectAllBtn.onclick = () => {
         });
     }
 
-    renderItems(currentItems);
+    for (const item of currentItems) syncSelectionToGallery(item.relativePath, true);
     updateBulkButtons();
 };
 deleteModal.addEventListener("click", (e) => {
@@ -5252,10 +4795,10 @@ deleteModal.addEventListener("click", (e) => {
         closeDeleteModal();
     }
 });
-clearSelectionBtn.onclick = async () => {
+clearSelectionBtn.onclick = () => {
     selectedItems.clear();
+    for (const item of currentItems) syncSelectionToGallery(item.relativePath, false);
     updateBulkButtons();
-    await loadFiles(currentPath);
 };
 
 bulkDownloadBtn.onclick = openBulkDownloadModal;
@@ -5474,18 +5017,18 @@ async function openMoveModal(sourcePath, sourceName) {
     folderTreeContainer.appendChild(renderFolderTree(tree));
 }
 
-async function sendChunk(formData) {
+async function sendChunk(formData, signal) {
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
             const res = await secureFetch("/api/files/upload-chunk", {
                 method: "POST",
-                body: formData
+                body: formData, signal
             });
 
             if (!res.ok) throw new Error("upload error");
             return;
         } catch (e) {
-            if (attempt === 2) throw e;
+            if (signal?.aborted || attempt === 2) throw e;
             await new Promise(r => setTimeout(r, 1000));
         }
     }
@@ -5632,7 +5175,7 @@ function debounce(fn, delay = 100) {
 }
 
 function escapeHtml(value) {
-    return value
+    return String(value ?? "")
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
@@ -5668,26 +5211,7 @@ async function handleLoadMoreScroll() {
     }
 }
 
-window.addEventListener("scroll", handleLoadMoreScroll);
+window.addEventListener("scroll", debounce(handleLoadMoreScroll, 100), {passive: true});
 
-/*Запрет масштабирования галереи*/
-let lastTouchEnd = 0;
-
-document.addEventListener("touchend", function (event) {
-    const now = Date.now();
-    if (now - lastTouchEnd <= 300) {
-        event.preventDefault();
-    }
-    lastTouchEnd = now;
-}, {passive: false});
-document.addEventListener("gesturestart", function (e) {
-    e.preventDefault();
-});
-document.addEventListener("gesturechange", function (e) {
-    e.preventDefault();
-});
-document.addEventListener("gestureend", function (e) {
-    e.preventDefault();
-});
 updateSortButtonsState();
 updateBulkButtons();

@@ -1,3 +1,10 @@
+:root {
+    --color-accent: #00ffa0;
+    --color-success: #22c55e;
+    --color-primary: #2563eb;
+    --surface-modal: rgba(17, 17, 17, 0.72);
+}
+
 /*   box-sizing: border-box
    означает, что padding и border входят в общую ширину/высоту элемента.
    Это сильно упрощает верстку.
@@ -5,7 +12,6 @@
 * {
     box-sizing: border-box;
 }
-
 
 body {
     margin: 0;
@@ -50,36 +56,6 @@ body {
     transform: translate(-50%, -50%) scale(1);
 }
 
-/*.toast {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%) translateY(20px);
-
-    background: rgba(17, 17, 17, 0.75);
-    backdrop-filter: blur(10px);
-
-    color: white;
-    padding: 14px 16px;
-    border-radius: 14px;
-
-    font-size: 13px;
-    text-align: center;
-
-    opacity: 0;
-    transition: all 0.25s ease;
-
-    z-index: 99999;
-    min-width: 280px;
-}
-
-
-.toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}*/
-
-
 .toast-actions {
     display: flex;
     justify-content: center;
@@ -88,7 +64,7 @@ body {
 }
 
 .card.highlight {
-    outline: 2px solid #22c55e;
+    outline: 2px solid var(--color-success);
 }
 
 .toast-actions button {
@@ -100,7 +76,6 @@ body {
     background: #1f6feb;
     color: white;
 }
-
 
 .toast-actions .secondary-btn {
     background: #e5e7eb;
@@ -123,20 +98,17 @@ body {
     display: none;
 }
 
-
 .folder-loading-ring svg {
     width: 44px;
     height: 44px;
     transform: rotate(-90deg);
 }
 
-
 .ring-bg {
     fill: none;
     stroke: #eae5eb;
     stroke-width: 3;
 }
-
 
 .ring-progress {
     fill: none;
@@ -145,7 +117,6 @@ body {
     stroke-linecap: round;
     transition: stroke-dasharray 0.25s ease;
 }
-
 
 .folder-loading-percent {
     position: absolute;
@@ -156,9 +127,8 @@ body {
     font-size: 10px;
     font-weight: 700;
 
-    color: #22c55e; /* 💚 зелёный */
+    color: var(--color-success); /* 💚 зелёный */
 }
-
 
 #folderListModal .modal-content {
     background: rgba(20, 24, 32, 0.96);
@@ -198,16 +168,14 @@ body {
     border: none;
     border-radius: 12px;
     padding: 9px 14px;
-    background: #2563eb;
+    background: var(--color-primary);
     color: white;
     font-weight: 600;
 }
 
-
 #folderListModal button:hover {
     filter: brightness(1.1);
 }
-
 
 #folderListModal .danger,
 #folderListModal #cancelFolderListBtn,
@@ -221,11 +189,9 @@ body {
     cursor: pointer;
 }
 
-
 #folderListModal .folder-tree-row:hover {
     background: rgba(255, 255, 255, 0.08);
 }
-
 
 #folderListModal .folder-tree-row.selected {
     background: #dbeafe;
@@ -248,12 +214,10 @@ body {
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 
-
 #downloadFormatModal h3 {
     margin-top: 0;
     margin-bottom: 18px;
 }
-
 
 .format-options {
     display: flex;
@@ -261,7 +225,6 @@ body {
     justify-content: center;
     margin: 18px 0 28px;
 }
-
 
 #downloadFormatModal button {
     font-size: 12px;
@@ -274,17 +237,14 @@ body {
     color: white;
 }
 
-
 #downloadFormatModal .format-btn.active {
-    background: #22c55e;
+    background: var(--color-success);
 }
-
 
 #downloadFormatModal .secondary-btn {
     background: #e5e7eb;
     color: #111;
 }
-
 
 #downloadFormatModal .delete-modal-actions {
     margin-top: 24px;
@@ -298,9 +258,8 @@ body {
     color: white;
 }
 
-
 .format-btn.active {
-    background: #22c55e;
+    background: var(--color-success);
 }
 
 .small-btn {
@@ -308,7 +267,6 @@ body {
     padding: 4px 8px;
     min-height: 28px;
 }
-
 
 /*
   Центральный контейнер страницы
@@ -320,14 +278,12 @@ body {
     padding: 140px 20px 20px;
 }
 
-
 /* кнопка прогресса */
 #toggleTransfersBtn {
     background: #2f80ed;
     height: 28px;
     font-size: 12px;
 }
-
 
 /* верхняя панель */
 
@@ -337,12 +293,12 @@ body {
     background: rgba(0,255,150,0.1) !important;
     border: 1px solid rgba(0,255,150,0.3);
 
-    color: #00ffa0;
+    color: var(--color-accent);
 
     border-radius: 8px;
     padding: 6px 10px;
 
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 #toggleTransfersBtn {
@@ -360,12 +316,10 @@ body {
     z-index: 13000;
 }
 
-
 /* крестик */
 .transfer-remove {
     line-height: 1;
 }
-
 
 /* play */
 .control.playing {
@@ -373,20 +327,17 @@ body {
     color: white;
 }
 
-
 /* pause */
 .control.paused {
     background: #f0c000;
     color: black;
 }
 
-
 /* кнопки в шапке модалки */
 .transfer-header-actions {
     display: flex;
     gap: 6px;
 }
-
 
 /* фикс кликов */
 .transfer-actions,
@@ -395,7 +346,6 @@ body {
     z-index: 3;
     pointer-events: auto;
 }
-
 
 /* сами кнопки */
 .transfer-remove,
@@ -430,9 +380,8 @@ body {
     cursor: pointer;
     z-index: 70;
 
-    transition: all .2s ease;
+    transition: transform .2s ease, opacity .2s ease, background-color .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
-
 
 .item-checkbox:checked {
     background: #2f80ed;
@@ -453,7 +402,6 @@ body {
 
     transform: translate(-50%, -58%) rotate(45deg);
 }
-
 
 .meta-row {
     margin-top: auto;
@@ -508,17 +456,14 @@ body {
     color: white;
 }
 
-
 #resumeAllTransfersBtn.resume-all-paused {
     background: #f0c000;
     color: black;
 }
 
-
 .transfer-remove {
     line-height: 1;
 }
-
 
 .transfer-row {
     display: flex;
@@ -530,7 +475,6 @@ body {
     pointer-events: auto;
 }
 
-
 .small-btn,
 #clearTransfersBtn,
 #resumeAllTransfersBtn {
@@ -538,7 +482,6 @@ body {
     padding: 3px 6px;
     min-height: 24px;
 }
-
 
 .control.playing {
     background: #43d17c;
@@ -550,12 +493,10 @@ body {
     min-height: 280px;
 }
 
-
 #previewBuildText {
     margin-bottom: 16px;
     line-height: 1.5;
 }
-
 
 #previewBuildSize {
     display: block;
@@ -567,7 +508,6 @@ body {
     text-align: center;
     min-height: 30px;
 }
-
 
 #previewBuildTime {
     margin-top: 18px;
@@ -581,12 +521,10 @@ body {
     align-items: center;
 }
 
-
 .control.paused {
     background: #f0c000;
     color: black;
 }
-
 
 .transfer-progress-btn {
     position: relative;
@@ -599,11 +537,9 @@ body {
     cursor: pointer;
 }
 
-
 .transfer-progress-btn.loading .tp-bar {
     animation: progressPulse 1.5s infinite linear;
 }
-
 
 @keyframes progressPulse {
     0% {
@@ -616,7 +552,6 @@ body {
         filter: brightness(1);
     }
 }
-
 
 .transfer-progress-btn .tp-bar {
     position: absolute;
@@ -634,17 +569,14 @@ body {
     transition: width 0.2s linear;
 }
 
-
 .transfer-progress-btn .tp-label {
     position: relative;
     z-index: 1;
 }
 
-
 .transfer-panel.collapsed {
     display: none;
 }
-
 
 .transfer-header {
     display: flex;
@@ -657,7 +589,6 @@ body {
     color: white;
     box-sizing: border-box;
 }
-
 
 .transfer-panel {
     position: fixed;
@@ -677,7 +608,6 @@ body {
     box-sizing: border-box;
 }
 
-
 #transferList {
     overflow-y: auto;
     max-height: calc(50vh - 58px);
@@ -685,11 +615,9 @@ body {
     box-sizing: border-box;
 }
 
-
 body.topbar-collapsed .container {
     padding-top: 90px;
 }
-
 
 /*
   Верхняя панель
@@ -702,13 +630,11 @@ body.topbar-collapsed .container {
     right: 0;
     z-index: 10000;
 
-
     display: flex;
     align-items: center;
     gap: 10px;
 
     padding: 10px 12px;
-
 
     background: rgba(30, 30, 40, 0.78) !important;
     backdrop-filter: blur(12px) saturate(130%) !important;
@@ -725,7 +651,7 @@ body.topbar-collapsed .container {
             0 0 8px rgba(0, 255, 150, 0.4),
             0 0 20px rgba(0, 255, 150, 0.15);
 
-    transition: all 0.3s ease;
+    transition: transform 0.3s ease, opacity 0.3s ease, background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .topbar:hover {
@@ -741,7 +667,6 @@ body.topbar-collapsed .container {
     margin: 0 auto;
     padding: 0 16px;
 }
-
 
 /* Путь */
 .path-row {
@@ -766,17 +691,16 @@ body.topbar-collapsed .container {
     box-shadow: inset 0 0 6px rgba(0,255,150,0.15);
 }
 
-
 .topbar button {
     background: rgba(0,255,150,0.1);
     border: 1px solid rgba(0,255,150,0.3);
 
     border-radius: 8px;
-    color: #00ffa0;
+    color: var(--color-accent);
 
     padding: 6px 10px;
 
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .topbar-toggle-btn {
     flex: 0 0 auto;
@@ -784,21 +708,17 @@ body.topbar-collapsed .container {
     padding: 10px 12px;
 }
 
-
 .topbar.collapsed .actions-row {
     display: none;
 }
-
 
 .topbar.collapsed .path-row {
     margin-bottom: 0;
 }
 
-
 .topbar.collapsed {
     padding-bottom: 8px;
 }
-
 
 .topbar.collapsed + .container,
 body.topbar-collapsed .container {
@@ -813,7 +733,6 @@ body.topbar-collapsed .container {
     font-size: 28px;
 }
 
-
 /*
   Блок с текущим путем
 */
@@ -823,7 +742,6 @@ body.topbar-collapsed .container {
     gap: 10px;
     flex-wrap: wrap;
 }
-
 
 /*
   Блок кнопок действий
@@ -835,7 +753,6 @@ body.topbar-collapsed .container {
     flex-wrap: wrap;
 }
 
-
 /* Ряд кнопок */
 
 .actions-row {
@@ -844,7 +761,6 @@ body.topbar-collapsed .container {
     gap: 14px;
     flex-wrap: wrap;
 }
-
 
 .toolbar-group {
     display: flex;
@@ -874,12 +790,10 @@ body.topbar-collapsed .container {
     flex-wrap: wrap;
 }
 
-
 /* Правая зона прибивается вправо на широких экранах */
 .actions-right {
     margin-left: auto;
 }
-
 
 /*
   Одинаковый базовый стиль для кнопок и псевдокнопки загрузки
@@ -902,7 +816,6 @@ button,
     cursor: pointer;
 }
 
-
 /*
   Небольшой hover-эффект
 */
@@ -910,7 +823,6 @@ button:hover,
 .upload-label span:hover {
     opacity: 0.92;
 }
-
 
 .transfer-size {
     font-size: 11px;
@@ -937,11 +849,9 @@ button:hover,
     background: #2ea043; /* зеленая, чтобы отличалась */
 }
 
-
 #homeBtn:hover {
     opacity: 0.9;
 }
-
 
 /*
   Верхняя часть карточки — превью
@@ -1011,7 +921,6 @@ button:hover,
     cursor: grabbing;
 }
 
-
 /*
   Фото и видео в режиме "заполнить превью"
 */
@@ -1020,21 +929,17 @@ button:hover,
     font-size: 56px;
 }
 
-
 .folder-children.hidden {
     display: none;
 }
-
 
 .file-thumb {
     font-size: 52px;
 }
 
-
 .card-body {
     padding: 12px;
 }
-
 
 .file-name {
     font-weight: bold;
@@ -1063,7 +968,6 @@ button:hover,
     line-height: 1.25;
 }
 
-
 .card-actions {
     display: flex;
     gap: 8px;
@@ -1073,7 +977,6 @@ button:hover,
     justify-content: center;
     flex-shrink: 0;
 }
-
 
 .card-actions button,
 .card-actions a {
@@ -1087,12 +990,10 @@ button:hover,
     cursor: pointer;
 }
 
-
 .card-actions .danger {
     background: #dc2626;
     color: white;
 }
-
 
 /*
   Модальное окно занимает весь экран
@@ -1100,10 +1001,9 @@ button:hover,
 .viewer {
     position: fixed;
     inset: 0;
-    /*z-index: 999;*/
+
     z-index: 12000;
 }
-
 
 /*
   Скрытое состояние
@@ -1112,17 +1012,15 @@ button:hover,
     display: none;
 }
 
-
 /*
   Затемнение фона
 */
 .viewer-backdrop {
     position: absolute;
     inset: 0;
-    /*background: rgba(0,0,0,0.75);*/
+
     background: rgba(0, 0, 0, 0.82);
 }
-
 
 /*
   Контейнер самого контента окна
@@ -1148,12 +1046,10 @@ button:hover,
             0 0 30px rgba(0, 255, 150, 0.15),
             0 12px 40px rgba(0,0,0,0.5);
 
-
     padding: 70px 20px 20px;
     min-height: 80vh;
     overflow: hidden;
 }
-
 
 /*
   Центрирование картинки или видео
@@ -1163,10 +1059,9 @@ button:hover,
     display: flex;
     justify-content: center;
     align-items: center;
-    /*min-height: 300px;*/
+
     min-height: 0;
 }
-
 
 #viewerBody img,
 #viewerBody video {
@@ -1175,7 +1070,6 @@ button:hover,
     display: block;
     object-fit: contain;
 }
-
 
 /* Верхние кнопки */
 .viewer-toolbar {
@@ -1188,11 +1082,10 @@ button:hover,
     flex-wrap: wrap;
 }
 
-
 .viewer-btn {
     background: rgba(0,255,150,0.1);
     border: 1px solid rgba(0,255,150,0.3);
-    color: #00ffa0;
+    color: var(--color-accent);
 
     padding: 8px 12px;
     border-radius: 10px;
@@ -1200,15 +1093,13 @@ button:hover,
     cursor: pointer;
     font-size: 13px;
 
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
-
 
 .viewer-btn:hover {
     background: rgba(0,255,150,0.2);
     box-shadow: 0 0 10px rgba(0,255,150,0.5);
 }
-
 
 #viewerBody {
     display: flex;
@@ -1218,11 +1109,9 @@ button:hover,
     position: relative;
 }
 
-
 .close-btn {
     font-weight: bold;
 }
-
 
 .viewer-nav {
     position: absolute;
@@ -1233,7 +1122,7 @@ button:hover,
     background: rgba(0,255,150,0.15);
     border: 1px solid rgba(0,255,150,0.3);
 
-    color: #00ffa0;
+    color: var(--color-accent);
 
     backdrop-filter: blur(6px);
 
@@ -1250,11 +1139,9 @@ button:hover,
     justify-content: center;
 }
 
-
 .viewer-nav-left {
     left: 12px;
 }
-
 
 .viewer-nav-right {
     right: 12px;
@@ -1275,7 +1162,6 @@ button:hover,
     border-radius: 16px 16px 0 0;
 }
 
-
 #prevViewerBtn,
 #nextViewerBtn {
     position: absolute;
@@ -1292,22 +1178,18 @@ button:hover,
     color: white;
 }
 
-
 #prevViewerBtn {
     left: 10px;
 }
-
 
 #nextViewerBtn {
     right: 10px;
 }
 
-
 /* Полноэкранный режим */
 .viewer:fullscreen {
     background: #000;
 }
-
 
 .viewer:fullscreen .viewer-content {
     width: 100vw;
@@ -1317,23 +1199,19 @@ button:hover,
     padding: 70px 20px 20px;
 }
 
-
 .viewer:fullscreen #viewerBody img,
 .viewer:fullscreen #viewerBody video {
     max-width: 100vw;
     max-height: calc(100vh - 110px);
 }
 
-
 .viewer:fullscreen .viewer-toolbar {
     z-index: 100;
 }
 
-
 .viewer:fullscreen .viewer-nav {
     z-index: 12100;
 }
-
 
 /* Чтобы кнопка назад не уезжала */
 #upBtn {
@@ -1346,7 +1224,6 @@ button:hover,
             0 0 40px rgba(0, 255, 150, 0.25),
             0 12px 40px rgba(0,0,0,0.6);
 }
-
 
 /*
   Кнопка play поверх миниатюры
@@ -1374,18 +1251,15 @@ button:hover,
     z-index: 11000;
 }
 
-
 .move-modal.hidden {
     display: none;
 }
-
 
 .move-modal-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.65);
 }
-
 
 .move-modal-content {
     position: relative;
@@ -1410,7 +1284,6 @@ button:hover,
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 
-
 .move-modal-header {
     display: flex;
     justify-content: space-between;
@@ -1419,18 +1292,15 @@ button:hover,
     margin-bottom: 12px;
 }
 
-
 .move-modal-header h3 {
     margin: 0;
     font-size: 18px;
 }
 
-
 .move-modal-close {
     background: #e5e7eb;
     color: #111;
 }
-
 
 .move-modal-target-name {
     font-weight: 700;
@@ -1438,7 +1308,6 @@ button:hover,
     word-break: break-word;
     color: white;
 }
-
 
 .selected-move-path {
     margin-bottom: 14px;
@@ -1453,7 +1322,6 @@ button:hover,
     word-break: break-word;
 }
 
-
 .folder-tree-container {
     width: min(82vw, 460px);
     max-height: 48vh;
@@ -1467,12 +1335,10 @@ button:hover,
     color: white;
 }
 
-
 .folder-tree-node {
     margin-left: 14px;
     margin-top: 5px;
 }
-
 
 .folder-tree-row {
     display: flex;
@@ -1486,17 +1352,14 @@ button:hover,
     color: white;
 }
 
-
 .folder-tree-row:hover {
     background: rgba(255, 255, 255, 0.12);
 }
-
 
 .folder-tree-row.selected {
     background: rgba(34, 197, 94, 0.28);
     border: 1px solid rgba(34, 197, 94, 0.75);
 }
-
 
 .folder-toggle {
     width: 22px;
@@ -1507,7 +1370,6 @@ button:hover,
     color: white;
     opacity: 0.85;
 }
-
 
 .folder-label {
     flex: 1;
@@ -1530,12 +1392,10 @@ button:hover,
     border-radius: 12px;
 }
 
-
 .move-modal-actions .secondary-btn {
     background: #e5e7eb;
     color: #111;
 }
-
 
 .delete-modal {
     position: fixed;
@@ -1543,11 +1403,9 @@ button:hover,
     z-index: 13000;
 }
 
-
 .delete-modal.hidden {
     display: none;
 }
-
 
 .delete-modal-backdrop {
     position: absolute;
@@ -1555,14 +1413,13 @@ button:hover,
     background: rgba(0, 0, 0, 0.65);
 }
 
-
 .delete-modal-content {
     position: relative;
     z-index: 1;
     width: min(90vw, 420px);
     margin: 120px auto;
-    /*background: white;*/
-    background: rgba(17, 17, 17, 0.72);
+
+    background: var(--surface-modal);
     backdrop-filter: blur(10px);
     border-radius: 16px;
     padding: 20px;
@@ -1570,20 +1427,17 @@ button:hover,
     color: white;
 }
 
-
 .delete-target-name {
     margin: 12px 0;
     font-weight: bold;
     word-break: break-word;
 }
 
-
 .delete-warning {
     margin-bottom: 16px;
     color: #b91c1c;
     font-size: 14px;
 }
-
 
 .delete-modal-actions {
     display: flex;
@@ -1592,18 +1446,15 @@ button:hover,
     flex-wrap: wrap;
 }
 
-
 .danger {
     background: #dc2626;
     color: white;
 }
 
-
 .secondary-btn {
     background: #e5e7eb;
     color: #111;
 }
-
 
 .modal-text-input {
     width: 100%;
@@ -1615,11 +1466,9 @@ button:hover,
     box-sizing: border-box;
 }
 
-
 .transfer-panel.hidden {
     display: none;
 }
-
 
 /* карточка */
 
@@ -1633,7 +1482,6 @@ button:hover,
     position: relative;
 }
 
-
 .transfer-name {
     position: relative;
     max-width: 100%;
@@ -1641,18 +1489,15 @@ button:hover,
     overflow: hidden;
 }
 
-
 .transfer-name span {
     display: inline-block;
     white-space: nowrap;
 }
 
-
 .transfer-name.marquee span {
     animation: marquee 8s linear infinite;
     animation-delay: 1s;
 }
-
 
 @keyframes marquee {
     0% {
@@ -1662,7 +1507,6 @@ button:hover,
         transform: translateX(-100%);
     }
 }
-
 
 /* прогресс НЕ должен перехватывать клики */
 
@@ -1678,7 +1522,6 @@ button:hover,
     pointer-events: none;
 }
 
-
 .progress-bar {
     pointer-events: none;
     height: 100%;
@@ -1687,7 +1530,6 @@ button:hover,
     border-radius: 999px;
     transition: width 0.2s linear;
 }
-
 
 .transfer-actions {
     display: flex;
@@ -1700,12 +1542,10 @@ button:hover,
     pointer-events: auto;
 }
 
-
 .transfer-actions button {
     font-size: 12px;
     padding: 4px 6px;
 }
-
 
 #collapseTransfersBtn {
     font-size: 12px;
@@ -1716,7 +1556,6 @@ button:hover,
     background: #2f80ed; /* синий */
     color: white;
 }
-
 
 #collapseTransfersBtn:hover {
     background: #1c6fe0;
@@ -1735,13 +1574,11 @@ button:hover,
     color: white;
 }
 
-
 #sortModal .delete-modal-actions {
     margin-top: 32px;
     display: flex;
     justify-content: center;
 }
-
 
 .sort-options {
     display: flex;
@@ -1750,7 +1587,6 @@ button:hover,
     flex-wrap: wrap;
     justify-content: center;
 }
-
 
 #sortModal button {
     font-size: 12px;
@@ -1763,25 +1599,21 @@ button:hover,
     color: white;
 }
 
-
 .sort-field-btn.active {
-    background: #22c55e !important;
+    background: var(--color-success) !important;
 }
-
 
 #sortDirectionBtn {
     width: 100%;
     margin-top: 8px;
 }
 
-
 #sortDirectionBtn.asc {
-    background: #2563eb !important;
+    background: var(--color-primary) !important;
 }
 
-
 #sortDirectionBtn.desc {
-    background: #22c55e !important;
+    background: var(--color-success) !important;
 }
 
 #moveModal #expandMoveTreeBtn,
@@ -1822,19 +1654,16 @@ button:hover,
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 
-
 #createFolderModal h3 {
     margin-top: 0;
     color: white;
 }
-
 
 #createFolderModal .modal-text-input {
     background: rgba(255,255,255,0.9);
     color: #111;
     border: 1px solid rgba(255,255,255,0.2);
 }
-
 
 #createFolderModal .delete-modal-actions {
     display: flex;
@@ -1843,14 +1672,12 @@ button:hover,
     margin-top: 18px;
 }
 
-
 #createFolderModal button {
     font-size: 12px;
     padding: 4px 8px;
     min-height: 28px;
     border-radius: 12px;
 }
-
 
 #createFolderModal .secondary-btn,
 #createFolderModal #cancelCreateFolderBtn {
@@ -1863,23 +1690,19 @@ button:hover,
     opacity: 0.92;
 }
 
-
 .folder-thumb,
 .file-thumb {
     color: white;
 }
 
-
 .gallery .card {
     min-height: 320px;
 }
-
 
 .gallery .thumb {
     height: 180px;
     min-height: 180px;
 }
-
 
 .gallery .card-body {
     display: flex;
@@ -1902,7 +1725,6 @@ button:hover,
     background: transparent;
 }
 
-
 .card {
     position: relative;
     overflow: visible;
@@ -1916,7 +1738,7 @@ button:hover,
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
 
-    transition: all 0.25s ease;
+    transition: transform 0.25s ease, opacity 0.25s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 
     box-shadow:
             0 0 6px rgba(139, 92, 246, 0.25),
@@ -2088,7 +1910,6 @@ button:hover,
     }
 }
 
-
 html, body {
     touch-action: pan-y pan-x;
     overscroll-behavior: contain;
@@ -2099,12 +1920,10 @@ html {
     background: url("/bg.jpg") center center / cover no-repeat fixed;
 }
 
-
 body {
     min-height: 100%;
     background: transparent;
 }
-
 
 body::before {
     content: "";
@@ -2121,7 +1940,6 @@ body::before {
     color: white;
 }
 
-
 .metadata-progress {
     width: 100%;
     height: 10px;
@@ -2131,14 +1949,12 @@ body::before {
     overflow: hidden;
 }
 
-
 #metadataLoadingBar {
     height: 100%;
     width: 0%;
-    background: #22c55e;
+    background: var(--color-success);
     transition: width 0.25s ease;
 }
-
 
 #metadataLoadingCount {
     font-size: 13px;
@@ -2148,7 +1964,6 @@ body::before {
 .total-cache-content {
     position: relative;
 }
-
 
 .total-cache-close-btn {
     position: absolute;
@@ -2192,7 +2007,6 @@ body::before {
     color: #39d98a;
 }
 
-
 #totalCacheModal h3 {
     margin: 0 0 12px;
     text-align: center;
@@ -2204,7 +2018,6 @@ body::before {
             0 0 10px rgba(84, 255, 174, 0.35);
 }
 
-
 #totalCacheStage {
     text-align: center;
     font-weight: 600;
@@ -2213,7 +2026,6 @@ body::before {
 
     margin-bottom: 10px;
 }
-
 
 #totalCachePath {
     max-width: 100%;
@@ -2231,7 +2043,6 @@ body::before {
     color: rgba(170, 255, 215, 0.82);
 }
 
-
 #totalCacheModal .metadata-progress {
     margin-top: 16px;
 
@@ -2246,7 +2057,6 @@ body::before {
     box-shadow:
             inset 0 0 8px rgba(0, 0, 0, 0.35);
 }
-
 
 #totalCacheBar {
     width: 0%;
@@ -2267,7 +2077,6 @@ body::before {
     transition: width 0.25s ease;
 }
 
-
 #totalCacheCount {
     margin-top: 12px;
 
@@ -2276,7 +2085,6 @@ body::before {
 
     color: rgba(180, 255, 225, 0.9);
 }
-
 
 /* Кнопки как верхняя панель */
 
@@ -2289,7 +2097,6 @@ body::before {
 
     margin-top: 18px;
 }
-
 
 #totalCacheModal .modal-actions button {
     min-width: 110px;
@@ -2317,7 +2124,6 @@ body::before {
             box-shadow 0.2s ease;
 }
 
-
 #totalCacheModal .modal-actions button:hover {
     transform: translateY(-1px);
 
@@ -2327,11 +2133,9 @@ body::before {
             0 0 14px rgba(84, 255, 174, 0.22);
 }
 
-
 #totalCacheModal .modal-actions button:active {
     transform: scale(0.98);
 }
-
 
 #totalCacheModal .modal-actions button:disabled {
     opacity: 0.45;
@@ -2439,7 +2243,6 @@ body::before {
     color: #d8ffe7;
 }
 
-
 /* ===== Rename modal: как total-cache/topbar ===== */
 
 #renameModal .rename-modal-content {
@@ -2518,7 +2321,7 @@ body::before {
 
     background: rgba(0,255,150,0.1) !important;
     border: 1px solid rgba(0,255,150,0.3);
-    color: #00ffa0;
+    color: var(--color-accent);
 }
 
 /* ===== Properties modal final: компактная модалка свойств ===== */
@@ -2531,101 +2334,101 @@ body::before {
 }
 
 #propertiesModal .properties-content {
-    position: absolute !important;
-    top: 120px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
+    position: absolute;
+    top: 120px;
+    left: 50%;
+    transform: translateX(-50%);
 
-    display: inline-flex !important;
-    flex-direction: column !important;
-    align-items: stretch !important;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
 
-    width: auto !important;
-    min-width: 280px !important;
-    max-width: 360px !important;
+    width: auto;
+    min-width: 280px;
+    max-width: 360px;
 
-    height: fit-content !important;
-    min-height: 0 !important;
-    max-height: 80vh !important;
+    height: fit-content;
+    min-height: 0;
+    max-height: 80vh;
 
-    margin: 0 !important;
-    padding: 16px 18px !important;
+    margin: 0;
+    padding: 16px 18px;
 
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
+    overflow-y: auto;
+    overflow-x: hidden;
 
-    background: rgba(17, 17, 17, 0.72) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
+    background: var(--surface-modal);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 
-    color: white !important;
-    text-align: left !important;
+    color: white;
+    text-align: left;
 
-    border-radius: 18px !important;
-    border: 1px solid rgba(0,255,150,0.25) !important;
+    border-radius: 18px;
+    border: 1px solid rgba(0,255,150,0.25);
 
     box-shadow:
             0 0 18px rgba(0,255,150,0.14),
-            0 10px 35px rgba(0,0,0,0.45) !important;
+            0 10px 35px rgba(0,0,0,0.45);
 }
 
 #propertiesModal h3 {
-    margin: 0 0 12px !important;
-    text-align: center !important;
-    font-size: 15px !important;
-    line-height: 1.2 !important;
-    color: white !important;
+    margin: 0 0 12px;
+    text-align: center;
+    font-size: 15px;
+    line-height: 1.2;
+    color: white;
 }
 
 #propertiesBody {
-    margin: 0 0 12px !important;
-    padding: 0 !important;
+    margin: 0 0 12px;
+    padding: 0;
 
-    font-size: 12px !important;
-    line-height: 1.45 !important;
+    font-size: 12px;
+    line-height: 1.45;
 
-    color: white !important;
+    color: white;
 }
 
 #propertiesBody div,
 #propertiesBody b {
-    color: white !important;
+    color: white;
 }
 
 #propertiesModal .delete-modal-actions,
 #propertiesModal .properties-actions {
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    flex-wrap: wrap !important;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
 
-    gap: 8px !important;
-    margin: 8px 0 0 !important;
-    padding: 0 !important;
+    gap: 8px;
+    margin: 8px 0 0;
+    padding: 0;
 }
 
 #propertiesModal .delete-modal-actions button,
 #renamePropertiesBtn,
 #movePropertiesBtn,
 #closePropertiesModalBtn {
-    width: auto !important;
-    min-width: 0 !important;
+    width: auto;
+    min-width: 0;
 
-    height: 24px !important;
-    min-height: 24px !important;
+    height: 24px;
+    min-height: 24px;
 
-    padding: 4px 8px !important;
+    padding: 4px 8px;
 
-    font-size: 11px !important;
-    line-height: 1 !important;
+    font-size: 11px;
+    line-height: 1;
 
-    border-radius: 8px !important;
+    border-radius: 8px;
 
     background: rgba(0,255,150,0.1) !important;
-    border: 1px solid rgba(0,255,150,0.3) !important;
-    color: #00ffa0 !important;
+    border: 1px solid rgba(0,255,150,0.3);
+    color: var(--color-accent) !important;
 
-    margin: 0 !important;
+    margin: 0;
 }
 /* ===== GROUPING ===== */
 
@@ -2769,15 +2572,7 @@ body::before {
     touch-action: none;
     pointer-events: auto;
 }
-#confirmMoveBtn {
-    touch-action: none;
-    pointer-events: auto;
-}
-/*#confirmMoveBtn {
-    touch-action: manipulation;
-    position: relative;
-    z-index: 16000;
-}*/
+
 .grouping-actions {
     display: flex;
     justify-content: center;
@@ -3058,7 +2853,7 @@ button[hidden] {
     background: rgba(0,255,150,0.1) !important;
     border: 1px solid rgba(0,255,150,0.3);
 
-    color: #00ffa0;
+    color: var(--color-accent);
 
     font-size: 12px;
 }
@@ -3165,10 +2960,6 @@ button[hidden] {
         font-size: 12px;
     }
 }
-.card {
-    position: relative;
-}
-
 .card-share-badge {
     position: absolute;
     top: 8px;
@@ -3231,7 +3022,7 @@ button[hidden] {
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
 
-    transition: all .2s ease;
+    transition: transform .2s ease, opacity .2s ease, background-color .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
 
 .card-delete-btn:hover {
@@ -3264,7 +3055,7 @@ button[hidden] {
     background: rgba(0,255,150,.10);
     border: 1px solid rgba(0,255,150,.30);
 
-    color: #00ffa0;
+    color: var(--color-accent);
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -3314,7 +3105,7 @@ button[hidden] {
     background: rgba(0,255,150,.10);
     border: 1px solid rgba(0,255,150,.30);
 
-    color: #00ffa0;
+    color: var(--color-accent);
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -3357,7 +3148,7 @@ button[hidden] {
     background: rgba(0,255,150,.10);
     border: 1px solid rgba(0,255,150,.30);
 
-    color: #00ffa0;
+    color: var(--color-accent);
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -3402,7 +3193,7 @@ button[hidden] {
     background: rgba(0,255,150,.10);
     border: 1px solid rgba(0,255,150,.30);
 
-    color: #00ffa0;
+    color: var(--color-accent);
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -3428,4 +3219,26 @@ button[hidden] {
     height: 18px;
 
     pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .gallery .card {
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .gallery .card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(30, 30, 40, 0.96);
+    }
 }

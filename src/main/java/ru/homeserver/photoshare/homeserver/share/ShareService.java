@@ -71,7 +71,7 @@ public class ShareService {
         link.setToken(token);
         link.setPath(fileService.toRelative(target));
         link.setDirectory(Files.isDirectory(target));
-        /*link.setPermission(request.permission() == null ? SharePermission.VIEW : request.permission());*/
+
         link.setPermission(permission);
         link.setCreatedAt(Instant.now());
         link.setActive(true);
@@ -323,9 +323,6 @@ public class ShareService {
         );
     }
 
-    /*private String encode(String value) {
-        return value == null ? "" : value.replace(" ", "%20");
-    }*/
     private String encode(String value) {
         if (value == null || value.isBlank()) {
             return "";

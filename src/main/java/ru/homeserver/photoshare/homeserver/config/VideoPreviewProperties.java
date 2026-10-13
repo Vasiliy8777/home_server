@@ -17,10 +17,6 @@ public class VideoPreviewProperties {
     private int previewWidth = 1920;
     private String previewVideoBitrate = "5000k";
     private String previewAudioBitrate = "128k";
-    /*private int hlsSegmentSeconds = 4;
-    private int previewWidth = 1280;
-    private String previewVideoBitrate = "3500k";
-    private String previewAudioBitrate = "128k";*/
 
     public Path getHlsCacheDir() {
         return hlsCacheDir;

@@ -35,7 +35,6 @@ public class FileService {
      * Это ключевой элемент безопасности:
      * приложение должно работать только внутри одной разрешенной директории.
      */
-    private final MetadataService metadataService;
     private final Path rootPath;
     private volatile FolderNodeDto cachedFolderTree;
 
@@ -55,13 +54,9 @@ public class FileService {
                     String name =
                             path.getFileName().toString();
 
-                    if (/*HIDDEN_DIRS.contains(name)*/HiddenPaths.isHiddenName(name)) {
+                    if (HiddenPaths.isHiddenName(name)) {
                         continue;
                     }
-
-                    /*if (Files.isSymbolicLink(path)) {
-                        continue;
-                    }*/
 
                     count++;
 
@@ -72,8 +67,7 @@ public class FileService {
             return count;
         }
     }
-    public FileService(MetadataService metadataService, AppProperties appProperties) throws IOException {
-        this.metadataService = metadataService;
+    public FileService(AppProperties appProperties) throws IOException {
         this.rootPath = Paths.get(appProperties.getStorageRoot()).toAbsolutePath().normalize();
         Files.createDirectories(this.rootPath);
     }
@@ -116,7 +110,6 @@ public class FileService {
          * 2) проверяет, что он не выходит за rootPath
          */
         Path current = resolveSafe(relativePath);
-        String absolutePath;
         /*
          * Проверяем, что папка существует
          */
@@ -142,13 +135,7 @@ public class FileService {
          */
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> all = stream
-                    /*.filter(path -> {
-                        try {
-                            return !Files.isSymbolicLink(path);
-                        } catch (Exception e) {
-                            return false;
-                        }
-                    })*/
+
                     .filter(path -> {
                         try {
                             return Files.exists(path);
@@ -213,7 +200,6 @@ public class FileService {
                     }
                     long modified = Files.getLastModifiedTime(path).toMillis();
 
-
                     long createdAt = isDir ? 0L : modified;
                     Long fileCount = null;
                     Long folderCount = null;
@@ -250,23 +236,7 @@ public class FileService {
     private FolderNodeDto buildFolderTree() throws IOException {
         return buildFolderNode(rootPath);
     }
-    public List<Path> getCachedFolderPaths() {
-        FolderNodeDto tree = cachedFolderTree;
 
-        if (tree == null) {
-            try {
-                rebuildFolderTreeCache();
-                tree = cachedFolderTree;
-            } catch (Exception e) {
-                return List.of(rootPath);
-            }
-        }
-
-        List<Path> result = new ArrayList<>();
-        collectFolderPaths(tree, result);
-
-        return result;
-    }
     public void rename(String relativePath, String newName) throws IOException {
         if (!StringUtils.hasText(newName)) {
             throw new IllegalArgumentException("New name is empty");
@@ -288,21 +258,7 @@ public class FileService {
         Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         cachedFolderTree = null;
     }
-    private void collectFolderPaths(FolderNodeDto node, List<Path> result) {
-        String relativePath = node.relativePath();
 
-        Path path = resolveSafe(relativePath);
-
-        result.add(path);
-
-        if (node.children() == null) {
-            return;
-        }
-
-        for (FolderNodeDto child : node.children()) {
-            collectFolderPaths(child, result);
-        }
-    }
     private long[] countDirectFolderChildren(Path folder) {
         long files = 0;
         long folders = 0;
@@ -311,14 +267,10 @@ public class FileService {
             for (Path child : stream.toList()) {
                 String name = child.getFileName().toString();
 
-                if (/*HIDDEN_DIRS.contains(name)*/HiddenPaths.isHiddenName(name)) {
+                if (HiddenPaths.isHiddenName(name)) {
                     continue;
                 }
 
-                /*if (Files.isDirectory(child)) {*/
-                /*if (Files.isSymbolicLink(child)) {
-                    continue;
-                }*/
                 if (!Files.exists(child)) {
                     continue;
                 }
@@ -384,13 +336,11 @@ public class FileService {
         try (Stream<Path> stream = Files.list(folder)) {
 
             children = stream
-                    /*.filter(Files::isDirectory)*/
+
                     .filter(path -> {
                         try {
                             return Files.isDirectory(path);
-                            /*return Files.isDirectory(path)
-                                    && !Files.isSymbolicLink(path);*/
-                                    /*&& !Files.isHidden(path);*/
+
                         } catch (Exception e) {
                             return false;
                         }

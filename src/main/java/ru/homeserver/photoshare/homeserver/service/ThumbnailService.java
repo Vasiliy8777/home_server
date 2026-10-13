@@ -184,7 +184,7 @@ public class ThumbnailService {
 
         boolean acquired = false;
         try {
-            /*thumbnailSemaphore.acquire();*/
+
             videoSemaphore.acquire();
             acquired = true;
 
@@ -266,7 +266,6 @@ public class ThumbnailService {
                 System.out.println("Exit code: " + exitCode);
                 System.out.println(log);
 
-                /*return null;*/
                 return createHeicThumbnailWithPython(file, thumbnail);
             }
 
@@ -279,7 +278,6 @@ public class ThumbnailService {
             System.out.println("⚠️ HEIC exception for: " + file);
             e.printStackTrace();
 
-            /*return null;*/
             return createHeicThumbnailWithPython(file, thumbnail);
         }
     }private Path createHeicThumbnailWithPython(Path file, Path thumbnail) throws IOException {
@@ -345,7 +343,7 @@ public class ThumbnailService {
 
         boolean acquired = false;
         try {
-           /* thumbnailSemaphore.acquire();*/
+
             imageSemaphore.acquire();
             acquired = true;
 
@@ -535,4 +533,3 @@ public class ThumbnailService {
         }
     }
 }
-

@@ -36,10 +36,6 @@ public class HlsFileController {
 
         MediaType mediaType = detectMediaType(filename);
 
-        /*return ResponseEntity.ok()
-                .contentType(mediaType)
-                .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS))
-                .body(new FileSystemResource(file));*/
         FileSystemResource resource = new FileSystemResource(file);
 
         return ResponseEntity.ok()

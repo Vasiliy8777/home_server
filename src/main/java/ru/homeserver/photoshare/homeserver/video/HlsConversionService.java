@@ -43,9 +43,6 @@ public class HlsConversionService {
         boolean enoughSegments = hasEnoughSegments(folder);
         boolean anySegments = hasAnySegment(folder);
         boolean finished = hasPlaylist && playlistHasEndlist(playlist);
-        //boolean finished = hasPlaylist && playlistHasEndlist(playlist);
-        /*boolean fullyConverted = isFullyConverted(sourceFile, playlist);
-        boolean finished = hasPlaylist && (playlistHasEndlist(playlist) || fullyConverted);*/
 
         if (finished) {
             statuses.put(key, HlsStatus.READY);
@@ -64,7 +61,7 @@ public class HlsConversionService {
             Files.createDirectories(folder);
 
             if (anySegments && hasInit) {
-                //rebuildPlaylist(folder, false);
+
                 statuses.put(key, HlsStatus.RUNNING);
                 startFfmpegResume(sourceFile, folder, key);
 
@@ -74,18 +71,6 @@ public class HlsConversionService {
                         "HLS resumed"
                 );
             }
-            /*if (anySegments && hasInit) {
-                clearBrokenHls(folder);
-
-                statuses.put(key, HlsStatus.RUNNING);
-                startFfmpeg(sourceFile, folder, key);
-
-                return new HlsConversionState(
-                        HlsStatus.RUNNING,
-                        playlistUrl,
-                        "HLS restarted safely"
-                );
-            }*/
 
             clearBrokenHls(folder);
 
@@ -103,16 +88,7 @@ public class HlsConversionService {
             return new HlsConversionState(HlsStatus.FAILED, null, e.getMessage());
         }
     }
-    private boolean isFullyConverted(Path sourceFile, Path playlist) {
-        double convertedSeconds = getConvertedSecondsFromPlaylist(playlist);
-        double totalSeconds = getDurationSeconds(sourceFile);
 
-        if (totalSeconds <= 0) {
-            return false;
-        }
-
-        return convertedSeconds >= totalSeconds - props.getHlsSegmentSeconds();
-    }
     public HlsStatus getStatus(Path sourceFile) {
         String key = cacheKeyService.cacheKey(sourceFile);
 
@@ -124,10 +100,6 @@ public class HlsConversionService {
                 && Files.exists(init)
                 && hasAnySegment(folder);
 
-        /*boolean finished = playable && (
-                playlistHasEndlist(playlist)
-                        || isFullyConverted(sourceFile, playlist)
-        );*/
         boolean finished = playable && playlistHasEndlist(playlist);
         Process process = processes.get(key);
         boolean running = process != null && process.isAlive();
@@ -165,43 +137,7 @@ public class HlsConversionService {
             return false;
         }
     }
-    private void rebuildPlaylist(Path folder, boolean endList) {
-        try {
-            Path playlist = folder.resolve("playlist.m3u8");
 
-            var segments = Files.list(folder)
-                    .filter(p -> p.getFileName().toString().endsWith(".m4s"))
-                    .sorted()
-                    .toList();
-
-            StringBuilder sb = new StringBuilder();
-
-            sb.append("#EXTM3U\n");
-            sb.append("#EXT-X-VERSION:7\n");
-            sb.append("#EXT-X-TARGETDURATION:")
-                    .append(props.getHlsSegmentSeconds() + 1)
-                    .append("\n");
-            sb.append("#EXT-X-MEDIA-SEQUENCE:0\n");
-            sb.append("#EXT-X-PLAYLIST-TYPE:EVENT\n");
-            sb.append("#EXT-X-MAP:URI=\"init.mp4\"\n");
-
-            for (Path segment : segments) {
-                sb.append("#EXTINF:")
-                        .append(props.getHlsSegmentSeconds())
-                        .append(".000000,\n");
-                sb.append(segment.getFileName()).append("\n");
-            }
-
-            if (endList) {
-                sb.append("#EXT-X-ENDLIST\n");
-            }
-
-            Files.writeString(playlist, sb.toString());
-
-        } catch (Exception e) {
-            System.out.println("[HLS] Cannot rebuild playlist: " + e.getMessage());
-        }
-    }
     private void clearBrokenHls(Path folder) {
         try {
             if (!Files.exists(folder)) return;
@@ -235,9 +171,7 @@ public class HlsConversionService {
         }
     }
     private void startFfmpegResume(Path sourceFile, Path folder, String key) throws IOException {
-        /*long segmentCount = countSegments(folder);
 
-        long startSeconds = Math.max(0, segmentCount * props.getHlsSegmentSeconds());*/
         long segmentCount = nextSegmentNumber(folder);
         double startSeconds = getConvertedSecondsFromPlaylist(folder.resolve("playlist.m3u8"));
         ProcessBuilder pb = new ProcessBuilder(
@@ -255,11 +189,6 @@ public class HlsConversionService {
                 "-maxrate", props.getPreviewVideoBitrate(),
                 "-bufsize", "10000k",
                 "-pix_fmt", "yuv420p",
-
-               /* "-g", String.valueOf(props.getHlsSegmentSeconds() * 30),
-                "-keyint_min", String.valueOf(props.getHlsSegmentSeconds() * 30),
-                "-sc_threshold", "0",
-                "-force_key_frames", "expr:gte(t,n_forced*" + props.getHlsSegmentSeconds() + ")",*/
 
                 "-c:a", "aac",
                 "-b:a", props.getPreviewAudioBitrate(),
@@ -351,11 +280,6 @@ public class HlsConversionService {
                 "-bufsize", "10000k",
                 "-pix_fmt", "yuv420p",
 
-                /*"-g", String.valueOf(props.getHlsSegmentSeconds() * 30),
-                "-keyint_min", String.valueOf(props.getHlsSegmentSeconds() * 30),
-                "-sc_threshold", "0",
-                "-force_key_frames", "expr:gte(t,n_forced*" + props.getHlsSegmentSeconds() + ")",*/
-
                 "-c:a", "aac",
                 "-b:a", props.getPreviewAudioBitrate(),
 
@@ -364,7 +288,7 @@ public class HlsConversionService {
 
                 "-f", "hls",
                 "-hls_time", String.valueOf(props.getHlsSegmentSeconds()),
-                "-hls_playlist_type", "event", //"vod", //vod хорош после полной готовности
+                "-hls_playlist_type", "event",
 
                 "-hls_list_size", "0",
                 "-hls_flags", "append_list+temp_file+independent_segments",

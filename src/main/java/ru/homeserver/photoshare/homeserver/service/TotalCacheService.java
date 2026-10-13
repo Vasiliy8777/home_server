@@ -40,8 +40,6 @@ public class TotalCacheService {
     private final ExecutorService thumbnailPool = Executors.newFixedThreadPool(1);
 
     private TotalCacheJobDto job = new TotalCacheJobDto();
-    private volatile TotalCacheScan cachedScan = null;
-    private volatile long cachedScanCreatedAt = 0;
     public TotalCacheService(
             FileService fileService,
             FolderPrepareService folderPrepareService,
@@ -61,41 +59,7 @@ public class TotalCacheService {
 
         loadJournal();
     }
-    /*private boolean shouldSkipPath(Path path) {
-        String name = path.getFileName() == null
-                ? ""
-                : path.getFileName().toString().toLowerCase();
 
-        String full = path.toAbsolutePath().normalize().toString().toLowerCase();
-
-        return name.equals(".metadata_cache")
-                || name.equals(".thumbnails")
-                || name.equals(".previews")
-                || name.equals(".preview_journal")
-                || name.equals(".folder_cache")
-                || name.equals(".upload_tmp")
-                || name.equals(".security")
-                || name.equals("$recycle.bin")
-                || name.equals("system volume information")
-                || full.contains("\\.metadata_cache\\")
-                || full.contains("\\.thumbnails\\")
-                || full.contains("\\.previews\\")
-                || full.contains("\\.preview_journal\\")
-                || full.contains("\\.folder_cache\\")
-                || full.contains("\\.upload_tmp\\")
-                || full.contains("\\.security\\")
-                || full.contains("\\$recycle.bin\\")
-                || full.contains("\\system volume information\\")
-                || full.contains("/.upload_tmp/")
-                || full.contains("/.security/")
-                || full.contains("/$recycle.bin/")
-                || full.contains("/system volume information/")
-                || full.contains("/.metadata_cache/")
-                || full.contains("/.thumbnails/")
-                || full.contains("/.previews/")
-                || full.contains("/.preview_journal/")
-                || full.contains("/.folder_cache/");
-    }*/
     private boolean shouldSkipPath(Path path) {
         return HiddenPaths.shouldSkip(path);
     }
@@ -137,50 +101,11 @@ public class TotalCacheService {
         try {
             Path root = fileService.getRootPath();
             updateStage("Сканирование папок и файлов", "");
-
-            /*TotalCacheScan scan = scanStorageRoot(root);*/
-            /*TotalCacheScan scan = getOrBuildScan();*/
-            invalidateStorageScanCache();
             TotalCacheScan scan = scanStorageRoot(root);
 
             List<Path> folders = scan.folders();
             List<Path> mediaFiles = scan.mediaFiles();
-            /*List<Path> folders = new ArrayList<>();
-            List<Path> files = new ArrayList<>();
 
-            updateStage("Сканирование папок и файлов", "");
-            Files.walkFileTree(root, new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    if (!dir.equals(root) && shouldSkipPath(dir)) {
-                        return FileVisitResult.SKIP_SUBTREE;
-                    }
-
-                    folders.add(dir);
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    if (!shouldSkipPath(file) && Files.isRegularFile(file)) {
-                        files.add(file);
-                    }
-
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                    System.out.println("Skip unreadable path: " + file + " / " + exc.getMessage());
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-            List<Path> mediaFiles = files.stream()
-                    .filter(file -> {
-                        String type = detectType(file);
-                        return "image".equals(type) || "video".equals(type);
-                    })
-                    .toList();*/
             synchronized (lock) {
                 job.totalFolders = folders.size();
 
@@ -217,13 +142,12 @@ public class TotalCacheService {
                 }));
             }
             for (Path file : mediaFiles) {
-            /*for (Path file : files) {*/
+
                 tasks.add(metadataPool.submit(() -> {
                     if (shouldStop()) return;
 
                     String rel = toRelative(file);
 
-                    /*updateStage("Кеш метаданных", rel);*/
                     synchronized (lock) {
                         if (job.processedFiles % 50 == 0) {
                             job.stage = "Кеш метаданных";
@@ -252,7 +176,6 @@ public class TotalCacheService {
 
                     String rel = toRelative(file);
 
-                    /*updateStage("Создание постеров", rel);*/
                     synchronized (lock) {
                         if (job.processedThumbnails % 50 == 0) {
                             job.stage = "Создание постеров";
@@ -292,31 +215,7 @@ public class TotalCacheService {
                         updateProgressUnsafe();
                         saveJournal();
                     }
-                    /*try {
-                        String type = detectType(file);
 
-                        if ("image".equals(type)) {
-                            if (!thumbnailService.hasImageThumbnail(file)) {
-                                thumbnailService.getOrCreateImageThumbnail(file);
-                            }
-                        }
-
-                        if ("video".equals(type)) {
-                            if (!thumbnailService.hasVideoThumbnail(file)) {
-                                thumbnailService.getOrCreateVideoThumbnail(file);
-                            }
-                        }
-                    } catch (Exception ignored) {
-                    }
-                    synchronized (lock) {
-                        job.processedThumbnails++;
-
-                        if (job.processedThumbnails % 50 == 0
-                                || job.processedThumbnails >= job.totalThumbnails) {
-                            updateProgressUnsafe();
-                            saveJournal();
-                        }
-                    }*/
                 }));
             }
 
@@ -404,11 +303,6 @@ public class TotalCacheService {
                 return job;
             }
 
-            /*if ("Анализ завершен".equals(job.stage)
-                    || "Кеш готов".equals(job.stage)) {
-                return job;
-            }*/
-
             statusScanRunning = true;
             statusScanStopRequested = false;
 
@@ -424,9 +318,6 @@ public class TotalCacheService {
             try {
 
                 Path root = fileService.getRootPath();
-                /*TotalCacheScan scan = scanStorageRoot(root);*/
-                /*TotalCacheScan scan = getOrBuildScan();*/
-                invalidateStorageScanCache();
                 TotalCacheScan scan = scanStorageRoot(root);
 
                 List<Path> folders = scan.folders();
@@ -556,18 +447,7 @@ public class TotalCacheService {
             saveJournal();
         }
     }
-    /*private boolean folderCacheExists(Path folder) {
-        try {
-            Path dir = folderPrepareService.folderCacheDir(folder);
 
-            return Files.exists(dir)
-                    && Files.exists(dir.resolve("signature.json"))
-                    && Files.exists(dir.resolve("manifest.json"));
-
-        } catch (Exception e) {
-            return false;
-        }
-    }*/
     private boolean folderCacheExists(Path folder) {
         return folderPrepareService.folderCacheValid(folder);
     }
@@ -633,52 +513,7 @@ public class TotalCacheService {
 
         return new TotalCacheScan(folders, mediaFiles);
     }
-    private TotalCacheScan getOrBuildScan() throws IOException {
 
-        TotalCacheScan scan = cachedScan;
-
-        if (scan != null) {
-            return scan;
-        }
-
-        synchronized (lock) {
-
-            if (cachedScan == null) {
-
-                Path root = fileService.getRootPath();
-
-                TotalCacheScan diskScan = scanStorageRoot(root);
-
-                List<Path> foldersFromTree = fileService.getCachedFolderPaths();
-
-                cachedScan = new TotalCacheScan(
-                        foldersFromTree,
-                        diskScan.mediaFiles()
-                );
-
-                cachedScanCreatedAt = System.currentTimeMillis();
-            }
-
-            return cachedScan;
-        }
-    }
-    public void invalidateStorageScanCache() {
-        synchronized (lock) {
-            cachedScan = null;
-            cachedScanCreatedAt = 0;
-        }
-    }
-    public void rebuildStorageScanCacheAsync() {
-        invalidateStorageScanCache();
-
-        new Thread(() -> {
-            try {
-                getOrBuildScan();
-            } catch (Exception e) {
-                System.out.println("Storage scan cache rebuild failed: " + e.getMessage());
-            }
-        }, "storage-scan-rebuild").start();
-    }
     private record TotalCacheScan(
             List<Path> folders,
             List<Path> mediaFiles

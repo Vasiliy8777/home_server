@@ -25,5 +25,19 @@ dependencies {
     implementation 'com.github.ua-parser:uap-java:1.6.1'
     implementation 'com.bucket4j:bucket4j_jdk17-core:8.18.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+tasks.register('frontendTest', Exec) {
+    description = 'Run frontend regression tests (requires Node.js 20+).'
+    group = 'verification'
+    commandLine 'node', '--test', 'src/test/js/frontend.test.cjs', 'src/test/js/styles.test.cjs'
+}
+
+tasks.named('check') {
+    dependsOn 'frontendTest'
+}

@@ -649,7 +649,6 @@ public class SharePublicController {
         Files.deleteIfExists(getMetaFile(uploadId));
 
         uploadLocks.remove(uploadId);
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
 
         return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }

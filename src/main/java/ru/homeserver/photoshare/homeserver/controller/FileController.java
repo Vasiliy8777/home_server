@@ -464,9 +464,6 @@ public class FileController {
                 .relativize(current)
                 .toString()
                 .replace("\\", "/");
-        /*String normalized = fileService.getRootPath().equals(current)
-                ? ""
-                : fileService.getRootPath().relativize(current).toString().replace("\\", "/");*/
 
                 String parent = "";
         if (StringUtils.hasText(normalized)) {
@@ -568,10 +565,7 @@ public class FileController {
          * - заголовками
          * - телом ответа
          */
-        /*fileService.upload(path, files);
-        folderPrepareService.invalidateFolderCache(path);
 
-        return ResponseEntity.ok(Map.of("message", "Uploaded"));*/
         fileService.upload(path, files);
 
         folderPrepareService.invalidateFolderCache(path);
@@ -592,11 +586,7 @@ public class FileController {
             @RequestParam(defaultValue = "") String path,
             @RequestParam String name
     ) throws IOException {
-        /*fileService.createFolder(path, name);
-        fileService.rebuildFolderTreeCache();
-        folderPrepareService.invalidateFolderCache(path);
 
-        return ResponseEntity.ok(Map.of("message", "Folder created"));*/
         fileService.createFolder(path, name);
 
         fileService.invalidateFolderTreeCache();
@@ -622,8 +612,7 @@ public class FileController {
             fileService.rebuildFolderTreeCache();
         }
         folderPrepareService.invalidateFolderCache(parent);
-        /*metadataService.clearFolderCache();*/
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
+
         folderPrepareService.invalidateFolderCache(parent);
         folderPrepareService.refreshFolderCacheAsync(parent);
         return ResponseEntity.ok(Map.of("message", "Deleted"));
@@ -643,12 +632,11 @@ public class FileController {
             fileService.rebuildFolderTreeCache();
         }
         folderPrepareService.invalidateFolderCache(parent);
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
+
         folderPrepareService.refreshFolderCacheAsync(parent);
         fileService.invalidateFolderTreeCache();
         return ResponseEntity.ok().build();
     }
-
 
     @GetMapping("/image-thumbnail")
     public ResponseEntity<Resource> imageThumbnail(@RequestParam String path) throws IOException {
@@ -920,15 +908,12 @@ public class FileController {
         Path source = fileService.resolveSafe(sourcePath);
         Path sourceParent = source.getParent();
         boolean wasDirectory = Files.isDirectory(source);
-        //Path target = fileService.resolveSafe(targetPath);
+
         fileService.move(sourcePath, targetPath);
         if (wasDirectory) {
             fileService.rebuildFolderTreeCache();
         }
-        /*folderPrepareService.invalidateFolderCache(fileService.toRelative(sourceParent));
-        folderPrepareService.invalidateFolderCache(targetPath);
 
-        return ResponseEntity.ok(Map.of("message", "Moved"));*/
         String sourceParentRel = fileService.toRelative(sourceParent);
 
         fileService.invalidateFolderTreeCache();
@@ -1073,16 +1058,6 @@ public class FileController {
             return ResponseEntity.badRequest().body(Map.of("error", "Not all chunks uploaded"));
         }
 
-        /*Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
-
-        folderPrepareService.invalidateFolderCache(meta.getTargetPath());
-        Files.deleteIfExists(getMetaFile(uploadId));
-
-        folderPrepareService.refreshFolderCacheAsync(targetPath);
-        fileService.invalidateFolderTreeCache();
-
-        uploadLocks.remove(uploadId);*/
-        /*totalCacheService.rebuildStorageScanCacheAsync();*/
         Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
 
         String targetPath = meta.getTargetPath();
@@ -1394,41 +1369,7 @@ public class FileController {
             }
         }
     }
-    /*@GetMapping("/download-selected/file")
-    public ResponseEntity<Resource> downloadSelectedFile(
-            @RequestParam String downloadId
-    ) throws IOException {
 
-        BulkDownloadStatus status =
-                bulkDownloadStatuses.get(downloadId);
-
-        Path zipFile =
-                bulkDownloadFiles.get(downloadId);
-
-        if (status == null
-                || !"READY".equals(status.status)
-                || zipFile == null
-                || !Files.exists(zipFile)) {
-
-            return ResponseEntity.notFound().build();
-        }
-
-        long zipSize = Files.size(zipFile);
-
-        Resource resource =
-                new FileSystemResource(zipFile);
-
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"selected-files.zip\""
-                )
-                .contentType(
-                        MediaType.parseMediaType("application/zip")
-                )
-                .contentLength(zipSize)
-                .body(resource);
-    }*/
     private long calculateSelectedSize(List<String> paths) {
 
         long total = 0;

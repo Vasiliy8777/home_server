@@ -30,9 +30,6 @@ import java.util.stream.Stream;
 public class MetadataService {
 
     private final String ffprobePath;
-
-
-    private final Map<Path, Long> createdAtCache = new ConcurrentHashMap<>();
     private final Map<Path, Map<String, Object>> folderStatsCache = new ConcurrentHashMap<>();
     private final Map<Path, Map<String, Object>> filePropertiesCache = new ConcurrentHashMap<>();
 
@@ -47,21 +44,7 @@ public class MetadataService {
         this.metadataCacheRoot = Path.of(appProperties.getMetadataCacheDir());
         Files.createDirectories(this.metadataCacheRoot);
     }
-    private long computeFolderSignature(Path folder) {
-        try (Stream<Path> stream = Files.list(folder)) {
-            return stream
-                    .mapToLong(p -> {
-                        try {
-                            return Files.getLastModifiedTime(p).toMillis();
-                        } catch (IOException e) {
-                            return 0L;
-                        }
-                    })
-                    .sum();
-        } catch (IOException e) {
-            return 0L;
-        }
-    }
+
     private Path folderCacheDir(Path folder) throws IOException {
         String safeDir = folder.toAbsolutePath().normalize().toString()
                 .replace(":", "")
@@ -245,30 +228,6 @@ public class MetadataService {
         }
 
         return result;
-    }
-    public long readCreatedAtMillis(Path path) {
-        try {
-            String lower = path.getFileName().toString().toLowerCase();
-
-            if (lower.endsWith(".lrv") || lower.endsWith(".insv")) {
-                return Files.getLastModifiedTime(path).toMillis();
-            }
-
-            Metadata metadata = ImageMetadataReader.readMetadata(path.toFile());
-
-            ExifSubIFDDirectory exif = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
-
-            if (exif != null && exif.getDateOriginal() != null) {
-                return exif.getDateOriginal().getTime();
-            }
-
-        } catch (Exception ignored) {}
-
-        try {
-            return Files.getLastModifiedTime(path).toMillis();
-        } catch (IOException e) {
-            return 0L;
-        }
     }
 
     private Map<String, Object> baseProperties(Path path) throws IOException {
@@ -476,24 +435,6 @@ public class MetadataService {
         return Instant.ofEpochMilli(millis)
                 .atZone(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
-    }
-
-    public void clearFolderCache() {
-        folderStatsCache.clear();
-        createdAtCache.clear();
-        filePropertiesCache.clear();
-
-        try (Stream<Path> stream = Files.list(metadataCacheRoot)) {
-            stream
-                    .filter(Files::isRegularFile)
-                    .forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException ignored) {
-                        }
-                    });
-        } catch (IOException ignored) {
-        }
     }
 
     private String formatDuration(double seconds) {

@@ -55,7 +55,7 @@ public class SecurityConfig {
                 )
                 .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
                 .authorizeHttpRequests(auth -> auth
-                        /*.requestMatchers("/login", "/error")*/
+
                         .requestMatchers(
                                 "/login",
                                 "/error",
@@ -78,7 +78,7 @@ public class SecurityConfig {
                         .failureHandler(loginFailureHandler)
                         .permitAll()
                 )
-                /*.formLogin(Customizer.withDefaults())*/
+
                 .logout(logout -> logout
                         .logoutUrl("/logout")
                         .logoutSuccessUrl("/login?logout")

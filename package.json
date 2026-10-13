@@ -1,0 +1,11 @@
+{
+  "name": "homeserver-frontend-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test src/test/js/frontend.test.cjs src/test/js/styles.test.cjs",
+    "test:browser": "node src/test/js/browser-smoke.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

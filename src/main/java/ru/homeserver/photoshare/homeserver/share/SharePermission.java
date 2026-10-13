@@ -6,10 +6,6 @@ public enum SharePermission {
     UPLOAD,
     MANAGE;
 
-    public boolean canView() {
-        return true;
-    }
-
     public boolean canDownload() {
         return this == DOWNLOAD || this == UPLOAD || this == MANAGE;
     }

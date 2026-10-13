@@ -216,7 +216,6 @@ public class    FolderPrepareService {
                         ? Math.min(49, Math.round(job.processed * 50f / job.total))
                         : 50;
 
-
                 offset += limit;
 
                 Thread.sleep(10);
@@ -240,7 +239,6 @@ public class    FolderPrepareService {
 
                                 long created = metadataService.readCreatedAtFromPropertiesCache(file);
 
-
                                 result = new FileItemDto(
                                         item.name(),
                                         item.relativePath(),
@@ -259,7 +257,6 @@ public class    FolderPrepareService {
                                         item.hlsStatusUrl()
                                 );
                             }
-
 
                             return result;
 
@@ -283,7 +280,7 @@ public class    FolderPrepareService {
 
             List<FileItemDto> filtered = enriched.stream()
                     .filter(item -> !isHiddenDirName(item.name()))
-                    /*.filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo))*/
+
                     .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo, sharedPaths))
                     .toList();
 
@@ -291,7 +288,7 @@ public class    FolderPrepareService {
             filtered.sort(createComparator(job.sortField, job.sortDirection));
 
             job.items = filtered;
-            /*job.processed = enriched.size();*/
+
             job.processed = filtered.size();
             job.ready = true;
             job.progress = 100;
@@ -349,10 +346,6 @@ public class    FolderPrepareService {
         return dir;
     }
 
-    private Path itemCacheFile(Path folder, FileItemDto item) throws IOException {
-        String hash = sha256(item.relativePath());
-        return folderItemsDir(folder).resolve(hash + ".json");
-    }
     private FolderSignature buildFolderSignature(Path folder)
             throws IOException {
 
@@ -373,28 +366,12 @@ public class    FolderPrepareService {
 
                 try {
 
-                    /*if (Files.isSymbolicLink(child)) {
-                        continue;
-                    }*/
-
                     String name =
                             child.getFileName().toString();
 
                     if (isHiddenDirName(name)) {
                         continue;
                     }
-
-                    /*if (name.equals(".metadata_cache")
-                            || name.equals(".thumbnails")
-                            || name.equals(".previews")
-                            || name.equals(".preview_journal")
-                            || name.equals(".folder_cache")
-                            || name.equals(".upload_tmp")
-                            || name.equals("$RECYCLE.BIN")
-                            || name.equals("System Volume Information")) {
-
-                        continue;
-                    }*/
 
                     count++;
 
@@ -495,7 +472,6 @@ public class    FolderPrepareService {
 
                 objectMapper.writeValue(target.toFile(), item);
 
-
                 manifest.add(fileName);
             }
             Path manifestFile = folderManifestFile(folder);
@@ -509,7 +485,6 @@ public class    FolderPrepareService {
             Files.createDirectories(signatureFile.getParent());
 
             objectMapper.writeValue(signatureFile.toFile(), signature);
-
 
         } catch (Exception e) {
             System.out.println("Folder items cache write failed: " + folder);
@@ -594,62 +569,7 @@ public class    FolderPrepareService {
     private boolean isHiddenDirName(String name) {
         return HiddenPaths.isHiddenName(name);
     }
-    /*private boolean matchesGrouping(
-            FileItemDto item,
-            String groupMode,
-            boolean periodEnabled,
-            String periodFrom,
-            String periodTo
-    ) {
-        if (item == null) return false;
 
-        if ("photo".equals(groupMode)) {
-            if (!"image".equals(item.type())) {
-                return false;
-            }
-        }
-
-        if ("video".equals(groupMode)) {
-            if (!"video".equals(item.type())) {
-                return false;
-            }
-        }
-
-        if (!periodEnabled) {
-            return true;
-        }
-
-        long date = item.createdAt() > 0
-                ? item.createdAt()
-                : item.lastModified();
-
-        if (date <= 0) {
-            return false;
-        }
-
-        LocalDate fileDate = java.time.Instant
-                .ofEpochMilli(date)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate();
-
-        if (periodFrom != null && !periodFrom.isBlank()) {
-            LocalDate from = LocalDate.parse(periodFrom);
-
-            if (fileDate.isBefore(from)) {
-                return false;
-            }
-        }
-
-        if (periodTo != null && !periodTo.isBlank()) {
-            LocalDate to = LocalDate.parse(periodTo);
-
-            if (fileDate.isAfter(to)) {
-                return false;
-            }
-        }
-
-        return true;
-    }*/
     private boolean matchesGrouping(
             FileItemDto item,
             String groupMode,
@@ -659,20 +579,6 @@ public class    FolderPrepareService {
             Set<String> sharedPaths
     ) {
         if (item == null) return false;
-
-        /*if ("shared".equals(groupMode)) {
-            String itemPath = item.relativePath();
-
-            boolean exactShared = sharedPaths.contains(itemPath);
-
-            boolean containsSharedInside = item.directory()
-                    && sharedPaths.stream()
-                    .anyMatch(sharedPath -> sharedPath.startsWith(itemPath + "/"));
-
-            if (!exactShared && !containsSharedInside) {
-                return false;
-            }
-        }*/
 
         if ("shared".equals(groupMode)) {
             if (!sharedPaths.contains(item.relativePath())) {

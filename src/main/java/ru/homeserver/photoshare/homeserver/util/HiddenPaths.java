@@ -16,7 +16,10 @@ public final class HiddenPaths {
             ".security",
             ".logs",
             "$recycle.bin",
-            "system volume information"
+            "system volume information",
+            "bitcoin",
+            "bitcoincorespeedcheck",
+            "bitcoinjavanode"
     );
 
     private HiddenPaths() {
