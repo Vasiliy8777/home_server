@@ -5,6 +5,84 @@ const {harness, Element} = require('./browser-harness.cjs');
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 const response = (data, ok = true) => ({ok, status: ok ? 200 : 500, json: async () => data});
 
+test('photo description toggles in properties and clears for another file', async () => {
+    const h = harness();
+    h.window.fetch = async () => response({name: 'photo.jpg', type: 'image', size: 10});
+    h.run('currentItems = [{relativePath: "photos/photo.jpg", searchDescription: "Фото у моря"}];');
+    await h.run('openPropertiesModal("photos/photo.jpg")');
+    const button = h.elements.get('propertiesDescriptionBtn');
+    const description = h.elements.get('propertiesDescription');
+    assert.equal(button.hidden, false);
+    assert.equal(description.hidden, true);
+    button.onclick();
+    assert.equal(description.hidden, false);
+    assert.equal(description.textContent, 'Фото у моря');
+    assert.equal(button.getAttribute('aria-expanded'), 'true');
+    await h.run('openPropertiesModal("other.jpg")');
+    assert.equal(button.hidden, true);
+    assert.equal(description.hidden, true);
+    assert.equal(description.textContent, '');
+});
+
+test('photo search ranks supplied results, pages them and preserves folder to return to', async () => {
+    const h = harness();
+    const urls = [];
+    const item = name => ({name, relativePath: name, type: 'image', size: 10});
+    h.window.fetch = async url => {
+        urls.push(url);
+        const first = url.includes('offset=0');
+        return response({hits: [{item: item(first ? 'beach.jpg' : 'sea.jpg'), description: 'У моря'}],
+            total: 2, status: {enabled: true, available: 2}});
+    };
+    h.run('currentPath="photos"; photoSearchInput.value="отдых у воды"; currentPreparedJobId="folder-job";');
+    await h.run('runPhotoSearch()');
+    assert.equal(h.run('currentPath'), 'photos');
+    assert.equal(h.run('currentPreparedJobId'), null);
+    assert.equal(h.run('currentItems[0].searchDescription'), 'У моря');
+    assert.equal(h.elements.get('photoSearchMore').hidden, false);
+    await h.run('loadPhotoSearchPage()');
+    assert.ok(urls[1].includes('offset=1'));
+    assert.equal(h.run('currentItems.length'), 2);
+    assert.equal(h.run('viewerItems.length'), 2);
+    assert.equal(h.elements.get('photoSearchMore').hidden, true);
+});
+
+test('photo search ignores responses after another folder or query opens', async () => {
+    const h = harness();
+    let finish;
+    h.window.fetch = () => new Promise(resolve => { finish = resolve; });
+    h.run('photoSearchInput.value="пляж";');
+    const pending = h.run('runPhotoSearch()');
+    h.run('++folderLoadSession; resetFolderRequests(); exitPhotoSearch(); loading=true;');
+    finish(response({hits: [{item: {relativePath:'old.jpg'}}], total: 1}));
+    await pending;
+    assert.equal(h.run('currentItems.length'), 0);
+    assert.equal(h.run('loading'), true);
+});
+
+test('photo index writes include CSRF and errors are shown as text', async () => {
+    const h = harness();
+    let request;
+    h.window.fetch = async (url, options) => {
+        request = {url, options};
+        return response({error: '<b>Ollama unavailable</b>'}, false);
+    };
+    await h.run('changePhotoIndex("index")');
+    assert.equal(request.url, '/api/photo-search/index');
+    assert.equal(request.options.headers['X-XSRF-TOKEN'], 'csrf token');
+    assert.equal(h.elements.get('photoIndexStatus').textContent, 'Не удалось обновить состояние индекса. Попробуйте ещё раз.');
+    assert.equal(h.elements.get('photoIndexStart').disabled, false);
+});
+
+test('public gallery never sends photo search or indexing requests', async () => {
+    const h = harness(true);
+    h.run('photoSearchInput.value="пляж";');
+    await h.run('runPhotoSearch()');
+    await h.run('changePhotoIndex("index")');
+    await h.run('updatePhotoIndexStatus()');
+    assert.equal(h.run('photoSearchState'), null);
+});
+
 test('private API includes CSRF on writes and public API maps upload/HLS endpoints', async () => {
     const h = harness();
     let request;
@@ -215,6 +293,19 @@ test('paused and cancelled uploads never finalize', async () => {
     assert.equal(completed, 0);
 });
 
+test('uploads use chunk size returned by resumed session', async () => {
+    const h = harness();
+    const sizes = [];
+    h.context.getUploadStatus = async () => ({totalChunks: 2, chunkSize: 4, uploadedChunks: []});
+    h.context.sendChunk = async form => { sizes.push(form.get('file').size); };
+    h.context.completeUploadSession = async () => {};
+    h.context.loadFiles = async () => {};
+    h.context.file = new Blob(['1234567']);
+    h.run('globalThis.task={id:"upload",name:"a",file,uploadId:"id",uploadedChunks:[],status:"uploading"}; transferTasks.set(task.id,task)');
+    await h.run('uploadFileResumableManaged(task,()=>false)');
+    assert.deepEqual(sizes, [4, 3]);
+});
+
 test('persistent metadata errors stop after bounded retries without marking data loaded', async () => {
     const h = harness();
     let calls = 0;
@@ -292,4 +383,30 @@ test('resuming an upload while its old request settles does not start a second w
     h.run('task.running=false');
     await h.run('processUploadQueue()');
     assert.equal(calls, 1);
+});
+
+
+test('reopening photo search reloads progress and closing aborts polling without stopping indexing', async () => {
+    const h = harness();
+    const modal = h.elements.get('photoSearchModal');
+    modal.open = false;
+    modal.showModal = () => { modal.open = true; };
+    modal.close = () => { modal.open = false; };
+    h.elements.get('photoSearchInput').focus = () => {};
+    const requests = [];
+    let count = 1;
+    h.window.fetch = async (url, options) => {
+        requests.push({url, options});
+        return response({enabled:true,running:true,processed:count,available:count,currentPath:'private.jpg',error:'secret failure'});
+    };
+    h.run('openPhotoSearch()'); await flush();
+    assert.match(h.elements.get('photoIndexStatus').textContent, /Обработано за текущий запуск: 1/);
+    assert.equal(h.elements.get('photoIndexProgress').hidden, false);
+    h.run('closePhotoSearch()');
+    assert.equal(requests[0].options.signal.aborted, true);
+    count = 8;
+    h.run('openPhotoSearch()'); await flush();
+    assert.match(h.elements.get('photoIndexStatus').textContent, /Обработано за текущий запуск: 8/);
+    assert.doesNotMatch(h.elements.get('photoIndexStatus').textContent, /private|secret|Ошибок|Последняя ошибка/);
+    assert.ok(requests.every(request => request.url === '/api/photo-search/status'));
 });

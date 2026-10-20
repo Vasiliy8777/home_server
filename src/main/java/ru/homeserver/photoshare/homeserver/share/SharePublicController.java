@@ -43,7 +43,6 @@ public class SharePublicController {
     private final FolderPrepareService folderPrepareService;
     private final HlsConversionService hlsConversionService;
     private final VideoPreviewProperties videoPreviewProperties;
-    private final Map<String, Object> uploadLocks = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, Path> sharedBulkDownloadFiles =
             new ConcurrentHashMap<>();
 
@@ -554,103 +553,72 @@ public class SharePublicController {
             @RequestParam int chunkIndex,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
-
-        if (chunkIndex < 0 || file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid chunk"));
-        }
-
-        UploadSessionDto meta = readMeta(uploadId);
-        if (meta == null) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Upload session not found",
-                    "uploadId", uploadId
-            ));
-        }
-
-        if (chunkIndex >= meta.getTotalChunks()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid chunk index"));
-        }
-
-        if (meta.getUploadedChunks() == null) {
-            meta.setUploadedChunks(new java.util.ArrayList<>());
-        }
-
-        Path tempFile = getTempFile(uploadId);
-
-        if (!Files.exists(tempFile)) {
-            Files.createFile(tempFile);
-        }
-
-        Object lock = uploadLocks.computeIfAbsent(uploadId, k -> new Object());
-
-        synchronized (lock) {
-            if (meta.getUploadedChunks().contains(chunkIndex)) {
-                return ResponseEntity.ok().build();
+        synchronized (ru.homeserver.photoshare.homeserver.util.UploadChunks.lock(uploadId)) {
+            UploadSessionDto meta = readMeta(uploadId);
+            if (meta == null) return ResponseEntity.badRequest().body(Map.of("error", "Upload session not found"));
+            if (!ru.homeserver.photoshare.homeserver.util.UploadChunks.valid(meta, chunkIndex, file.getSize())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Invalid chunk size/index"));
             }
-
-            try (RandomAccessFile raf = new RandomAccessFile(tempFile.toFile(), "rw")) {
-                long position = (long) chunkIndex * meta.getChunkSize();
-                raf.seek(position);
-                raf.write(file.getBytes());
-            }
-
+            if (meta.getUploadedChunks() == null) meta.setUploadedChunks(new java.util.ArrayList<>());
+            if (meta.getUploadedChunks().contains(chunkIndex)) return ResponseEntity.ok().build();
+            ru.homeserver.photoshare.homeserver.util.UploadChunks.write(getTempFile(uploadId), meta, chunkIndex, file);
             meta.getUploadedChunks().add(chunkIndex);
-            meta.getUploadedChunks().sort(Integer::compareTo);
             writeMeta(meta);
+            return ResponseEntity.ok().build();
         }
-
-        return ResponseEntity.ok().build();
     }
     @PostMapping("/upload/complete")
     public ResponseEntity<?> completeUpload(@RequestParam String uploadId) throws IOException {
-        UploadSessionDto meta = readMeta(uploadId);
+        synchronized (ru.homeserver.photoshare.homeserver.util.UploadChunks.lock(uploadId)) {
+            UploadSessionDto meta = readMeta(uploadId);
 
-        if (meta == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Upload session not found"));
+            if (meta == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Upload session not found"));
+            }
+
+            String safeFileName = Path.of(meta.getFileName()).getFileName().toString();
+
+            if (!StringUtils.hasText(safeFileName)
+                    || !safeFileName.equals(meta.getFileName())
+                    || safeFileName.contains("..")
+                    || safeFileName.contains("/")
+                    || safeFileName.contains("\\")
+                    || safeFileName.contains("\0")) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Invalid file name"));
+            }
+
+            Path tempFile = getTempFile(uploadId);
+
+            Path finalDir = fileService.resolveSafe(meta.getTargetPath());
+
+            if (!Files.exists(finalDir)) {
+                Files.createDirectories(finalDir);
+            }
+
+            if (!Files.isDirectory(finalDir)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Target is not a directory"));
+            }
+
+            Path finalPath = fileService.resolveSafe(
+                    meta.getTargetPath() + "/" + safeFileName
+            );
+
+            if (!Files.exists(tempFile)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Temp file not found"));
+            }
+
+            if (meta.getUploadedChunks().size() != meta.getTotalChunks()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Not all chunks uploaded"));
+            }
+
+            if (Files.size(tempFile) != meta.getFileSize()) return ResponseEntity.badRequest().body(Map.of("error", "Uploaded file size mismatch"));
+            Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
+            folderPrepareService.invalidateFolderCache(meta.getTargetPath());
+            Files.deleteIfExists(getMetaFile(uploadId));
+
+
+            return ResponseEntity.ok(Map.of("message", "Upload completed"));
         }
-
-        String safeFileName = Path.of(meta.getFileName()).getFileName().toString();
-
-        if (!StringUtils.hasText(safeFileName)
-                || !safeFileName.equals(meta.getFileName())
-                || safeFileName.contains("..")
-                || safeFileName.contains("/")
-                || safeFileName.contains("\\")
-                || safeFileName.contains("\0")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid file name"));
-        }
-
-        Path tempFile = getTempFile(uploadId);
-
-        Path finalDir = fileService.resolveSafe(meta.getTargetPath());
-
-        if (!Files.exists(finalDir)) {
-            Files.createDirectories(finalDir);
-        }
-
-        if (!Files.isDirectory(finalDir)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Target is not a directory"));
-        }
-
-        Path finalPath = fileService.resolveSafe(
-                meta.getTargetPath() + "/" + safeFileName
-        );
-
-        if (!Files.exists(tempFile)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Temp file not found"));
-        }
-
-        if (meta.getUploadedChunks().size() != meta.getTotalChunks()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Not all chunks uploaded"));
-        }
-
-        Files.move(tempFile, finalPath, StandardCopyOption.REPLACE_EXISTING);
-        folderPrepareService.invalidateFolderCache(meta.getTargetPath());
-        Files.deleteIfExists(getMetaFile(uploadId));
-
-        uploadLocks.remove(uploadId);
-
-        return ResponseEntity.ok(Map.of("message", "Upload completed"));
     }
     private Path getUploadTempDir() throws IOException {
         Path dir = Path.of(appProperties.getUploadTempDir());
@@ -678,7 +646,7 @@ public class SharePublicController {
 
     private void writeMeta(UploadSessionDto meta) throws IOException {
         Path metaFile = getMetaFile(meta.getUploadId());
-        objectMapper.writeValue(metaFile.toFile(), meta);
+        ru.homeserver.photoshare.homeserver.util.UploadChunks.writeMetadata(metaFile, meta);
     }
     @DeleteMapping("/clear-temp")
     public ResponseEntity<?> clearTemp(@PathVariable String token) throws IOException {
@@ -1289,7 +1257,7 @@ public class SharePublicController {
                 "processed", job.processed,
                 "total", job.total,
                 "stage", job.stage,
-                "itemsTotal", job.items != null ? job.items.size() : 0
+                "itemsTotal", job.total
         );
     }
     @GetMapping("/prepared-items")
@@ -1308,17 +1276,15 @@ public class SharePublicController {
             return Map.of("items", List.of());
         }
 
-        int to = Math.min(offset + limit, job.items.size());
-
         List<FileItemDto> items =
-                job.items.subList(offset, to)
+                folderPrepareService.items(jobId, offset, limit)
                         .stream()
                         .map(item -> shareService.toPublicItem(link, item))
                         .toList();
 
         return Map.of(
                 "items", items,
-                "total", job.items.size()
+                "total", job.total
         );
     }
     private List<SharedDownloadItem> resolveSharedDownloadItems(

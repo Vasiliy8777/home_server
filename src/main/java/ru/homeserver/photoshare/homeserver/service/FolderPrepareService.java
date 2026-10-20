@@ -23,6 +23,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.Semaphore;
+import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.util.stream.Stream;
 
 @Service
@@ -31,15 +39,21 @@ public class    FolderPrepareService {
     private final FileService fileService;
     private final MetadataService metadataService;
     private final Map<String, FolderPrepareJob> jobs = new ConcurrentHashMap<>();
+    private final Map<String, Long> jobAccess = new ConcurrentHashMap<>();
+    private final Map<String, ScheduledFuture<?>> pendingRefreshes = new HashMap<>();
+    private final Semaphore folderPreparationLimit = new Semaphore(2);
+    private final ReentrantLock[] folderLocks = java.util.stream.IntStream.range(0, 64).mapToObj(i -> new ReentrantLock()).toArray(ReentrantLock[]::new);
     private final ThumbnailService thumbnailService;
 
-    private final ExecutorService folderRefreshPool =
-            Executors.newFixedThreadPool(1);
+    private final ScheduledThreadPoolExecutor folderRefreshPool = new ScheduledThreadPoolExecutor(1);
+    private final ExecutorService preparationPool = Executors.newFixedThreadPool(2);
+    private final ForkJoinPool metadataPool = new ForkJoinPool(4);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Path folderCacheRoot;
 
     private final ShareService shareService;
+    private final SqliteCacheStore database;
 
     public FolderPrepareService(
             FileService fileService,
@@ -47,28 +61,40 @@ public class    FolderPrepareService {
             ThumbnailService thumbnailService,
             AppProperties appProperties, ShareService shareService
     ) {
+        this(fileService, metadataService, thumbnailService, appProperties, shareService, null);
+    }
+
+    @Autowired
+    public FolderPrepareService(FileService fileService, MetadataService metadataService,
+                                ThumbnailService thumbnailService, AppProperties appProperties,
+                                ShareService shareService, SqliteCacheStore database) {
         this.fileService = fileService;
         this.metadataService = metadataService;
         this.thumbnailService = thumbnailService;
 
         this.folderCacheRoot = Path.of(appProperties.getFolderCacheDir());
         this.shareService = shareService;
+        this.database = database;
+        folderRefreshPool.setRemoveOnCancelPolicy(true);
         try {
             Files.createDirectories(this.folderCacheRoot);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
-    public void refreshFolderCacheAsync(String relativePath) {
-        folderRefreshPool.submit(() -> {
+    public synchronized void refreshFolderCacheAsync(String relativePath) {
+        String normalized = fileService.toRelative(fileService.resolveSafe(relativePath));
+        ScheduledFuture<?> previous = pendingRefreshes.remove(normalized);
+        if (previous != null) previous.cancel(false);
+        pendingRefreshes.put(normalized, folderRefreshPool.schedule(() -> {
+            synchronized (this) { pendingRefreshes.remove(normalized); }
             try {
-                invalidateFolderCache(relativePath);
-                prepareFolderCacheOnly(relativePath);
+                prepareFolderCacheOnly(normalized);
             } catch (Exception e) {
                 System.out.println("Folder cache refresh failed: " + relativePath);
                 e.printStackTrace();
             }
-        });
+        }, 500, TimeUnit.MILLISECONDS));
     }
     public String start(
             String path,
@@ -112,9 +138,13 @@ public class    FolderPrepareService {
         job.sortField = finalSortField;
         job.sortDirection = finalSortDirection;
 
+        pruneJobs();
+        if (jobs.size() >= 96) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Очередь подготовки папок заполнена");
         jobs.put(jobId, job);
+        jobAccess.put(jobId, System.currentTimeMillis());
 
-        new Thread(() -> process(
+        preparationPool.submit(() -> process(
                 job,
                 finalPath,
                 finalSortField,
@@ -123,7 +153,7 @@ public class    FolderPrepareService {
                 finalPeriodEnabled,
                 finalPeriodFrom,
                 finalPeriodTo
-        )).start();
+        ));
 
         return jobId;
     }
@@ -137,8 +167,14 @@ public class    FolderPrepareService {
             String periodFrom,
             String periodTo
     ) {
+        boolean acquired = false;
+        ReentrantLock folderLock = null;
         try {
+            folderPreparationLimit.acquire();
+            acquired = true;
             Path folder = fileService.resolveSafe(job.path);
+            folderLock = lockFor(folder);
+            folderLock.lockInterruptibly();
 
             if (!Files.exists(folder) || !Files.isDirectory(folder)) {
                 job.stage = "Папка не найдена";
@@ -176,9 +212,29 @@ public class    FolderPrepareService {
             }
             FolderSignature currentSignature = buildFolderSignature(folder);
 
+            String folderKey = folder.toAbsolutePath().normalize().toString();
+            boolean useDatabase = database != null && database.enabled();
+            String signatureJson = objectMapper.writeValueAsString(currentSignature);
+            if (useDatabase && signatureJson.equals(database.signature(folderKey))) {
+                if ("all".equals(groupMode) && !periodEnabled) {
+                    completeDatabaseJob(job, folderKey);
+                    return;
+                }
+                List<FileItemDto> filtered = database.page(folderKey, job.sortField, job.sortDirection, 0, Integer.MAX_VALUE)
+                        .stream().filter(item -> !isHiddenDirName(item.name()))
+                        .filter(item -> matchesGrouping(item, groupMode, periodEnabled, periodFrom, periodTo, sharedPaths)).toList();
+                job.items = filtered; job.total = filtered.size(); job.processed = filtered.size();
+                job.progress = 100; job.ready = true; job.stage = "Каталог SQLite";
+                return;
+            }
+
             List<FileItemDto> cached = readFolderItemsCache(folder, currentSignature);
 
             if (cached != null) {
+                if (useDatabase) {
+                    database.saveFolder(folderKey, signatureJson, cached);
+                    if ("all".equals(groupMode) && !periodEnabled) { completeDatabaseJob(job, folderKey); return; }
+                }
 
                 List<FileItemDto> filtered = cached.stream()
                         .filter(item -> !isHiddenDirName(item.name()))
@@ -195,32 +251,17 @@ public class    FolderPrepareService {
                 job.ready = true;
                 return;
             }
-            List<FileItemDto> all = new ArrayList<>();
-
-            job.total = (int) fileService.countItems(job.path);
-            job.processed = 0;
-            job.progress = 0;
-
-            int offset = 0;
-            int limit = 200;
-
-            while (true) {
-                List<FileItemDto> batch = fileService.list(job.path, offset, limit);
-
-                if (batch.isEmpty()) break;
-
-                all.addAll(batch);
-                job.stage = "Загрузка карточек";
-                job.processed = all.size();
-                job.progress = job.total > 0
-                        ? Math.min(49, Math.round(job.processed * 50f / job.total))
-                        : 50;
-
-                offset += limit;
-
-                Thread.sleep(10);
+            job.stage = "Загрузка карточек";
+            List<FileItemDto> all = fileService.list(job.path, 0, Integer.MAX_VALUE);
+            job.total = all.size();
+            job.processed = all.size();
+            job.progress = 49;
+            // Name/size order is stable before EXIF extraction. Date/group filters wait for enrichment.
+            if (useDatabase && "all".equals(groupMode) && !periodEnabled && !"lastModified".equals(job.sortField)) {
+                database.saveFolder(folderKey, "partial:" + signatureJson, all);
+                completeDatabaseJob(job, folderKey);
+                job.stage = "Галерея готова; обновление метаданных";
             }
-            ForkJoinPool pool = new ForkJoinPool(4);
 
             List<FileItemDto> source = all;
             AtomicInteger metadataDone = new AtomicInteger(0);
@@ -229,7 +270,7 @@ public class    FolderPrepareService {
             job.stage = "Чтение метаданных, подготовка карточек";
             job.processed = 0;
             job.progress = 50;
-            List<FileItemDto> enriched = pool.submit(() ->
+            List<FileItemDto> enriched = metadataPool.submit(() ->
                     source.parallelStream().map(item -> {
                         try {
                             FileItemDto result = item;
@@ -275,8 +316,9 @@ public class    FolderPrepareService {
                     }).collect(java.util.stream.Collectors.toCollection(ArrayList::new))
             ).get();
 
-            pool.shutdown();
-            writeFolderItemsCache(folder, currentSignature, enriched);
+            if (useDatabase) database.saveFolder(folderKey, signatureJson, enriched);
+            else writeFolderItemsCache(folder, currentSignature, enriched);
+            if (useDatabase && "all".equals(groupMode) && !periodEnabled) { completeDatabaseJob(job, folderKey); return; }
 
             List<FileItemDto> filtered = enriched.stream()
                     .filter(item -> !isHiddenDirName(item.name()))
@@ -294,15 +336,74 @@ public class    FolderPrepareService {
             job.progress = 100;
 
         } catch (Exception e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             e.printStackTrace();
             job.stage = "Ошибка чтения папки";
             job.ready = true;
             job.items = List.of();
             job.progress = 100;
+        } finally {
+            if (folderLock != null && folderLock.isHeldByCurrentThread()) folderLock.unlock();
+            job.complete = true;
+            if (acquired) folderPreparationLimit.release();
+            if (jobs.containsKey(job.id)) jobAccess.put(job.id, System.currentTimeMillis());
+            pruneJobs();
         }
     }
     public FolderPrepareJob get(String jobId) {
+        pruneJobs();
+        if (jobs.containsKey(jobId)) jobAccess.put(jobId, System.currentTimeMillis());
         return jobs.get(jobId);
+    }
+
+    private void completeDatabaseJob(FolderPrepareJob job, String folderKey) throws IOException {
+        synchronized (job) {
+            String previous = job.databaseFolder;
+            job.databaseFolder = database.acquireSnapshot(folderKey);
+            database.releaseSnapshot(previous);
+            job.items = List.of();
+            job.total = database.count(job.databaseFolder);
+            job.processed = job.total;
+            job.stage = "Каталог SQLite";
+            job.progress = 100;
+            job.ready = true;
+        }
+    }
+
+    public List<FileItemDto> items(String jobId, int offset, int limit) throws IOException {
+        if (offset < 0 || limit < 1 || limit > 1000) throw new IllegalArgumentException("Invalid page");
+        FolderPrepareJob job = get(jobId);
+        if (job == null || !job.ready) return List.of();
+        synchronized (job) {
+            if (job.databaseFolder != null) return database.page(job.databaseFolder, job.sortField, job.sortDirection, offset, limit);
+        }
+        if (offset >= job.items.size()) return List.of();
+        return List.copyOf(job.items.subList(offset, (int) Math.min((long) offset + limit, job.items.size())));
+    }
+
+    private synchronized void pruneJobs() {
+        long cutoff = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(15);
+        List<String> completed = jobs.entrySet().stream().filter(entry -> entry.getValue().complete)
+                .map(Map.Entry::getKey).sorted(Comparator.comparingLong(id -> jobAccess.getOrDefault(id, 0L))).toList();
+        int excess = Math.max(0, completed.size() - 32);
+        for (String id : completed) {
+            if (excess > 0 || jobAccess.getOrDefault(id, 0L) < cutoff) {
+                FolderPrepareJob removed = jobs.remove(id);
+                if (removed != null && database != null) {
+                    synchronized (removed) { database.releaseSnapshot(removed.databaseFolder); }
+                }
+                jobAccess.remove(id);
+                if (excess > 0) excess--;
+            }
+        }
+    }
+
+    @PreDestroy
+    public void close() {
+        preparationPool.shutdownNow();
+        folderRefreshPool.shutdownNow();
+        metadataPool.shutdownNow();
+        if (database != null) jobs.values().forEach(job -> database.releaseSnapshot(job.databaseFolder));
     }
     private java.util.Comparator<FileItemDto> createComparator(String sortField, String sortDirection) {
         java.util.Comparator<FileItemDto> comparator;
@@ -501,6 +602,7 @@ public class    FolderPrepareService {
         }
     }
     public void invalidateFolderCache(String relativePath) {
+        ReentrantLock folderLock = null;
         try {
             Path folder = fileService.resolveSafe(relativePath);
 
@@ -509,6 +611,14 @@ public class    FolderPrepareService {
             }
 
             if (folder == null) return;
+            metadataService.invalidate(folder);
+            if (database != null && database.enabled()) {
+                database.invalidateFolder(folder.toAbsolutePath().normalize().toString());
+                return;
+            }
+
+            folderLock = lockFor(folder);
+            folderLock.lock();
 
             Path dir = folderCacheDir(folder);
 
@@ -523,6 +633,11 @@ public class    FolderPrepareService {
                 }
             }
         } catch (Exception ignored) {}
+        finally { if (folderLock != null && folderLock.isHeldByCurrentThread()) folderLock.unlock(); }
+    }
+
+    private ReentrantLock lockFor(Path folder) {
+        return folderLocks[(folder.toAbsolutePath().normalize().hashCode() & Integer.MAX_VALUE) % folderLocks.length];
     }
     private static class FolderSignature {
         public long count;

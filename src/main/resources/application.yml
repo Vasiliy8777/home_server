@@ -27,6 +27,21 @@ app:
   ffprobe-path: ${APP_FFPROBE_PATH:ffprobe}
   magick-path: ${APP_MAGICK_PATH:magick}
 
+  cache:
+    database-enabled: ${APP_CACHE_DATABASE_ENABLED:true}
+    database-path: ${APP_CACHE_DATABASE_PATH:${LOCALAPPDATA:C:/Users/Vasiliy/AppData/Local}/homeserver/cache/catalog.sqlite}
+
+  photo-search:
+    auto-resume: ${APP_PHOTO_SEARCH_AUTO_RESUME:true}
+    retry-attempts: ${APP_PHOTO_SEARCH_RETRY_ATTEMPTS:4}
+    retry-delay-seconds: ${APP_PHOTO_SEARCH_RETRY_DELAY_SECONDS:5}
+    enabled: ${APP_PHOTO_SEARCH_ENABLED:true}
+    base-url: ${APP_PHOTO_SEARCH_BASE_URL:http://127.0.0.1:11434}
+    vision-model: ${APP_PHOTO_SEARCH_VISION_MODEL:qwen3-vl:4b}
+    embedding-model: ${APP_PHOTO_SEARCH_EMBEDDING_MODEL:embeddinggemma}
+    timeout-seconds: ${APP_PHOTO_SEARCH_TIMEOUT_SECONDS:180}
+    min-score: ${APP_PHOTO_SEARCH_MIN_SCORE:0.35}
+
   video:
     hls-cache-dir: ${APP_VIDEO_HLS_CACHE_DIR:G:/arc_Y_disc/.previews/hls}
     ffmpeg-path: ${APP_FFMPEG_PATH:ffmpeg}

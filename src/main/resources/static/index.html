@@ -54,6 +54,7 @@
                     <button id="folderListBtn">Список папок</button>
                     <button id="sortBtn">Сортировка</button>
                     <button id="groupingBtn" class="blue-top-btn">Группировка</button>
+                    <button id="photoSearchOpen" type="button" aria-haspopup="dialog" aria-controls="photoSearchModal">Поиск фото</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -79,11 +80,42 @@
 
             </div>
 
+
         </div>
     </header>
 
     <section id="gallery" class="gallery"></section>
+    <button id="photoSearchMore" class="photo-search-more" type="button" hidden>Показать ещё</button>
 </div>
+
+
+<dialog id="photoSearchModal" class="photo-search-modal" aria-labelledby="photoSearchTitle">
+    <div class="photo-search-heading">
+        <h2 id="photoSearchTitle">Поиск по содержимому фото</h2>
+        <button id="photoSearchClose" type="button" aria-label="Закрыть поиск">✕</button>
+    </div>
+    <form id="photoSearchForm" class="photo-search-form" role="search">
+        <label class="photo-search-label" for="photoSearchInput">Что найти на фотографиях?</label>
+        <div class="photo-search-input-wrap">
+            <input id="photoSearchInput" type="search" maxlength="1000"
+                   placeholder="Например: дети на пляже" required>
+            <button id="photoSearchReset" type="button" aria-label="Очистить запрос" title="Очистить запрос">✕</button>
+        </div>
+        <button id="photoSearchSubmit" type="submit">Найти</button>
+        <button id="photoSearchClear" type="button" hidden>Вернуться в папку</button>
+    </form>
+    <div id="photoSearchMessage" class="photo-search-message" role="status" aria-live="polite"></div>
+    <section class="photo-index-section" aria-label="Индексация фотографий">
+        <h3>Индекс фотографий</h3>
+        <p>Анализ фотографий идёт в фоне. Можно закрыть окно и вернуться позже.</p>
+        <progress id="photoIndexProgress" aria-label="Обработка фотографий" hidden></progress>
+        <div id="photoIndexStatus" class="photo-search-message" role="status" aria-live="polite"></div>
+        <div class="photo-index-actions">
+            <button id="photoIndexStart" type="button" disabled>Обновить индекс</button>
+            <button id="photoIndexStop" type="button" hidden>Остановить</button>
+        </div>
+    </section>
+</dialog>
 
 <!--
   Модальное окно для большого просмотра фото или видео
@@ -177,7 +209,13 @@
     <div class="delete-modal-backdrop"></div>
 
     <div class="delete-modal-content properties-content">
-        <h3>Свойства файла</h3>
+        <div class="properties-heading">
+            <h3>Свойства файла</h3>
+            <button id="propertiesDescriptionBtn" class="card-properties-btn properties-description-btn" type="button" title="Описание фотографии" aria-label="Описание фотографии" aria-controls="propertiesDescription" aria-expanded="false" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6v20h14V8Z"/><path d="M14 2v6h6M9 13h8M9 17h8"/></svg>
+            </button>
+        </div>
+        <div id="propertiesDescription" class="properties-description" hidden></div>
 
         <div id="propertiesBody">
             Загрузка...

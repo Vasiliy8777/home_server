@@ -31,9 +31,12 @@ for (const [mode, width] of [['private', 1280], ['public', 1280], ['private', 39
             {name:'image.jpg',relativePath:'image.jpg',directory:false,type:'image',size:10,previewUrl:pixel,thumbnailUrl:pixel,downloadUrl:'/download'},
             {name:'folder',relativePath:'folder',directory:true,type:'directory',fileCount:1,folderCount:0}
         ];
+        let indexStatusReads = 0;
         window.fetch = async url => {
             let data;
-            if (url.includes('card-bulk')) data = {};
+            if (url.includes('/api/photo-search/status')) data = {enabled:true,running:true,processed:++indexStatusReads,available:1,stage:'Обход фотографий',currentPath:'secret.jpg',error:'secret error'};
+            else if (url.includes('/api/photo-search?')) data = {hits:[{item:testItems[0],description:'Дети на пляже'}],total:1,status:{enabled:true,available:1}};
+            else if (url.includes('card-bulk')) data = {};
             else if (url.includes('prepare-folder')) data = {jobId:'job'};
             else if (url.includes('prepare-status')) data = {ready:true,total:2};
             else if (url.includes('prepared-items')) data = {items:testItems,total:2};
@@ -65,6 +68,45 @@ for (const [mode, width] of [['private', 1280], ['public', 1280], ['private', 39
                     check('select all preserves cards', selectedItems.size===2 && document.querySelectorAll('#gallery .card').length===2);
                     clearSelectionBtn.click();
                     check('clear selection', selectedItems.size===0 && !document.querySelector('#gallery .card.selected'));
+                    document.getElementById('photoSearchOpen').click();
+                    check('search modal opens', photoSearchModal.open && document.activeElement===photoSearchInput);
+                    check('search input fits mobile viewport', photoSearchInput.getBoundingClientRect().right<=innerWidth && photoSearchInput.getBoundingClientRect().width>0);
+                    photoSearchInput.value = 'отдых у моря';
+                    document.getElementById('photoSearchReset').click();
+                    check('clear query keeps input focused', photoSearchInput.value==='' && document.activeElement===photoSearchInput);
+                    photoSearchInput.value = 'отдых у моря';
+                    await runPhotoSearch();
+                    await new Promise(resolve => setTimeout(resolve,50));
+                    check('photo search displays compact result', document.querySelectorAll('#gallery .card').length===1
+                        && !document.querySelector('.photo-search-description') && !!document.querySelector('.card-location-btn'));
+                    const resultCard = document.querySelector('#gallery .card');
+                    const cardRect = resultCard.getBoundingClientRect();
+                    check('result actions fit card', [...resultCard.querySelectorAll('.card-location-btn,.card-download-btn,.card-properties-btn,.card-share-btn')].every(button => {
+                        const rect = button.getBoundingClientRect();
+                        return rect.left>=cardRect.left && rect.right<=cardRect.right;
+                    }));
+                    if (innerWidth<=768) {
+                        check('checkbox stays below image', resultCard.querySelector('.item-checkbox').getBoundingClientRect().top>=resultCard.querySelector('.thumb').getBoundingClientRect().bottom);
+                    }
+                    check('search closes to show gallery', !photoSearchModal.open);
+                    check('photo search supports viewer', viewerItems.length===1);
+                    check('search form fits viewport', photoSearchInput.getBoundingClientRect().right<=innerWidth);
+                    check('gallery below expanded header', gallery.getBoundingClientRect().top>=topbar.getBoundingClientRect().bottom);
+                    topbar.classList.add("collapsed");
+                    check("search button collapses with other actions", document.getElementById("photoSearchOpen").getBoundingClientRect().width===0);
+                    topbar.classList.remove("collapsed");
+                    syncPhotoSearchLayout();
+                    openPhotoSearch();
+                    await new Promise(resolve => setTimeout(resolve,50));
+                    check("reopening refreshes running progress", !photoIndexProgress.hidden && photoIndexStatus.textContent.includes("Обработано за текущий запуск: 2"));
+                    check("index details remain private", !photoIndexStatus.textContent.includes("secret"));
+                    topbar.classList.remove("collapsed");
+                    syncPhotoSearchLayout();
+                    window.scrollTo(0,0);
+                    check('gallery below indexing controls', gallery.getBoundingClientRect().top>=topbar.getBoundingClientRect().bottom);
+                    closePhotoSearch();
+                    await loadFiles('');
+                    check('returns from search to folder', currentItems.length===2 && photoSearchState===null);
                 } else {
                     check('download permission', getComputedStyle(downloadViewerBtn).display!=='none');
                     check('upload disabled', getComputedStyle(toggleTransfersBtn).display==='none');
@@ -92,6 +134,7 @@ for (const [mode, width] of [['private', 1280], ['public', 1280], ['private', 39
     ], {encoding:'utf8', timeout:30000, maxBuffer:4*1024*1024, windowsHide:true});
     if (run.error) throw run.error;
     assert.equal(run.status, 0, run.stderr);
+    fs.writeFileSync(path.join(outDir, `${mode}-${width}-dom.html`), run.stdout);
     const match = run.stdout.match(/<pre id="smoke-results">([\s\S]*?)<\/pre>/);
     assert.ok(match, `Missing ${mode} report: ${run.stderr}`);
     const results = JSON.parse(match[1].replaceAll('&quot;', '"').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>'));

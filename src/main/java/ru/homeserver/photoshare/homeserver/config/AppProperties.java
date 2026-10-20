@@ -19,6 +19,18 @@ public class AppProperties {
     private String uploadTempDir;
 
     private String folderCacheDir;
+    private Cache cache = new Cache();
+
+    public static class Cache {
+        private boolean databaseEnabled = true;
+        private String databasePath;
+        public boolean isDatabaseEnabled() { return databaseEnabled; }
+        public void setDatabaseEnabled(boolean databaseEnabled) { this.databaseEnabled = databaseEnabled; }
+        public String getDatabasePath() { return databasePath; }
+        public void setDatabasePath(String databasePath) { this.databasePath = databasePath; }
+    }
+    public Cache getCache() { return cache; }
+    public void setCache(Cache cache) { this.cache = cache; }
 
     private Security security = new Security();
 

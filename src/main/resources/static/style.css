@@ -758,18 +758,12 @@ body.topbar-collapsed .container {
 .actions-row {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
 .toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    padding: 8px;
-    border-radius: 14px;
-    background: rgba(0, 0, 0, 0.04);
+    display: contents;
 }
 
 .topbar-back-btn {
@@ -777,9 +771,6 @@ body.topbar-collapsed .container {
     padding: 6px 10px;
 }
 
-.toolbar-group + .toolbar-group {
-    margin-left: 4px;
-}
 
 /* Левая и правая зоны */
 .actions-left,
@@ -1838,8 +1829,8 @@ button:hover,
     }
 
     .actions-row {
-        flex-direction: column;
-        align-items: stretch;
+        flex-direction: row;
+        align-items: center;
     }
     .toolbar-group {
         width: 100%;
@@ -3115,6 +3106,45 @@ button[hidden] {
     z-index: 60;
 }
 
+.card-location-btn {
+    right: 150px;
+}
+
+.photo-search-result .card-created-date {
+    display: none;
+}
+
+.properties-heading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+#propertiesModal .properties-heading h3 {
+    margin: 0;
+}
+
+.properties-description-btn {
+    position: static;
+    flex-shrink: 0;
+}
+
+.properties-description-btn[hidden], .properties-description[hidden] {
+    display: none;
+}
+
+.properties-description {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 35vh;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
 .card-properties-btn:hover {
     background: rgba(0,255,150,.18);
     box-shadow: 0 0 12px rgba(0,255,150,.35);
@@ -3228,6 +3258,137 @@ button[hidden] {
     }
 }
 
+.photo-search-panel {
+    margin-top: 12px;
+    min-width: 0;
+    color: #fff;
+}
+
+.photo-search-form, .photo-index-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.photo-search-label {
+    width: 100%;
+    font-size: 13px;
+}
+
+#photoSearchInput {
+    flex: 1 1 260px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(128, 128, 128, 0.5);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #222;
+    font-size: 16px;
+}
+
+.photo-search-input-wrap {
+    position: relative;
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.photo-search-input-wrap #photoSearchInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding-right: 44px;
+}
+
+#photoSearchInput::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+}
+
+#photoSearchReset {
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #444;
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .photo-search-result .card-body {
+        min-height: 160px;
+        padding-bottom: 92px;
+        box-sizing: border-box;
+    }
+
+    .photo-search-result .item-checkbox {
+        right: 12px;
+        bottom: 62px;
+    }
+
+    .photo-search-result .card-location-btn,
+    .photo-search-result .card-download-btn,
+    .photo-search-result .card-properties-btn,
+    .photo-search-result .card-share-btn {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        min-height: 32px;
+        bottom: 12px;
+        right: auto;
+    }
+
+    .photo-search-result .card-location-btn { left: calc(12.5% - 16px); }
+    .photo-search-result .card-download-btn { left: calc(37.5% - 16px); }
+    .photo-search-result .card-properties-btn:not(.card-location-btn) { left: calc(62.5% - 16px); }
+    .photo-search-result .card-share-btn { left: calc(87.5% - 16px); }
+}
+
+.photo-search-message, #photoIndexDetails p {
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    margin: 8px 0;
+}
+
+#photoIndexDetails summary {
+    cursor: pointer;
+    font-size: 13px;
+}
+
+#photoIndexStatus {
+    white-space: pre-line;
+}
+
+.photo-search-more {
+    display: block;
+    margin: 20px auto;
+}
+
+.photo-search-description {
+    font-size: 12px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    margin-top: 6px;
+}
+
+.photo-search-location {
+    font-size: 11px;
+    opacity: 0.75;
+    overflow-wrap: anywhere;
+}
+
+.photo-search-panel [hidden], #photoSearchMore[hidden] {
+    display: none !important;
+}
+
 @media (max-width: 768px) {
     .gallery .card {
         backdrop-filter: blur(4px);
@@ -3242,3 +3403,40 @@ button[hidden] {
         background: rgba(30, 30, 40, 0.96);
     }
 }
+
+/* Native dialog preserves keyboard focus and remains accessible on small screens. */
+.photo-search-modal {
+    width: min(640px, calc(100vw - 24px));
+    max-height: calc(100dvh - 24px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 20px;
+    border: 1px solid rgba(0,255,150,.3);
+    border-radius: 16px;
+    background: rgba(30,30,40,.98);
+    color: #fff;
+    box-shadow: 0 0 24px rgba(0,255,150,.15);
+}
+.photo-search-modal::backdrop { background: rgba(0,0,0,.65); }
+.photo-search-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.photo-search-heading h2 { font-size: 19px; margin: 0 0 16px; }
+.photo-search-modal button {
+    background: rgba(0,255,150,.1); color: var(--color-accent);
+    border: 1px solid rgba(0,255,150,.3); border-radius: 8px; padding: 10px 12px;
+}
+.photo-index-section { border-top: 1px solid rgba(0,255,150,.2); margin-top: 20px; padding-top: 8px; }
+.photo-index-section p { font-size: 13px; line-height: 1.5; }
+#photoIndexProgress { width: 100%; height: 10px; accent-color: var(--color-accent); border-radius: 8px; }
+#photoIndexProgress::-webkit-progress-bar { background: rgba(0,255,150,.12); border-radius: 8px; }
+#photoIndexProgress::-webkit-progress-value { background: var(--color-accent); border-radius: 8px; }
+#photoIndexProgress:indeterminate { background: linear-gradient(90deg, transparent, rgba(0,255,150,.7), transparent); background-size: 200% 100%; animation: photo-index-pulse 1.5s linear infinite; }
+@keyframes photo-index-pulse { to { background-position: -200% 0; } }
+.photo-search-modal [hidden] { display: none !important; }
+#photoSearchOpen { flex-shrink: 0; white-space: nowrap; }
+#currentPath { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+    .photo-search-modal { padding: 16px; }
+    #photoSearchInput { flex-basis: 100%; width: 100%; }
+    .path-row { gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) { #photoIndexProgress:indeterminate { animation: none; } }

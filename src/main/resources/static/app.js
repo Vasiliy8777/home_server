@@ -97,6 +97,20 @@ let currentPropertiesPath = null;
 let currentPropertiesName = null;
 
 let currentItems = [];
+let photoSearchState = null;
+let photoIndexPolling = null;
+const photoSearchForm = document.getElementById("photoSearchForm");
+const photoSearchInput = document.getElementById("photoSearchInput");
+const photoSearchMessage = document.getElementById("photoSearchMessage");
+const photoSearchMore = document.getElementById("photoSearchMore");
+const photoSearchClear = document.getElementById("photoSearchClear");
+const photoSearchModal = document.getElementById("photoSearchModal");
+const photoIndexProgress = document.getElementById("photoIndexProgress");
+let lastPhotoIndexStatus = null;
+let photoIndexRefreshController = null;
+const photoIndexStatus = document.getElementById("photoIndexStatus");
+const photoIndexStart = document.getElementById("photoIndexStart");
+const photoIndexStop = document.getElementById("photoIndexStop");
 let virtualStart = -1;
 let virtualEnd = -1;
 let virtualTotalCount = -1;
@@ -253,7 +267,7 @@ const METADATA_QUEUE = [];
 const MAX_METADATA_REQUESTS = window.innerWidth <= 768 ? 2 : 4; // 🔥 для телефона критично
 const METADATA_BATCH_SIZE = window.innerWidth <= 768 ? 20 : 80;
 let currentPreparedTotal = 0;
-const PAGE_LIMIT = 1000;
+const PAGE_LIMIT = 100;
 
 function startSequentialPolling(callback, delay, onError = console.error) {
     const controller = new AbortController();
@@ -824,6 +838,7 @@ function updatePublicShareButtons(permission) {
 }
 
 async function loadFilesPrepared(path = "", options = {}) {
+    exitPhotoSearch();
 
     const sessionId = ++folderLoadSession;
     const signal = resetFolderRequests();
@@ -898,6 +913,7 @@ async function loadFilesPrepared(path = "", options = {}) {
             if (!statusRes.ok) throw new Error("Folder preparation failed");
             const status = await statusRes.json();
             if (sessionId !== folderLoadSession) return;
+            if (status.error) throw new Error("Подготовка папки истекла. Откройте папку снова.");
             currentPreparedTotal = status.total || 0;
             ready = status.ready;
             updateMetadataLoadingModal(
@@ -1148,6 +1164,176 @@ async function updateTotalCacheStatus(signal) {
 async function loadFiles(path = "", options = {}) {
     return loadFilesPrepared(path, options);
 }
+
+function exitPhotoSearch() {
+    photoSearchState = null;
+    if (photoSearchClear) photoSearchClear.hidden = true;
+    if (photoSearchMore) photoSearchMore.hidden = true;
+    if (photoSearchMessage) photoSearchMessage.textContent = "";
+}
+
+function syncPhotoSearchLayout() {
+    if (PUBLIC_SHARE_MODE || !photoSearchForm || !topbar) return;
+    const container = document.querySelector(".container");
+    if (container) container.style.paddingTop = `${Math.ceil(topbar.getBoundingClientRect().height) + 24}px`;
+}
+
+async function runPhotoSearch() {
+    if (PUBLIC_SHARE_MODE || !photoSearchInput) return;
+    const query = photoSearchInput.value.trim();
+    if (!query) return;
+    ++folderLoadSession;
+    resetFolderRequests();
+    currentPreparedJobId = null;
+    preparedAllLoaded = true;
+    loading = false;
+    activeFolderPath = currentPath;
+    selectedItems.clear();
+    metadataLoaded.clear();
+    currentItems = [];
+    viewerItems = [];
+    gallery.innerHTML = "";
+    hideMetadataLoadingModal();
+    hideThumbLoadingModal();
+    hideFolderLoadingRing();
+    hideLoadingGif();
+    updateBulkButtons();
+    currentPathEl.textContent = "Поиск по всей библиотеке";
+    photoSearchClear.hidden = false;
+    photoSearchState = {query, offset: 0, total: 0, session: folderLoadSession};
+    await loadPhotoSearchPage();
+}
+
+async function loadPhotoSearchPage() {
+    const state = photoSearchState;
+    if (!state || loading || PUBLIC_SHARE_MODE) return;
+    const signal = folderLoadAbortController?.signal;
+    const isCurrent = () => photoSearchState === state && state.session === folderLoadSession;
+    loading = true;
+    photoSearchMore.hidden = true;
+    photoSearchMessage.textContent = "Ищем фотографии…";
+    try {
+        const response = await secureFetch(`/api/photo-search?query=${encodeURIComponent(state.query)}&offset=${state.offset}&limit=60`, {signal});
+        const data = await response.json();
+        if (!isCurrent()) return;
+        if (!response.ok) throw new Error(data.error || "Не удалось выполнить поиск");
+        const items = (data.hits || []).map(hit => ({...hit.item, searchDescription: hit.description}));
+        appendItems(items);
+        state.offset += items.length;
+        state.total = data.total || 0;
+        photoSearchMessage.textContent = state.total
+            ? `Найдено: ${state.total}. Показано: ${state.offset}. Результаты по близости к запросу.`
+            : (data.status?.available ? "Подходящие фото не найдены. Попробуйте другое описание."
+                : "Индекс пока пуст. Откройте «Индекс фотографий» и запустите обработку.");
+        if (!state.offset) gallery.textContent = "Нет результатов";
+        renderPhotoIndexStatus(data.status);
+        if (photoSearchModal?.open) closePhotoSearch();
+        syncPhotoSearchLayout();
+        if (state.offset === items.length) window.scrollTo?.({top: 0});
+    } catch (error) {
+        if (isCurrent() && !signal?.aborted) photoSearchMessage.textContent = error.message;
+    } finally {
+        if (isCurrent()) {
+            loading = false;
+            photoSearchMore.hidden = !(state.offset < state.total && state.offset <= 10000);
+        }
+    }
+}
+
+function renderPhotoIndexStatus(status) {
+    if (!status || !photoIndexStatus || PUBLIC_SHARE_MODE) return;
+    photoIndexStart.disabled = !status.enabled || status.running;
+    photoIndexStop.hidden = !status.running;
+    lastPhotoIndexStatus = status;
+    const processed = status.processed ?? ((status.indexed || 0) + (status.unchanged || 0));
+    const phase = status.running ? status.stage || "Идёт индексация" : status.stage || "Индексация не запущена";
+    photoIndexStatus.textContent = `${phase}. Обработано за текущий запуск: ${processed}. Всего в индексе: ${status.available || 0}`;
+    photoIndexProgress.hidden = !status.running;
+    if (!status.enabled) photoSearchMessage.textContent = "Поиск по фото отключён в настройках сервера.";
+    syncPhotoSearchLayout();
+}
+
+async function updatePhotoIndexStatus(signal) {
+    if (PUBLIC_SHARE_MODE || !photoSearchModal?.open) return;
+    const response = await secureFetch("/api/photo-search/status", {signal});
+    if (!response.ok) throw new Error("Не удалось получить состояние индекса");
+    const status = await response.json();
+    if (!signal?.aborted) renderPhotoIndexStatus(status);
+}
+
+async function changePhotoIndex(action) {
+    if (PUBLIC_SHARE_MODE) return;
+    photoIndexStart.disabled = true;
+    photoIndexStop.disabled = true;
+    try {
+        const response = await secureFetch(`/api/photo-search/${action}`, {method: "POST"});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Не удалось изменить состояние индекса");
+        renderPhotoIndexStatus(data);
+    } catch (error) {
+        photoIndexStatus.textContent = "Не удалось обновить состояние индекса. Попробуйте ещё раз.";
+        photoIndexStart.disabled = false;
+    } finally {
+        photoIndexStop.disabled = false;
+    }
+}
+
+photoSearchForm?.addEventListener("submit", event => { event.preventDefault(); runPhotoSearch(); });
+document.getElementById("photoSearchReset")?.addEventListener("click", () => {
+    photoSearchInput.value = "";
+    photoSearchInput.focus();
+});
+photoSearchMore?.addEventListener("click", loadPhotoSearchPage);
+photoSearchClear?.addEventListener("click", () => { closePhotoSearch(); loadFiles(currentPath); });
+photoIndexStart?.addEventListener("click", () => changePhotoIndex("index"));
+photoIndexStop?.addEventListener("click", () => changePhotoIndex("stop"));
+function stopPhotoIndexPolling() {
+    stopPolling(photoIndexPolling);
+    photoIndexPolling = null;
+    photoIndexRefreshController?.abort();
+    photoIndexRefreshController = null;
+}
+
+function refreshPhotoIndexPolling() {
+    stopPhotoIndexPolling();
+    if (PUBLIC_SHARE_MODE || !photoSearchModal?.open) return;
+    const controller = new AbortController();
+    photoIndexRefreshController = controller;
+    const onError = () => {
+        if (!controller.signal.aborted) photoIndexStatus.textContent = "Связь с сервером прервана. Повторяем подключение…";
+    };
+    // Wait for the first request before scheduling the next; never overlap requests.
+    updatePhotoIndexStatus(controller.signal).catch(onError).finally(() => {
+        if (!controller.signal.aborted) photoIndexPolling = startSequentialPolling(updatePhotoIndexStatus, 2000, onError);
+    });
+}
+
+function openPhotoSearch() {
+    if (PUBLIC_SHARE_MODE || !photoSearchModal || photoSearchModal.open) return;
+    photoSearchModal.showModal();
+    if (lastPhotoIndexStatus) renderPhotoIndexStatus(lastPhotoIndexStatus);
+    refreshPhotoIndexPolling();
+    photoSearchInput.focus();
+}
+
+function closePhotoSearch() {
+    photoSearchModal?.close();
+    stopPhotoIndexPolling();
+}
+
+document.getElementById("photoSearchOpen")?.addEventListener("click", openPhotoSearch);
+document.getElementById("photoSearchClose")?.addEventListener("click", closePhotoSearch);
+photoSearchModal?.addEventListener("close", stopPhotoIndexPolling);
+photoSearchModal?.addEventListener("click", event => {
+    if (event.target !== photoSearchModal) return;
+    const rect = photoSearchModal.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closePhotoSearch();
+});
+window.addEventListener("pagehide", stopPhotoIndexPolling);
+window.addEventListener("pageshow", refreshPhotoIndexPolling);
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshPhotoIndexPolling();
+});
 
 async function maybeLoadMorePrepared(jobId = currentPreparedJobId) {
     if (!jobId || jobId !== currentPreparedJobId) return;
@@ -2625,7 +2811,7 @@ async function runUploadTask(task) {
 async function uploadFileResumableManaged(task, isPaused) {
     const file = task.file;
     const targetPath = task.targetPath;
-    const CHUNK_SIZE = 1024 * 1024;
+    const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;
 
     let initData = null;
 
@@ -2634,7 +2820,7 @@ async function uploadFileResumableManaged(task, isPaused) {
     }
 
     if (!initData) {
-        initData = await initUploadSession(file, targetPath, CHUNK_SIZE, task.controller?.signal);
+        initData = await initUploadSession(file, targetPath, DEFAULT_CHUNK_SIZE, task.controller?.signal);
         task.uploadId = initData.uploadId;
     }
 
@@ -2642,6 +2828,7 @@ async function uploadFileResumableManaged(task, isPaused) {
 
     const uploadId = task.uploadId;
     const totalChunks = initData.totalChunks;
+    const CHUNK_SIZE = Number(initData.chunkSize || 1024 * 1024);
     const uploadedChunks = new Set(initData.uploadedChunks || task.uploadedChunks || []);
 
     saveTransferTasks();
@@ -3633,6 +3820,24 @@ function createCard(item) {
     </div>
 `;
 
+    if (item.searchDescription !== undefined) {
+        card.classList.add("photo-search-result");
+        const folderBtn = document.createElement("button");
+        folderBtn.type = "button";
+        folderBtn.className = "card-properties-btn card-location-btn";
+        folderBtn.title = "Открыть папку файла";
+        folderBtn.setAttribute("aria-label", folderBtn.title);
+        folderBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7V5h6l2 2h10v13H3Z"/></svg>`;
+        folderBtn.onclick = event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const separator = item.relativePath.lastIndexOf("/");
+            resetGroupingState();
+            loadFiles(separator < 0 ? "" : item.relativePath.slice(0, separator));
+        };
+        card.appendChild(folderBtn);
+    }
+
     card.appendChild(selectBox);
     selectBox.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -4089,6 +4294,17 @@ function renderItems(items) {
 async function openPropertiesModal(path) {
     propertiesModal.classList.remove("hidden");
     propertiesBody.innerHTML = "Загрузка свойств...";
+    const descriptionBtn = document.getElementById("propertiesDescriptionBtn");
+    const descriptionBody = document.getElementById("propertiesDescription");
+    const description = currentItems.find(item => item.relativePath === path)?.searchDescription;
+    descriptionBody.textContent = description || "";
+    descriptionBody.hidden = true;
+    descriptionBtn.hidden = !description;
+    descriptionBtn.setAttribute("aria-expanded", "false");
+    descriptionBtn.onclick = () => {
+        descriptionBody.hidden = !descriptionBody.hidden;
+        descriptionBtn.setAttribute("aria-expanded", String(!descriptionBody.hidden));
+    };
 
     const response = await secureFetch(`/api/files/properties?path=${encodeURIComponent(path)}`);
 
@@ -5190,6 +5406,11 @@ if (savedTopbarState === "1") {
 restoreTransferTasks();
 hideInPublicMode();
 document.addEventListener("DOMContentLoaded", () => {
+    syncPhotoSearchLayout();
+    if (photoSearchForm && !PUBLIC_SHARE_MODE && topbar && typeof ResizeObserver !== "undefined") {
+        const observer = new ResizeObserver(syncPhotoSearchLayout);
+        observer.observe(topbar);
+    }
     loadFiles();
     window.metadataLoadingModal = document.getElementById("metadataLoadingModal");
     window.metadataLoadingBar = document.getElementById("metadataLoadingBar");

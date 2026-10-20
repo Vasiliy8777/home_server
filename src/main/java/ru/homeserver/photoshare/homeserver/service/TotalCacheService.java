@@ -40,6 +40,7 @@ public class TotalCacheService {
     private final ExecutorService thumbnailPool = Executors.newFixedThreadPool(1);
 
     private TotalCacheJobDto job = new TotalCacheJobDto();
+    private long lastJournalSaveNanos;
     public TotalCacheService(
             FileService fileService,
             FolderPrepareService folderPrepareService,
@@ -564,6 +565,10 @@ public class TotalCacheService {
     }
 
     private void saveJournal() {
+        long now = System.nanoTime();
+        if (job.running && !stopRequested && !job.paused && !job.finished
+                && now - lastJournalSaveNanos < java.util.concurrent.TimeUnit.SECONDS.toNanos(1)) return;
+        lastJournalSaveNanos = now;
         try {
             objectMapper.writeValue(journalFile.toFile(), job);
         } catch (Exception ignored) {

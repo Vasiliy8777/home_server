@@ -10,18 +10,24 @@ import com.drew.metadata.png.PngDirectory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import ru.homeserver.photoshare.homeserver.config.AppProperties;
+import ru.homeserver.photoshare.homeserver.util.HiddenPaths;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.FileVisitResult;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
@@ -30,13 +36,28 @@ import java.util.stream.Stream;
 public class MetadataService {
 
     private final String ffprobePath;
-    private final Map<Path, Map<String, Object>> folderStatsCache = new ConcurrentHashMap<>();
-    private final Map<Path, Map<String, Object>> filePropertiesCache = new ConcurrentHashMap<>();
+    private final Map<Path, StatsSnapshot> folderStatsCache = boundedCache(256);
+    private final Map<Path, Map<String, Object>> filePropertiesCache = boundedCache(10000);
+
+    private record StatsSnapshot(long expiresAt, Map<String, Object> value) {}
+
+    private static <K, V> Map<K, V> boundedCache(int limit) {
+        return Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+            @Override protected boolean removeEldestEntry(Map.Entry<K, V> eldest) { return size() > limit; }
+        });
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Path metadataCacheRoot;
+    private final SqliteCacheStore database;
 
     public MetadataService(AppProperties appProperties) throws IOException {
+        this(appProperties, null);
+    }
+
+    @Autowired
+    public MetadataService(AppProperties appProperties, SqliteCacheStore database) throws IOException {
+        this.database = database;
         this.ffprobePath = appProperties.getFfprobePath() != null
                 ? appProperties.getFfprobePath()
                 : "ffprobe";
@@ -89,8 +110,11 @@ public class MetadataService {
 
             long cachedModified = ((Number) wrapper.getOrDefault("_modifiedMillis", -1)).longValue();
             long currentModified = Files.getLastModifiedTime(file).toMillis();
+            long currentSize = Files.size(file);
 
-            if (cachedModified != currentModified) {
+            Object savedSize = wrapper.get("_size");
+            if (savedSize == null && wrapper.get("value") instanceof Map<?, ?> oldValue) savedSize = oldValue.get("size");
+            if (cachedModified != currentModified || !(savedSize instanceof Number size) || size.longValue() != currentSize) {
                 Files.deleteIfExists(cacheFile);
                 return null;
             }
@@ -119,6 +143,7 @@ public class MetadataService {
             Map<String, Object> wrapper = new HashMap<>();
             wrapper.put("_path", file.toAbsolutePath().normalize().toString());
             wrapper.put("_modifiedMillis", Files.getLastModifiedTime(file).toMillis());
+            wrapper.put("_size", Files.size(file));
             wrapper.put("value", value);
 
             objectMapper.writeValue(cacheFile.toFile(), wrapper);
@@ -128,6 +153,10 @@ public class MetadataService {
     }
     public boolean propertiesCacheExists(Path file) {
         try {
+            if (database != null && database.enabled()) {
+                Path key = file.toAbsolutePath().normalize();
+                if (database.metadata(key, Files.getLastModifiedTime(key).toMillis(), Files.size(key)) != null) return true;
+            }
             Path cache = filePropertiesCacheFile(file);
 
             return Files.exists(cache)
@@ -139,6 +168,7 @@ public class MetadataService {
     }
     public Map<String, Object> readFileProperties(Path path) throws IOException {
         Path key = path.toAbsolutePath().normalize();
+        if (HiddenPaths.shouldSkip(key)) throw new IOException("Excluded path: " + key);
 
         if (Files.isDirectory(key)) {
             return readFolderProperties(key);
@@ -146,11 +176,22 @@ public class MetadataService {
 
         Map<String, Object> memoryCached = filePropertiesCache.get(key);
         if (memoryCached != null) {
-            return memoryCached;
+            BasicFileAttributes attrs = Files.readAttributes(key, BasicFileAttributes.class);
+            if (memoryCached.get("modifiedMillis") instanceof Number modified
+                    && modified.longValue() == attrs.lastModifiedTime().toMillis()
+                    && memoryCached.get("size") instanceof Number size && size.longValue() == attrs.size()) {
+                return memoryCached;
+            }
+            filePropertiesCache.remove(key);
         }
 
-        Map<String, Object> diskCached = readSingleFilePropertiesCache(key);
+        BasicFileAttributes attributes = Files.readAttributes(key, BasicFileAttributes.class);
+        Map<String, Object> diskCached = database != null && database.enabled()
+                ? database.metadata(key, attributes.lastModifiedTime().toMillis(), attributes.size()) : null;
+        boolean importedLegacy = diskCached == null;
+        if (importedLegacy) diskCached = readSingleFilePropertiesCache(key);
         if (diskCached != null) {
+            if (importedLegacy && database != null && database.enabled()) database.saveMetadata(key, attributes.lastModifiedTime().toMillis(), attributes.size(), diskCached);
             filePropertiesCache.put(key, diskCached);
             return diskCached;
         }
@@ -158,7 +199,8 @@ public class MetadataService {
         Map<String, Object> result = readFilePropertiesUncached(key);
 
         filePropertiesCache.put(key, result);
-        writeSingleFilePropertiesCache(key, result);
+        if (database != null && database.enabled()) database.saveMetadata(key, attributes.lastModifiedTime().toMillis(), attributes.size(), result);
+        else writeSingleFilePropertiesCache(key, result);
 
         return result;
     }
@@ -253,41 +295,36 @@ public class MetadataService {
     }
     public Map<String, Object> readFolderStats(Path folder) {
         Path key = folder.toAbsolutePath().normalize();
-
-        Map<String, Object> memoryCached = folderStatsCache.get(key);
-        if (memoryCached != null) {
-            return memoryCached;
-        }
-
-        Map<String, Object> result = folderStatsCache.computeIfAbsent(key, f -> {
-            try {
-                long size = 0;
-                long files = 0;
-                long folders = 0;
-
-                try (Stream<Path> stream = Files.walk(f)) {
-                    for (Path p : stream.toList()) {
-                        if (Files.isDirectory(p)) {
-                            if (!p.equals(f)) folders++;
-                        } else {
-                            files++;
-                            size += Files.size(p);
-                        }
-                    }
+        Map<String, Object> empty = Map.of("size", 0L, "fileCount", 0L, "folderCount", 0L);
+        if (HiddenPaths.shouldSkip(key)) return empty;
+        StatsSnapshot cached = folderStatsCache.get(key);
+        if (cached != null && cached.expiresAt() > System.currentTimeMillis()) return cached.value();
+        long[] counts = new long[3];
+        try {
+            Files.walkFileTree(key, new SimpleFileVisitor<>() {
+                @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    if (HiddenPaths.shouldSkip(dir)) return FileVisitResult.SKIP_SUBTREE;
+                    if (!dir.equals(key)) counts[2]++;
+                    return FileVisitResult.CONTINUE;
                 }
+                @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    if (!HiddenPaths.shouldSkip(file) && attrs.isRegularFile()) { counts[0] += attrs.size(); counts[1]++; }
+                    return FileVisitResult.CONTINUE;
+                }
+                @Override public FileVisitResult visitFileFailed(Path file, IOException exc) { return FileVisitResult.CONTINUE; }
+            });
+            Map<String, Object> result = Map.of("size", counts[0], "fileCount", counts[1], "folderCount", counts[2]);
+            folderStatsCache.put(key, new StatsSnapshot(System.currentTimeMillis() + 30_000, result));
+            return result;
+        } catch (IOException e) { return empty; }
+    }
 
-                Map<String, Object> map = new HashMap<>();
-                map.put("size", size);
-                map.put("fileCount", files);
-                map.put("folderCount", folders);
-                return map;
-
-            } catch (Exception e) {
-                return Map.of("size", 0, "fileCount", 0, "folderCount", 0);
-            }
-        });
-
-        return result;
+    public void invalidate(Path path) {
+        Path key = path.toAbsolutePath().normalize();
+        filePropertiesCache.remove(key);
+        synchronized (folderStatsCache) {
+            folderStatsCache.keySet().removeIf(folder -> key.startsWith(folder) || folder.startsWith(key));
+        }
     }
     private Map<String, Object> readFolderProperties(Path folder) throws IOException {
         Map<String, Object> map = baseProperties(folder);

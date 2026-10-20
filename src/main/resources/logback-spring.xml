@@ -1,7 +1,21 @@
 <configuration>
 
-    <property name="LOG_DIR"
-              value="G:/arc_Y_disc/.logs"/>
+    <springProperty scope="context" name="LOG_DIR" source="app.log-dir" defaultValue="G:/arc_Y_disc/.logs"/>
+    <springProperty scope="context" name="PHOTO_LOG_LEVEL" source="logging.level.ru.homeserver.photoshare.homeserver.search" defaultValue="INFO"/>
+
+    <appender name="PHOTO_SEARCH_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/photo-search.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/photo-search.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{0} - %msg%n%ex</pattern>
+        </encoder>
+    </appender>
 
     <appender name="CLOUD_ACCESS_FILE"
               class="ch.qos.logback.core.rolling.RollingFileAppender">
@@ -31,10 +45,16 @@
               class="ch.qos.logback.core.ConsoleAppender">
 
         <encoder>
+            <charset>UTF-8</charset>
             <pattern>%d{HH:mm:ss.SSS} %-5level %logger - %msg%n</pattern>
         </encoder>
 
     </appender>
+
+    <logger name="ru.homeserver.photoshare.homeserver.search" level="${PHOTO_LOG_LEVEL}" additivity="false">
+        <appender-ref ref="PHOTO_SEARCH_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
