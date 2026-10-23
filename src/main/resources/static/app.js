@@ -98,6 +98,7 @@ let currentPropertiesName = null;
 
 let currentItems = [];
 let photoSearchState = null;
+let mediaSearchMode = "photo";
 let photoIndexPolling = null;
 const photoSearchForm = document.getElementById("photoSearchForm");
 const photoSearchInput = document.getElementById("photoSearchInput");
@@ -1178,9 +1179,9 @@ function syncPhotoSearchLayout() {
     if (container) container.style.paddingTop = `${Math.ceil(topbar.getBoundingClientRect().height) + 24}px`;
 }
 
-async function runPhotoSearch() {
+async function runPhotoSearch(queryOverride, modeOverride, order = "relevance") {
     if (PUBLIC_SHARE_MODE || !photoSearchInput) return;
-    const query = photoSearchInput.value.trim();
+    const query = typeof queryOverride === "string" ? queryOverride : photoSearchInput.value.trim();
     if (!query) return;
     ++folderLoadSession;
     resetFolderRequests();
@@ -1200,7 +1201,9 @@ async function runPhotoSearch() {
     updateBulkButtons();
     currentPathEl.textContent = "Поиск по всей библиотеке";
     photoSearchClear.hidden = false;
-    photoSearchState = {query, offset: 0, total: 0, session: folderLoadSession};
+    photoSearchState = {query, mode: modeOverride || mediaSearchMode, sort: order,
+        direction: sortDirection, group: groupingMode, period: periodFilterEnabled,
+        from: periodFromValue, to: periodToValue, offset: 0, total: 0, session: folderLoadSession};
     await loadPhotoSearchPage();
 }
 
@@ -1211,9 +1214,12 @@ async function loadPhotoSearchPage() {
     const isCurrent = () => photoSearchState === state && state.session === folderLoadSession;
     loading = true;
     photoSearchMore.hidden = true;
-    photoSearchMessage.textContent = "Ищем фотографии…";
+    photoSearchMessage.textContent = state.mode === "video" ? "Ищем видео…" : "Ищем фотографии…";
     try {
-        const response = await secureFetch(`/api/photo-search?query=${encodeURIComponent(state.query)}&offset=${state.offset}&limit=60`, {signal});
+        const params = new URLSearchParams({query: state.query, offset: state.offset, limit: 60,
+            sortField: state.sort, sortDirection: state.direction, groupMode: state.group,
+            periodEnabled: state.period, periodFrom: state.from, periodTo: state.to});
+        const response = await secureFetch(`/api/${state.mode || "photo"}-search?${params}`, {signal});
         const data = await response.json();
         if (!isCurrent()) return;
         if (!response.ok) throw new Error(data.error || "Не удалось выполнить поиск");
@@ -1222,11 +1228,11 @@ async function loadPhotoSearchPage() {
         state.offset += items.length;
         state.total = data.total || 0;
         photoSearchMessage.textContent = state.total
-            ? `Найдено: ${state.total}. Показано: ${state.offset}. Результаты по близости к запросу.`
-            : (data.status?.available ? "Подходящие фото не найдены. Попробуйте другое описание."
-                : "Индекс пока пуст. Откройте «Индекс фотографий» и запустите обработку.");
+            ? `Найдено: ${state.total}. Показано: ${state.offset}.`
+            : (data.status?.available ? "Подходящие файлы не найдены. Проверьте запрос и фильтры."
+                : "Индекс пока пуст. Запустите обработку выбранного режима.");
         if (!state.offset) gallery.textContent = "Нет результатов";
-        renderPhotoIndexStatus(data.status);
+        if ((state.mode || "photo") === mediaSearchMode) renderPhotoIndexStatus(data.status);
         if (photoSearchModal?.open) closePhotoSearch();
         syncPhotoSearchLayout();
         if (state.offset === items.length) window.scrollTo?.({top: 0});
@@ -1242,40 +1248,72 @@ async function loadPhotoSearchPage() {
 
 function renderPhotoIndexStatus(status) {
     if (!status || !photoIndexStatus || PUBLIC_SHARE_MODE) return;
-    photoIndexStart.disabled = !status.enabled || status.running;
+    photoIndexStart.disabled = !status.enabled;
     photoIndexStop.hidden = !status.running;
     lastPhotoIndexStatus = status;
     const processed = status.processed ?? ((status.indexed || 0) + (status.unchanged || 0));
     const phase = status.running ? status.stage || "Идёт индексация" : status.stage || "Индексация не запущена";
     photoIndexStatus.textContent = `${phase}. Обработано за текущий запуск: ${processed}. Всего в индексе: ${status.available || 0}`;
     photoIndexProgress.hidden = !status.running;
-    if (!status.enabled) photoSearchMessage.textContent = "Поиск по фото отключён в настройках сервера.";
+    if (!status.enabled) photoSearchMessage.textContent = "Поиск по содержимому отключён в настройках сервера.";
     syncPhotoSearchLayout();
 }
 
 async function updatePhotoIndexStatus(signal) {
     if (PUBLIC_SHARE_MODE || !photoSearchModal?.open) return;
-    const response = await secureFetch("/api/photo-search/status", {signal});
+    const mode = mediaSearchMode;
+    const response = await secureFetch(`/api/${mode}-search/status`, {signal});
     if (!response.ok) throw new Error("Не удалось получить состояние индекса");
     const status = await response.json();
-    if (!signal?.aborted) renderPhotoIndexStatus(status);
+    if (!signal?.aborted && mode === mediaSearchMode) renderPhotoIndexStatus(status);
 }
 
 async function changePhotoIndex(action) {
     if (PUBLIC_SHARE_MODE) return;
+    if (action === "index") {
+        document.getElementById("photoIndexSection").open = true;
+        if (lastPhotoIndexStatus?.running) return;
+    }
+    const mode = mediaSearchMode;
     photoIndexStart.disabled = true;
     photoIndexStop.disabled = true;
     try {
-        const response = await secureFetch(`/api/photo-search/${action}`, {method: "POST"});
+        const response = await secureFetch(`/api/${mode}-search/${action}`, {method: "POST"});
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Не удалось изменить состояние индекса");
-        renderPhotoIndexStatus(data);
+        if (mode === mediaSearchMode) renderPhotoIndexStatus(data);
     } catch (error) {
+        if (mode !== mediaSearchMode) return;
         photoIndexStatus.textContent = "Не удалось обновить состояние индекса. Попробуйте ещё раз.";
         photoIndexStart.disabled = false;
     } finally {
-        photoIndexStop.disabled = false;
+        if (mode === mediaSearchMode) photoIndexStop.disabled = false;
     }
+}
+
+document.querySelectorAll(".media-search-mode").forEach(button => {
+    button.addEventListener("click", () => {
+        mediaSearchMode = button.dataset.mode;
+        document.querySelectorAll(".media-search-mode").forEach(candidate => {
+            const active = candidate.dataset.mode === mediaSearchMode;
+            candidate.classList.toggle("active", active);
+            candidate.setAttribute("aria-pressed", String(active));
+        });
+        lastPhotoIndexStatus = null;
+        photoIndexStatus.textContent = "Загрузка состояния индекса…";
+        photoIndexStart.disabled = true;
+        photoIndexStop.hidden = true;
+        photoIndexProgress.hidden = true;
+        photoIndexProgress.setAttribute("aria-label", mediaSearchMode === "video" ? "Обработка видео" : "Обработка фотографий");
+        photoIndexStop.disabled = false;
+        document.getElementById("mediaIndexTitle").textContent = mediaSearchMode === "video" ? "Индекс видео" : "Индекс фотографий";
+        refreshPhotoIndexPolling();
+    });
+});
+
+function refreshGalleryFilters() {
+    if (photoSearchState) return runPhotoSearch(photoSearchState.query, photoSearchState.mode, sortField);
+    return loadFiles(currentPath);
 }
 
 photoSearchForm?.addEventListener("submit", event => { event.preventDefault(); runPhotoSearch(); });
@@ -1323,7 +1361,9 @@ function closePhotoSearch() {
 
 document.getElementById("photoSearchOpen")?.addEventListener("click", openPhotoSearch);
 document.getElementById("photoSearchClose")?.addEventListener("click", closePhotoSearch);
-photoSearchModal?.addEventListener("close", stopPhotoIndexPolling);
+photoSearchModal?.addEventListener("close", () => {
+    if (!photoSearchModal.open) stopPhotoIndexPolling();
+});
 photoSearchModal?.addEventListener("click", event => {
     if (event.target !== photoSearchModal) return;
     const rect = photoSearchModal.getBoundingClientRect();
@@ -1403,7 +1443,7 @@ applyGroupingBtn.onclick = () => {
 
     groupingModal.classList.add("hidden");
 
-    loadFiles(currentPath);
+    refreshGalleryFilters();
 };
 
 function resetGroupingState() {
@@ -1436,7 +1476,7 @@ resetGroupingBtn.onclick = () => {
 
     groupingModal.classList.add("hidden");
 
-    loadFiles(currentPath);
+    refreshGalleryFilters();
 };
 cancelRenameBtn.onclick = closeRenameModal;
 closeRenameModalBtn.onclick = closeRenameModal;
@@ -1823,7 +1863,7 @@ document.querySelectorAll(".sort-field-btn").forEach(btn => {
         localStorage.setItem("sortDirection", sortDirection);
 
         updateSortButtonsState();
-        loadFiles(currentPath);
+        refreshGalleryFilters();
     };
 });
 
@@ -3770,7 +3810,7 @@ function createCard(item) {
         <img
             src="/video-placeholder.png"
             loading="lazy"
-            data-src="${buildVideoThumbnailUrl(item.relativePath)}"
+            data-src="${item.thumbnailUrl || buildVideoThumbnailUrl(item.relativePath)}"
             alt="${escapeHtml(item.name)}"
             class="lazy-thumb video-thumb-img"
         >
@@ -4778,15 +4818,6 @@ sortModal.addEventListener("click", (e) => {
     }
 });
 
-document.querySelectorAll(".sort-field-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-        sortField = btn.dataset.field;
-        localStorage.setItem("sortField", sortField);
-        updateSortButtonsState();
-        await loadFiles(currentPath);
-    });
-});
-
 closePropertiesModalBtn.onclick = closePropertiesModal;
 downloadOriginalFormatBtn.onclick = () => {
     selectedDownloadFormat = "original";
@@ -4870,7 +4901,7 @@ sortDirectionBtn.onclick = () => {
     localStorage.setItem("sortDirection", sortDirection);
 
     updateSortButtonsState();
-    loadFiles(currentPath);
+    refreshGalleryFilters();
 };
 cancelPreviewBuildBtn.onclick = async () => {
     previewWaitController?.abort();

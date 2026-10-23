@@ -23,13 +23,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = PhotoSearchController.class,
-        excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX, pattern = ".*WebConfig.*"), properties = {
+        excludeFilters = {
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = ".*WebConfig.*"),
+                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = VideoSearchController.class)
+        }, properties = {
         "app.security.username=test", "app.security.password=test",
         "app.log-dir=${java.io.tmpdir}/homeserver-photo-search-test-logs"})
 @Import(SecurityConfig.class)
 class PhotoSearchControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean PhotoSearchService service;
+    @MockitoBean ru.homeserver.photoshare.homeserver.share.ShareService shares;
     @MockitoBean LoginFailureHandler failureHandler;
     @MockitoBean LoginSuccessHandler successHandler;
 
@@ -64,10 +68,10 @@ class PhotoSearchControllerTest {
 
     @Test
     void returnsSearchPageAndValidationErrors() throws Exception {
-        when(service.search("пляж", 0, 60)).thenReturn(new PhotoSearchService.SearchPage(List.of(), 0, null));
+        when(service.search(eq("пляж"), eq(0), eq(60), any(), isNull())).thenReturn(new PhotoSearchService.SearchPage(List.of(), 0, null));
         mvc.perform(get("/api/photo-search").session(authenticatedSession()).param("query", "пляж"))
                 .andExpect(status().isOk()).andExpect(jsonPath("total").value(0));
-        when(service.search("", 0, 60)).thenThrow(new IllegalArgumentException("Введите запрос"));
+        when(service.search(eq(""), eq(0), eq(60), any(), isNull())).thenThrow(new IllegalArgumentException("Введите запрос"));
         mvc.perform(get("/api/photo-search").session(authenticatedSession()).param("query", ""))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("error").value("Введите запрос"));
     }

@@ -5,6 +5,49 @@ const {harness, Element} = require('./browser-harness.cjs');
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 const response = (data, ok = true) => ({ok, status: ok ? 200 : 500, json: async () => data});
 
+test('search filters preserve query and mode and restart server pagination', async () => {
+    const h = harness();
+    const urls = [];
+    h.window.fetch = async url => {
+        urls.push(String(url));
+        return response({hits: [], total: 0, status: {enabled: true, available: 2}});
+    };
+    h.run('mediaSearchMode="video"; photoSearchInput.value="парусник";');
+    await h.run('runPhotoSearch()');
+    assert.ok(urls[0].startsWith('/api/video-search?'));
+    h.run('photoSearchInput.value="ещё не отправленный запрос"; groupingMode="shared"; sortField="size"; sortDirection="desc"; periodFilterEnabled=true; periodFromValue="2025-01-01"; periodToValue="2025-12-31";');
+    await h.run('refreshGalleryFilters()');
+    const params = new URLSearchParams(urls[1].split('?')[1]);
+    assert.equal(params.get('query'), 'парусник');
+    assert.equal(params.get('offset'), '0');
+    assert.equal(params.get('groupMode'), 'shared');
+    assert.equal(params.get('sortField'), 'size');
+    assert.equal(params.get('sortDirection'), 'desc');
+    assert.equal(params.get('periodEnabled'), 'true');
+    assert.equal(params.get('periodFrom'), '2025-01-01');
+    assert.equal(h.run('photoSearchState.mode'), 'video');
+});
+
+test('index actions target selected media and ignore stale status from another mode', async () => {
+    const h = harness();
+    const urls = [];
+    let complete;
+    h.window.fetch = url => {
+        urls.push(String(url));
+        return new Promise(resolve => { complete = resolve; });
+    };
+    h.run('mediaSearchMode="video";');
+    const pending = h.run('changePhotoIndex("index")');
+    assert.equal(urls[0], '/api/video-search/index');
+    h.run('mediaSearchMode="photo"; photoIndexStatus.textContent="Фото";');
+    complete(response({enabled:true, running:true, available:100}));
+    await pending;
+    assert.equal(h.elements.get('photoIndexStatus').textContent, 'Фото');
+    h.window.fetch = async url => { urls.push(String(url)); return response({enabled:true, running:false}); };
+    await h.run('changePhotoIndex("stop")');
+    assert.equal(urls[1], '/api/photo-search/stop');
+});
+
 test('photo description toggles in properties and clears for another file', async () => {
     const h = harness();
     h.window.fetch = async () => response({name: 'photo.jpg', type: 'image', size: 10});

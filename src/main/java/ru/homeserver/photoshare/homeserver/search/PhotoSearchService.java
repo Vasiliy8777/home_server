@@ -32,6 +32,7 @@ public class PhotoSearchService {
     private final PhotoAiClient ai;
     private final PhotoImageReader images;
     private final Path indexDir;
+    private final boolean video;
     private final SqliteCacheStore database;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
@@ -55,13 +56,19 @@ public class PhotoSearchService {
     @Autowired
     public PhotoSearchService(FileService files, AppProperties app, PhotoSearchProperties properties,
                               PhotoAiClient ai, PhotoImageReader images, SqliteCacheStore database) throws IOException {
+        this(files, app, properties, ai, images, database, false);
+    }
+
+    PhotoSearchService(FileService files, AppProperties app, PhotoSearchProperties properties,
+                       PhotoAiClient ai, PhotoImageReader images, SqliteCacheStore database, boolean video) throws IOException {
+        this.video = video;
         this.files = files;
         this.properties = properties;
         this.ai = ai;
         this.images = images;
         this.database = database != null && database.enabled() ? database : null;
         // Separate indexes when the same cache location serves different storage roots.
-        indexDir = Path.of(app.getMetadataCacheDir()).resolve("photo-search")
+        indexDir = Path.of(app.getMetadataCacheDir()).resolve(video ? "video-search" : "photo-search")
                 .resolve(hash(files.getRootPath().toString()));
         Files.createDirectories(indexDir);
         if (this.database != null) {
@@ -123,9 +130,9 @@ public class PhotoSearchService {
         scanned = indexed = unchanged = failed = processed = 0;
         error = null;
         currentPath = "";
-        stage = "Обход фотографий";
-        log.info("INDEX_START root={} visionModel={} embeddingModel={} available={}",
-                files.getRootPath(), properties.getVisionModel(), properties.getEmbeddingModel(), entries.size());
+        stage = video ? "Обход видео" : "Обход фотографий";
+        log.info("INDEX_START root={} visionModel={} embeddingModel={} available={} mode={}",
+                files.getRootPath(), properties.getVisionModel(), properties.getEmbeddingModel(), entries.size(), video ? "video" : "photo");
         worker.submit(this::indexPhotos);
         return status();
     }
@@ -279,6 +286,9 @@ public class PhotoSearchService {
             log.info("PHOTO_INDEXED path={} jpegBytes={} descriptionChars={} vectorDimensions={} elapsedMs={}",
                     relative, jpeg.length, description.length(), vector.length,
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+        } catch (MediaSkippedException e) {
+            synchronized (this) { processed++; }
+            log.info("MEDIA_SKIPPED path={} reason={}", relative, e.getMessage());
         } catch (InterruptedException e) {
             log.info("PHOTO_INTERRUPTED path={} stage={}", relative, processingStage);
             Thread.currentThread().interrupt();
@@ -318,6 +328,12 @@ public class PhotoSearchService {
     }
 
     public SearchPage search(String query, int offset, int limit) throws IOException, InterruptedException {
+        return search(query, offset, limit, item -> true, null);
+    }
+
+    public SearchPage search(String query, int offset, int limit,
+                             java.util.function.Predicate<FileItemDto> filter,
+                             Comparator<FileItemDto> order) throws IOException, InterruptedException {
         requireEnabled();
         if (query == null || query.isBlank() || query.length() > 1000) {
             throw new IllegalArgumentException("Введите запрос длиной от 1 до 1000 символов");
@@ -329,12 +345,15 @@ public class PhotoSearchService {
         float[] vector = normalize(ai.embed(query.strip(), true));
         Comparator<Match> bestFirst = Comparator.comparingDouble(Match::score).reversed()
                 .thenComparing(m -> m.entry().relativePath());
+        if (order != null) bestFirst = Comparator.comparing((Match m) -> toItem(m.entry()), order)
+                .thenComparing(bestFirst);
         PriorityQueue<Match> best = new PriorityQueue<>(bestFirst.reversed());
         int total = 0;
         for (Entry entry : entries.values()) {
             if (!ai.signature().equals(entry.signature()) || vector.length != entry.vector().length) continue;
             double score = similarity(vector, entry.vector());
             if (score < properties.getMinScore()) continue;
+            if (!filter.test(toItem(entry))) continue;
             Path photo = resolveEntry(entry.relativePath());
             if (photo == null) continue;
             try {
@@ -352,12 +371,13 @@ public class PhotoSearchService {
 
     private FileItemDto toItem(Entry entry) {
         String encoded = URLEncoder.encode(entry.relativePath(), StandardCharsets.UTF_8).replace("+", "%20");
-        String thumbnail = "/api/photo-search/image?path=" + encoded + "&version=" + entry.modified();
+        String thumbnail = video ? "/api/files/video-thumbnail?path=" + encoded
+                : "/api/photo-search/image?path=" + encoded + "&version=" + entry.modified();
         String lower = entry.relativePath().toLowerCase(Locale.ROOT);
-        String preview = lower.matches(".*\\.(jpg|jpeg|png|gif|webp|bmp|avif)$")
+        String preview = video || lower.matches(".*\\.(jpg|jpeg|png|gif|webp|bmp|avif)$")
                 ? "/api/files/raw?path=" + encoded : thumbnail;
         return new FileItemDto(Path.of(entry.relativePath()).getFileName().toString(), entry.relativePath(), false,
-                entry.size(), "image", preview, thumbnail, "/api/files/download?path=" + encoded,
+                entry.size(), video ? "video" : "image", preview, thumbnail, "/api/files/download?path=" + encoded,
                 entry.modified(), entry.modified(), null, null, false, null, null);
     }
 
@@ -383,8 +403,9 @@ public class PhotoSearchService {
         return real.startsWith(files.getRootPath().toRealPath()) && !HiddenPaths.shouldSkip(real);
     }
 
-    private static boolean isPhoto(Path path) {
-        return PhotoFormats.isPhoto(path);
+    private boolean isPhoto(Path path) {
+        return video ? Set.of("mp4", "mov", "avi", "mkv", "webm", "m4v", "ogv", "insv", "lrv")
+                .contains(PhotoFormats.extension(path)) : PhotoFormats.isPhoto(path);
     }
 
     private Path entryFile(String relative) { return indexDir.resolve(hash(relative) + ".json"); }
@@ -421,7 +442,7 @@ public class PhotoSearchService {
             if (stopRequested) throw new InterruptedException("Index stopped");
             try {
                 T result = operation.run();
-                synchronized (this) { stage = "Обход фотографий"; }
+                synchronized (this) { stage = video ? "Обход видео" : "Обход фотографий"; }
                 return result;
             }
             catch (PhotoAiClient.TemporaryException e) {

@@ -32,9 +32,13 @@ for (const [mode, width] of [['private', 1280], ['public', 1280], ['private', 39
             {name:'folder',relativePath:'folder',directory:true,type:'directory',fileCount:1,folderCount:0}
         ];
         let indexStatusReads = 0;
+        let lastIndexRequest = '';
         window.fetch = async url => {
             let data;
             if (url.includes('/api/photo-search/status')) data = {enabled:true,running:true,processed:++indexStatusReads,available:1,stage:'Обход фотографий',currentPath:'secret.jpg',error:'secret error'};
+            else if (url.includes('/api/video-search/status')) data = {enabled:true,running:false,processed:7,available:7};
+            else if (url.includes('/api/video-search/index')) { lastIndexRequest = url; data = {enabled:true,running:true,processed:0,available:7}; }
+            else if (url.includes('/api/video-search?')) data = {hits:[{item:{...testItems[0],name:'clip.mp4',relativePath:'clip.mp4',type:'video'},description:'Парусник на море'}],total:1,status:{enabled:true,available:7}};
             else if (url.includes('/api/photo-search?')) data = {hits:[{item:testItems[0],description:'Дети на пляже'}],total:1,status:{enabled:true,available:1}};
             else if (url.includes('card-bulk')) data = {};
             else if (url.includes('prepare-folder')) data = {jobId:'job'};
@@ -70,6 +74,8 @@ for (const [mode, width] of [['private', 1280], ['public', 1280], ['private', 39
                     check('clear selection', selectedItems.size===0 && !document.querySelector('#gallery .card.selected'));
                     document.getElementById('photoSearchOpen').click();
                     check('search modal opens', photoSearchModal.open && document.activeElement===photoSearchInput);
+                    check('index details initially collapsed', !document.getElementById('photoIndexSection').open);
+                    check('index button beside media modes', !!document.querySelector('.media-search-modes #photoIndexStart'));
                     check('search input fits mobile viewport', photoSearchInput.getBoundingClientRect().right<=innerWidth && photoSearchInput.getBoundingClientRect().width>0);
                     photoSearchInput.value = 'отдых у моря';
                     document.getElementById('photoSearchReset').click();
@@ -96,14 +102,33 @@ for (const [mode, width] of [['private', 1280], ['public', 1280], ['private', 39
                     check("search button collapses with other actions", document.getElementById("photoSearchOpen").getBoundingClientRect().width===0);
                     topbar.classList.remove("collapsed");
                     syncPhotoSearchLayout();
+                    const previousReads = indexStatusReads;
                     openPhotoSearch();
                     await new Promise(resolve => setTimeout(resolve,50));
-                    check("reopening refreshes running progress", !photoIndexProgress.hidden && photoIndexStatus.textContent.includes("Обработано за текущий запуск: 2"));
+                    check("reopening refreshes running progress", !photoIndexProgress.hidden && indexStatusReads>previousReads);
                     check("index details remain private", !photoIndexStatus.textContent.includes("secret"));
                     topbar.classList.remove("collapsed");
                     syncPhotoSearchLayout();
                     window.scrollTo(0,0);
                     check('gallery below indexing controls', gallery.getBoundingClientRect().top>=topbar.getBoundingClientRect().bottom);
+                    document.querySelector('.media-search-mode[data-mode="video"]').click();
+                    await new Promise(resolve => setTimeout(resolve,50));
+                    check('video mode displays separate index', mediaSearchMode==='video' && document.getElementById('mediaIndexTitle').textContent==='Индекс видео' && photoIndexStatus.textContent.includes('Всего в индексе: 7'));
+                    await changePhotoIndex('index');
+                    check('video mode updates only video index', lastIndexRequest==='/api/video-search/index');
+                    const indexSection = document.getElementById('photoIndexSection');
+                    check('index action expands details', indexSection.open);
+                    indexSection.querySelector('summary').click();
+                    renderPhotoIndexStatus({enabled:true,running:true,processed:3,available:7});
+                    check('progress updates preserve collapsed details', !indexSection.open);
+                    document.getElementById('photoIndexStart').click();
+                    check('running index button reopens details', indexSection.open && !photoIndexStart.disabled);
+                    indexSection.querySelector('summary').click();
+                    indexSection.querySelector('summary').click();
+                    check('index arrow toggles during processing', indexSection.open);
+                    photoSearchInput.value = 'парусник';
+                    await runPhotoSearch();
+                    check('video search displays playable results', currentItems[0].type==='video' && photoSearchState.mode==='video' && viewerItems[0].relativePath==='clip.mp4');
                     closePhotoSearch();
                     await loadFiles('');
                     check('returns from search to folder', currentItems.length===2 && photoSearchState===null);

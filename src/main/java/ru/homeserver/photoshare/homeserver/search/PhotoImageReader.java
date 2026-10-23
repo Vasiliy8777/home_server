@@ -83,9 +83,14 @@ public class PhotoImageReader {
                 }
             }
         } finally {
-            Files.deleteIfExists(temp);
-            Files.deleteIfExists(diagnostics);
+            cleanup(temp);
+            cleanup(diagnostics);
         }
+    }
+
+    private static void cleanup(Path path) {
+        try { Files.deleteIfExists(path); }
+        catch (IOException e) { log.warn("TEMP_CLEANUP_FAILED path={} reason={}", path, e.toString()); }
     }
 
     private byte[] readWithImageIo(Path photo) throws IOException, InterruptedException {

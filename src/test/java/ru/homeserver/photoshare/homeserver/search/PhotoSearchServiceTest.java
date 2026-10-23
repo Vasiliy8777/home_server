@@ -345,6 +345,75 @@ class PhotoSearchServiceTest {
         }
     }
 
+    @Test
+    void videoIndexIsSeparatePersistentAndReturnsPlayableResults() throws Exception {
+        Files.writeString(root.resolve("photo.jpg"), "beach");
+        Files.writeString(root.resolve("clip.mp4"), "beach");
+        var photos = service();
+        index(photos);
+        var videos = new PhotoSearchService(new FileService(app), app, properties, ai, reader, null, true);
+        services.add(videos);
+        index(videos);
+        assertEquals(1, videos.status().available());
+        var hit = videos.search("отдых у воды", 0, 60).hits().getFirst();
+        assertEquals("clip.mp4", hit.item().relativePath());
+        assertEquals("video", hit.item().type());
+        assertEquals("/api/files/video-thumbnail?path=clip.mp4", hit.item().thumbnailUrl());
+        assertTrue(Files.isRegularFile(videos.image("clip.mp4", hit.item().lastModified())));
+        var restored = new PhotoSearchService(new FileService(app), app, properties, ai, reader, null, true);
+        services.add(restored);
+        assertEquals(1, restored.status().available());
+        assertEquals("photo.jpg", photos.search("отдых у воды", 0, 60).hits().getFirst().item().relativePath());
+    }
+
+    @Test
+    void filtersAndSortsAcrossAllMatchesBeforePagination() throws Exception {
+        Files.writeString(root.resolve("a.jpg"), "beach");
+        Files.writeString(root.resolve("b.jpg"), "sea");
+        Files.writeString(root.resolve("c.jpg"), "beach");
+        var service = service();
+        index(service);
+        var page = service.search("отдых у воды", 1, 1,
+                item -> !item.name().equals("a.jpg"),
+                java.util.Comparator.comparing(ru.homeserver.photoshare.homeserver.dto.FileItemDto::name).reversed());
+        assertEquals(2, page.total());
+        assertEquals("b.jpg", page.hits().getFirst().item().name());
+    }
+
+    @Test
+    void skipsGenerationFailureAndContinuesWithNextFile() throws Exception {
+        Files.writeString(root.resolve("one.mp4"), "beach");
+        Files.writeString(root.resolve("two.mp4"), "beach");
+        var provider = mock(PhotoAiClient.class);
+        when(provider.signature()).thenReturn("generation-failure-test");
+        when(provider.describe(any())).thenThrow(new PhotoAiClient.GenerationException("token repeat limit reached"))
+                .thenReturn("Дети на пляже");
+        when(provider.embed(anyString(), anyBoolean())).thenReturn(new float[]{1, 0});
+        var service = new PhotoSearchService(new FileService(app), app, properties, provider, reader, null, true);
+        services.add(service);
+        service.start();
+        await().atMost(Duration.ofSeconds(5)).until(() -> !service.status().running());
+        assertEquals(2, service.status().scanned());
+        assertEquals(2, service.status().processed());
+        assertEquals(1, service.status().failed());
+        assertEquals(1, service.status().indexed());
+        assertEquals("Индексация завершена с ошибками", service.status().stage());
+        verify(provider, times(2)).describe(any());
+    }
+
+    @Test
+    void intentionalShortVideoSkipIsProcessedWithoutFailureOrAiCall() throws Exception {
+        Files.writeString(root.resolve("short.mp4"), "short");
+        doThrow(new MediaSkippedException("video-duration-below-2-seconds")).when(reader).readJpeg(any());
+        var service = new PhotoSearchService(new FileService(app), app, properties, ai, reader, null, true);
+        services.add(service);
+        index(service);
+        assertEquals(1, service.status().processed());
+        assertEquals(0, service.status().failed());
+        assertEquals(0, service.status().indexed());
+        assertEquals(0, ai.descriptions);
+    }
+
     private static class FakeAi implements PhotoAiClient {
         volatile String signature = "test-v1";
         volatile int descriptions;
