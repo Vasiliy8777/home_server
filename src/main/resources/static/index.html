@@ -16,6 +16,7 @@
     <title>Домашняя галерея</title>
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css"/>
     <link rel="stylesheet" href="/style.css"/>
+    <link rel="stylesheet" href="/music.css"/>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <!--
       Подключаем CSS-файл
@@ -55,6 +56,7 @@
                     <button id="sortBtn">Сортировка</button>
                     <button id="groupingBtn" class="blue-top-btn">Группировка</button>
                     <button id="photoSearchOpen" type="button" aria-haspopup="dialog" aria-controls="photoSearchModal">Поиск</button>
+                    <button id="musicOpen" class="music-glow" type="button" aria-haspopup="dialog" aria-controls="musicModal">muz_gen</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -89,6 +91,73 @@
 </div>
 
 
+<dialog id="musicModal" class="music-modal" aria-labelledby="musicTitle">
+    <div class="music-heading">
+        <div><h2 id="musicTitle">muz_gen</h2><p>Создайте свою музыку и песни</p></div>
+        <button id="musicClose" type="button" aria-label="Закрыть генератор">✕</button>
+    </div>
+    <form id="musicForm">
+        <label for="musicMode">Режим</label>
+        <select id="musicMode"><option value="text2music">Новая песня по описанию</option><option value="cover">По образцу — переработать всю запись</option><option value="repaint">По образцу — изменить фрагмент</option></select>
+        <section id="musicSourceSection" class="music-source" hidden>
+            <label for="musicSourceFile">Звуковой образец</label>
+            <input id="musicSourceFile" type="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.opus,.aac,.webm">
+            <p id="musicSourceInfo">Аудио от 10 до 300 секунд, до 100 МБ. Длительность результата соответствует образцу.</p>
+            <audio id="musicSourceAudio" controls preload="metadata" hidden></audio>
+            <label for="musicChanges">Что изменить в образце</label>
+            <textarea id="musicChanges" rows="3" maxlength="4000" placeholder="Например: сохранить мелодию, заменить ударные на мягкие, добавить пианино и женский вокал"></textarea>
+            <div id="musicCoverSettings"><label for="musicStrength">Сходство с образцом: <output id="musicStrengthValue">70%</output></label><input id="musicStrength" type="range" min="0" max="1" step="0.05" value="0.7"><p>Выше — ближе к структуре образца, ниже — больше свободы для изменений.</p></div>
+            <div id="musicRepaintSettings" class="music-settings" hidden>
+                <label>Начало фрагмента, сек.<input id="musicEditStart" type="number" min="0" max="297" step="0.1" value="0"></label>
+                <label>Конец фрагмента, сек.<input id="musicEditEnd" type="number" min="3" max="300" step="0.1" value="10"></label>
+                <p>Выберите интервал от 3 до 90 секунд. Для замены слов укажите желаемый текст в поле ниже.</p>
+            </div>
+            <p>Модель создаёт новую интерпретацию записи. Описывайте желаемое звучание; точность отдельных изменений зависит от модели.</p>
+            <p>Если нужны конкретные слова, вставьте их в поле текста песни. Без текста модель может изменить слова образца.</p>
+        </section>
+        <label for="musicDescription">Описание песни</label>
+        <textarea id="musicDescription" maxlength="4000" rows="3" required placeholder="Жанр, настроение, инструменты и голос. Например: лиричный инди-поп, тёплый мужской вокал, гитара и мягкие ударные"></textarea>
+        <div class="music-lyrics-heading">
+            <label for="musicLyrics">Текст песни или запрос для его создания</label>
+            <button id="musicWriteLyrics" type="button">Сгенерировать текст</button>
+        </div>
+        <textarea id="musicLyrics" maxlength="16000" rows="8" placeholder="Введите готовый текст или пожелания и нажмите «Сгенерировать текст». Например: песня о путешествии к морю, два куплета и припев"></textarea>
+        <div class="music-settings">
+            <label>Модель<select id="musicModel"><option value="acestep-v15-xl-turbo">XL — качество</option><option value="acestep-v15-turbo">Turbo — скорость</option></select></label>
+            <label>Длительность, сек.<input id="musicDuration" type="number" min="10" max="300" step="1" value="120" required></label>
+            <label>Язык<select id="musicLanguage"><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="zh">中文</option><option value="ja">日本語</option><option value="ko">한국어</option></select></label>
+            <label>Темп, BPM<input id="musicBpm" type="number" min="30" max="300" placeholder="Авто"></label>
+        </div>
+        <div class="music-checks">
+            <label><input id="musicInstrumental" type="checkbox">Без вокала</label>
+            <label><input id="musicThinking" type="checkbox" checked>Музыкальное планирование</label>
+            <label><input id="musicEnhance" type="checkbox">Уточнять описание автоматически</label>
+        </div>
+        <details class="music-advanced"><summary>Дополнительные настройки</summary>
+            <div class="music-settings">
+                <label>Seed<input id="musicSeed" type="number" min="0" max="2147483647" placeholder="Случайный"></label>
+                <label>Шаги генерации<input id="musicSteps" type="number" min="1" max="20" value="8" required></label>
+            </div>
+            <p>Для Turbo обычно достаточно 8 шагов. Большее число не гарантирует лучший результат. Seed помогает сравнивать варианты.</p>
+        </details>
+        <div class="music-submit"><span id="musicConnection">Проверяем генератор…</span><button id="musicStart" class="music-glow" type="submit">start</button></div>
+    </form>
+    <div id="musicProcessing" class="processing-indicator" role="status" hidden><img src="/img/loading1.gif" alt=""><span id="musicProcessingLabel">Создаём песню…</span></div>
+    <p id="musicStatus" class="music-status" role="status" aria-live="polite"></p>
+    <section id="musicResult" class="music-result" aria-label="Результат генерации" hidden>
+        <audio id="musicAudio" preload="metadata"></audio>
+        <div class="music-player">
+            <button id="musicPlay" type="button" aria-label="Воспроизвести" disabled>▶</button>
+            <button id="musicPause" type="button" aria-label="Пауза" disabled>Ⅱ</button>
+            <span id="musicElapsed">0:00</span>
+            <input id="musicSeek" type="range" min="0" max="0" step="0.1" value="0" aria-label="Перемотка" disabled>
+            <span id="musicTotal">0:00</span>
+        </div>
+        <div class="music-result-actions"><button id="musicDownload" type="button" disabled>Скачать</button><button id="musicSave" type="button">Сохранить</button><button id="musicDelete" class="danger" type="button">Удалить временный файл</button></div>
+    </section>
+    <section class="music-history"><label for="musicHistory">История генераций</label><div><select id="musicHistory"><option value="">Выберите результат</option></select><button id="musicLoad" type="button">Открыть</button><button id="musicRefresh" type="button" aria-label="Обновить историю">↻</button></div></section>
+</dialog>
+
 <dialog id="photoSearchModal" class="photo-search-modal" aria-labelledby="photoSearchTitle">
     <div class="photo-search-heading">
         <h2 id="photoSearchTitle">Поиск по содержимому</h2>
@@ -109,6 +178,7 @@
         <button id="photoSearchSubmit" type="submit">Найти</button>
         <button id="photoSearchClear" type="button" hidden>Вернуться в папку</button>
     </form>
+    <div id="photoSearchBusy" class="processing-indicator" role="status" hidden><img src="/img/loading1.gif" alt=""><span>Ищем по описанию…</span></div>
     <div id="photoSearchMessage" class="photo-search-message" role="status" aria-live="polite"></div>
     <details id="photoIndexSection" class="photo-index-section">
         <summary class="photo-index-summary">
@@ -632,6 +702,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <script src="/app.js"></script>
+<script src="/music.js"></script>
 <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
 <div id="actionToast" class="toast hidden">
     <div class="toast-text"></div>

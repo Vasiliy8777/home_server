@@ -12,7 +12,7 @@ class HiddenPathsTest {
     @Test
     void skipsExcludedDirectoriesAndTheirContentsRegardlessOfCase() {
         for (String name : new String[]{".logs", "$recycle.bin", "system volume information",
-                "Bitcoin", "BitcoinCoreSpeedCheck", "BitcoinJavaNode"}) {
+                "Bitcoin", "BitcoinCoreSpeedCheck", "BitcoinJavaNode", "muz_gen"}) {
             for (String variant : new String[]{name, name.toUpperCase(Locale.ROOT),
                     name.toLowerCase(Locale.ROOT)}) {
                 assertTrue(HiddenPaths.isHiddenName(variant), variant);

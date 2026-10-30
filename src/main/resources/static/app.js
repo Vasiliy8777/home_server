@@ -1167,7 +1167,11 @@ async function loadFiles(path = "", options = {}) {
 }
 
 function exitPhotoSearch() {
+    if (photoSearchState?.pending) hideLoadingGif();
     photoSearchState = null;
+    const busy = document.getElementById("photoSearchBusy");
+    if (busy) busy.hidden = true;
+    photoSearchForm?.setAttribute("aria-busy", "false");
     if (photoSearchClear) photoSearchClear.hidden = true;
     if (photoSearchMore) photoSearchMore.hidden = true;
     if (photoSearchMessage) photoSearchMessage.textContent = "";
@@ -1214,6 +1218,11 @@ async function loadPhotoSearchPage() {
     const isCurrent = () => photoSearchState === state && state.session === folderLoadSession;
     loading = true;
     photoSearchMore.hidden = true;
+    state.pending = true;
+    showLoadingGif();
+    const searchBusy = document.getElementById("photoSearchBusy");
+    if (searchBusy) searchBusy.hidden = false;
+    photoSearchForm?.setAttribute("aria-busy", "true");
     photoSearchMessage.textContent = state.mode === "video" ? "Ищем видео…" : "Ищем фотографии…";
     try {
         const params = new URLSearchParams({query: state.query, offset: state.offset, limit: 60,
@@ -1241,6 +1250,10 @@ async function loadPhotoSearchPage() {
     } finally {
         if (isCurrent()) {
             loading = false;
+            state.pending = false;
+            hideLoadingGif();
+            if (searchBusy) searchBusy.hidden = true;
+            photoSearchForm?.setAttribute("aria-busy", "false");
             photoSearchMore.hidden = !(state.offset < state.total && state.offset <= 10000);
         }
     }

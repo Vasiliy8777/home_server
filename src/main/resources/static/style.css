@@ -5,6 +5,10 @@
     --surface-modal: rgba(17, 17, 17, 0.72);
 }
 
+.processing-indicator { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 16px 0; color: #70e3d6; }
+.processing-indicator[hidden] { display: none; }
+.processing-indicator img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
+
 /*   box-sizing: border-box
    означает, что padding и border входят в общую ширину/высоту элемента.
    Это сильно упрощает верстку.

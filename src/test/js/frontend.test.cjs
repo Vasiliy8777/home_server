@@ -5,6 +5,22 @@ const {harness, Element} = require('./browser-harness.cjs');
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 const response = (data, ok = true) => ({ok, status: ok ? 200 : 500, json: async () => data});
 
+test('description search shows GIF until completion and stale responses cannot hide a newer search', async () => {
+    const h = harness();
+    const pending = [];
+    h.window.fetch = () => new Promise(resolve => pending.push(resolve));
+    const first = h.run('runPhotoSearch("первый")');
+    assert.equal(h.elements.get('photoSearchBusy').hidden, false);
+    assert.equal(h.elements.get('loadingGifOverlay').style.display, 'flex');
+    const second = h.run('runPhotoSearch("второй")');
+    pending[0](response({hits:[], total:0})); await first;
+    assert.equal(h.elements.get('photoSearchBusy').hidden, false);
+    pending[1](response({error:'Ошибка поиска'}, false)); await second;
+    assert.equal(h.elements.get('photoSearchBusy').hidden, true);
+    assert.equal(h.elements.get('loadingGifOverlay').style.display, 'none');
+    assert.equal(h.elements.get('photoSearchForm').getAttribute('aria-busy'), 'false');
+});
+
 test('search filters preserve query and mode and restart server pagination', async () => {
     const h = harness();
     const urls = [];

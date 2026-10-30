@@ -1,0 +1,73 @@
+#musicOpen, .music-modal .music-glow {
+    color: #a7fff4;
+    border: 1px solid #42d8c5;
+    background: #123f40 !important;
+    box-shadow: 0 0 12px #2dd4bf66, inset 0 0 8px #2dd4bf22;
+}
+#musicOpen:hover, .music-modal .music-glow:hover { background: #185557 !important; box-shadow: 0 0 19px #2dd4bf88; }
+.music-modal {
+    width: min(780px, calc(100vw - 24px));
+    max-height: 90dvh;
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 26px;
+    border: 1px solid #397573;
+    border-radius: 20px;
+    background: #142126;
+    color: #edf7f6;
+    box-shadow: 0 20px 80px #0009;
+}
+.music-modal::backdrop { background: #051113bd; backdrop-filter: blur(5px); }
+.music-modal h2 { margin: 0; color: #76ead8; font-size: 26px; }
+.music-modal p { color: #a8bfbe; font-size: 13px; }
+.music-heading, .music-lyrics-heading, .music-submit, .music-result-actions, .music-player { display: flex; align-items: center; gap: 12px; }
+.music-heading, .music-lyrics-heading, .music-submit { justify-content: space-between; }
+.music-heading { margin-bottom: 16px; }
+.music-modal label { display: block; font-size: 14px; color: #daeeeb; }
+.music-modal textarea, .music-modal select, .music-modal input:not([type="checkbox"]):not([type="range"]) {
+    width: 100%; box-sizing: border-box; border: 1px solid #40575d; border-radius: 10px;
+    color: #f0faf9; background: #0c191e; padding: 11px; font: inherit;
+}
+.music-modal textarea { resize: vertical; margin: 8px 0 18px; line-height: 1.5; }
+.music-modal textarea::placeholder, .music-modal input::placeholder { color: #829c9d; }
+.music-modal button { cursor: pointer; border-radius: 10px; min-height: 40px; background: #254447; color: #edf7f6; border: 1px solid #446769; padding: 8px 12px; }
+.music-modal button.danger { background: #4a252c; border-color: #9d5965; color: #ffd7dd; }
+.music-modal :focus-visible { outline: 2px solid #70f0db; outline-offset: 3px; }
+.music-modal :disabled { opacity: .5; cursor: default; }
+.music-settings { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.music-settings input, .music-settings select { margin-top: 7px; }
+.music-checks { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 12px 0 20px; }
+.music-checks label { display: flex; align-items: center; gap: 6px; }
+.music-modal input { accent-color: #43d8c3; }
+.music-advanced summary { cursor: pointer; color: #99bfbb; margin-bottom: 12px; }
+.music-advanced .music-settings { grid-template-columns: 1fr 1fr; }
+.music-submit { margin-top: 18px; }
+.music-submit span { color: #9bb6b3; font-size: 13px; }
+#musicStart { min-width: 120px; font-size: 17px; }
+.music-status { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 20px; }
+.music-status[data-error="true"] { color: #ffaaaa; }
+.music-result { padding: 16px; border: 1px solid #37635f; border-radius: 12px; background: #102e2e; }
+.music-result[hidden] { display: none; }
+.music-player { font-variant-numeric: tabular-nums; }
+.music-player input { flex: 1; min-width: 45px; width: auto; }
+.music-player span { font-size: 13px; white-space: nowrap; }
+.music-result-actions { margin-top: 14px; flex-wrap: wrap; }
+.music-source { margin: 14px 0 20px; padding: 16px; border: 1px solid #37635f; border-radius: 12px; }
+.music-source[hidden], .music-modal [hidden] { display: none; }
+.music-source input[type="file"] { margin-top: 8px; }
+.music-source audio { width: 100%; margin-bottom: 14px; }
+.music-source p { overflow-wrap: anywhere; }
+.music-source .music-settings { grid-template-columns: 1fr 1fr; }
+.music-source .music-settings p { grid-column: 1 / -1; }
+#musicStrength { width: 100%; }
+#musicMode { margin: 8px 0 18px; }
+.music-history { margin-top: 22px; border-top: 1px solid #344d50; padding-top: 16px; }
+.music-history > div { display: flex; gap: 8px; margin-top: 8px; }
+.music-history select { min-width: 0; flex: 1; }
+@media (max-width: 600px) {
+    .music-modal { padding: 18px; }
+    .music-settings { grid-template-columns: 1fr 1fr; }
+    .music-lyrics-heading { align-items: flex-start; flex-direction: column; }
+    .music-player { gap: 7px; }
+    .music-player button { padding: 6px 10px; }
+}

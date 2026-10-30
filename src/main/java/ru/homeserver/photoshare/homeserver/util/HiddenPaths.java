@@ -19,7 +19,10 @@ public final class HiddenPaths {
             "system volume information",
             "bitcoin",
             "bitcoincorespeedcheck",
-            "bitcoinjavanode"
+            "bitcoinjavanode",
+            "rvnjavanjde",
+            "muz_gen",
+            "disk_h"
     );
 
     private HiddenPaths() {

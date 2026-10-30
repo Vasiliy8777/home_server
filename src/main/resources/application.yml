@@ -27,6 +27,16 @@ app:
   ffprobe-path: ${APP_FFPROBE_PATH:ffprobe}
   magick-path: ${APP_MAGICK_PATH:magick}
 
+  music:
+    root: ${APP_MUSIC_ROOT:K:/muz_gen}
+    ace-url: ${APP_MUSIC_ACE_URL:http://127.0.0.1:8001}
+    ollama-url: ${APP_MUSIC_OLLAMA_URL:http://127.0.0.1:11434}
+    lyrics-model: ${APP_MUSIC_LYRICS_MODEL:qwen3:14b}
+    timeout-seconds: ${APP_MUSIC_TIMEOUT_SECONDS:3600}
+    auto-start: ${APP_MUSIC_AUTO_START:true}
+    ffmpeg-path: ${APP_FFMPEG_PATH:ffmpeg}
+    ffprobe-path: ${APP_FFPROBE_PATH:ffprobe}
+
   cache:
     database-enabled: ${APP_CACHE_DATABASE_ENABLED:true}
     database-path: ${APP_CACHE_DATABASE_PATH:${LOCALAPPDATA:C:/Users/Vasiliy/AppData/Local}/homeserver/cache/catalog.sqlite}
