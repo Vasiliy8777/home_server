@@ -131,6 +131,9 @@ class MusicServiceTest {
     }
 
     @Test void rejectsInvalidOptionsBeforeStartingWork() {
+        assertEquals(8, new MusicRequest("Поп", "текст", "acestep-v15-xl-turbo", "ru", 60, null, null, 20, false, true, false).steps());
+        assertEquals(8, new MusicRequest("Поп", "текст", "acestep-v15-turbo", "ru", 60, null, null, 20, false, true, false).steps());
+        assertThrows(IllegalArgumentException.class, () -> request().withSeed(4294967296L));
         assertThrows(IllegalArgumentException.class, () -> new MusicRequest("", "", "../evil", "ru", 60, null, null, 8, false, true, false));
         assertThrows(IllegalArgumentException.class, () -> new MusicRequest("Поп", "текст", "acestep-v15-turbo", "ru", 600, null, null, 8, false, true, false));
         assertThrows(IllegalArgumentException.class, () -> new MusicRequest("Поп", "", "acestep-v15-turbo", "ru", 60, null, null, 8, false, true, false));
@@ -163,6 +166,82 @@ class MusicServiceTest {
         assertThrows(IllegalArgumentException.class, () -> new MusicRequest("piano", "", "acestep-v15-turbo", "ru", 30, null, null, 8,
                 false, false, false, "repaint", java.util.UUID.randomUUID().toString(), "change", .5, 10., 11.));
     }
+    @Test void randomSeedIsRecordedAndCanBeReusedAfterRestart() throws Exception {
+        audioResponse();
+        var random = request().withSeed(42);
+        random = new MusicRequest(random.description(), random.lyrics(), random.model(), random.language(),
+                random.duration(), random.bpm(), null, random.steps(), false, true, false);
+        var ready = finished(service.generate(random).id());
+        assertNotNull(ready.request().seed());
+        var sent = org.mockito.ArgumentCaptor.forClass(MusicRequest.class);
+        verify(client).submit(sent.capture());
+        assertEquals(ready.request().seed(), sent.getValue().seed());
+        try (var restarted = new Restarted(properties, json, client)) {
+            assertEquals(ready.request().seed(), restarted.service.get(ready.id()).request().seed());
+        }
+        assertEquals(ready.request().seed(), finished(service.generate(ready.request()).id()).request().seed());
+    }
+
+    @Test void recoversLegacySeedFromEngineResultMetadata() throws Exception {
+        audioResponse();
+        var ready = finished(service.generate(request()).id());
+        var record = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(root.resolve("jobs/" + ready.id() + ".json").toFile());
+        ((com.fasterxml.jackson.databind.node.ObjectNode)record.path("request")).putNull("seed");
+        json.writeValue(root.resolve("jobs/" + ready.id() + ".json").toFile(), record);
+        assertEquals(42L, service.get(ready.id()).request().seed());
+    }
+
+    @Test void speechUsesExactTextAndExistingResultLifecycle() throws Exception {
+        service.close();
+        var speech = mock(LocalSpeechService.class);
+        var sources = mock(MusicSourceService.class);
+        service = new MusicService(properties, json, client, sources, speech);
+        doAnswer(call -> {
+            Path work = call.getArgument(1, Path.class); Files.createDirectories(work);
+            Files.write(work.resolve("result.wav"), new byte[100]); return null;
+        }).when(speech).generate(any(), any());
+        var r = new MusicRequest("Спокойный низкий мужской голос", "Первая фраза.\nВторая фраза!", null, "ru", 0, null, 123L, 0,
+                false, false, false, "speech", "", "", null, null, null);
+        var ready = finished(service.generate(r).id());
+        assertEquals("ready", ready.state());
+        verify(speech).generate(eq(r), any()); verifyNoInteractions(sources);
+        verify(client, never()).submit(any());
+        assertEquals(r.lyrics(), Files.readString(root.resolve("speech-texts/" + ready.id() + ".txt")));
+        assertEquals(r.description(), Files.readString(root.resolve("speech-prompts/" + ready.id() + ".txt")));
+        assertTrue(Files.isRegularFile(service.audio(ready.id())));
+        assertEquals("saved", service.save(ready.id()).state());
+    }
+
+    @Test void voiceCloningUsesValidatedSampleAndKeepsTranscriptWithSeed() throws Exception {
+        service.close();
+        var speech = mock(LocalSpeechService.class);
+        var sources = mock(MusicSourceService.class);
+        service = new MusicService(properties, json, client, sources, speech);
+        String id = java.util.UUID.randomUUID().toString();
+        Path sample = root.resolve("voice.wav"); Files.write(sample, new byte[100]);
+        when(sources.get(id)).thenReturn(new MusicSourceService.Source(id, "voice.wav", 5, "/audio", "voice"));
+        when(sources.audio(id)).thenReturn(sample);
+        doAnswer(call -> {
+            Path work = call.getArgument(1, Path.class); Files.createDirectories(work);
+            Files.write(work.resolve("result.wav"), new byte[100]); return null;
+        }).when(speech).generate(any(), any(), eq(sample));
+        var r = new MusicRequest("", "Новый текст для произнесения.", null, "ru", 0, null, null, 0,
+                false, false, false, "speech_clone", id, "", null, null, null, "Слова в образце.", false);
+        var ready = finished(service.generate(r).id());
+        assertEquals("ready", ready.state());
+        assertEquals("Qwen3-TTS-12Hz-1.7B-Base", ready.request().model());
+        assertNotNull(ready.request().seed());
+        assertEquals("Слова в образце.", ready.request().referenceText());
+        verify(speech).generate(eq(ready.request()), any(), eq(sample));
+        verify(client, never()).submit(any());
+        assertThrows(IllegalArgumentException.class, () -> new MusicRequest("", "Новый текст", null, "ru", 0, null, null, 0,
+                false, false, false, "speech_clone", id, "", null, null, null, "", false));
+        when(sources.get(id)).thenReturn(new MusicSourceService.Source(id, "music.wav", 15, "/audio", "music"));
+        assertThrows(IllegalArgumentException.class, () -> service.generate(r));
+        service.delete(ready.id());
+        assertTrue(Files.exists(sample));
+    }
+
     private static class Restarted implements AutoCloseable {
         final MusicService service;
         Restarted(MusicProperties p, ObjectMapper j, LocalMusicClient c) { service = new MusicService(p, j, c); }

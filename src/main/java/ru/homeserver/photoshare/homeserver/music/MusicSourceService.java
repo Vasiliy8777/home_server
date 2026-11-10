@@ -10,7 +10,10 @@ import java.util.concurrent.*;
 
 @Service
 public class MusicSourceService {
-    public record Source(String id, String name, double duration, String audioUrl) {}
+    public record Source(String id, String name, double duration, String audioUrl, String purpose) {
+        public Source(String id, String name, double duration, String audioUrl) { this(id, name, duration, audioUrl, "music"); }
+        public Source { purpose = purpose == null ? "music" : purpose; }
+    }
     private static final long MAX_BYTES = 100L * 1024 * 1024;
     private static final String FORMATS = "wav,mp3,flac,mov,ogg,aac,matroska,webm";
     private final Path root;
@@ -38,6 +41,13 @@ public class MusicSourceService {
     }
 
     public Source upload(String name, long length, InputStream input) throws IOException, InterruptedException {
+        return upload(name, length, input, "music");
+    }
+    public Source upload(String name, long length, InputStream input, String purpose) throws IOException, InterruptedException {
+        if (!Set.of("music", "voice").contains(purpose)) throw new IllegalArgumentException("Неизвестный тип образца");
+        boolean voice = "voice".equals(purpose);
+        double minimum = voice ? 3 : 10, maximum = voice ? 30 : 300;
+        String durationError = voice ? "Образец голоса должен содержать от 3 до 30 секунд речи" : "Образец должен содержать аудио длительностью от 10 до 300 секунд";
         if (name == null || name.isBlank() || name.length() > 250) throw new IllegalArgumentException("Укажите имя аудиофайла");
         name = name.replace('\\', '/');
         name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "");
@@ -69,20 +79,20 @@ public class MusicSourceService {
             boolean hasAudio = false;
             for (var stream : metadata.path("streams")) if ("audio".equals(stream.path("codec_type").asText())) hasAudio = true;
             double duration = metadata.path("format").path("duration").asDouble(0);
-            if (!hasAudio || !Double.isFinite(duration) || duration < 10 || duration > 300)
-                throw new IllegalArgumentException("Образец должен содержать аудио длительностью от 10 до 300 секунд");
+            if (!hasAudio || !Double.isFinite(duration) || duration < minimum || duration > maximum)
+                throw new IllegalArgumentException(durationError);
             command(List.of(properties.getFfmpegPath(), "-nostdin", "-y", "-v", "error", "-protocol_whitelist", "file,pipe",
                     "-format_whitelist", FORMATS, "-i", original.toString(), "-map", "0:a:0", "-vn", "-t", "301",
-                    "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", "-threads", "2", dir.resolve("source.wav").toString()),
+                    "-ac", voice ? "1" : "2", "-ar", voice ? "24000" : "48000", "-c:a", "pcm_s16le", "-threads", "2", dir.resolve("source.wav").toString()),
                     dir.resolve("convert.out"), dir.resolve("convert.log"), 90);
             // Measure the decoded duration as container metadata can be inaccurate.
             command(List.of(properties.getFfprobePath(), "-v", "error", "-show_entries", "format=duration", "-of", "json", dir.resolve("source.wav").toString()),
                     dir.resolve("decoded.json"), dir.resolve("decoded.log"), 15);
             duration = json.readTree(dir.resolve("decoded.json").toFile()).path("format").path("duration").asDouble(0);
-            if (!Double.isFinite(duration) || duration < 10 || duration > 300)
-                throw new IllegalArgumentException("Длительность декодированного образца должна быть от 10 до 300 секунд");
+            if (!Double.isFinite(duration) || duration < minimum || duration > maximum)
+                throw new IllegalArgumentException(durationError);
             String id = dir.getFileName().toString();
-            Source source = new Source(id, name, duration, "/api/music/sources/" + id + "/audio");
+            Source source = new Source(id, name, duration, "/api/music/sources/" + id + "/audio", purpose);
             json.writeValue(dir.resolve("source.json").toFile(), source);
             return source;
         } catch (IOException | InterruptedException | RuntimeException e) {

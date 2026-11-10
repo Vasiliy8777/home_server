@@ -33,6 +33,27 @@ class MusicLiveTest {
                 assertNotNull(request, "The selected job must contain a music request");
             }
             String mode = System.getenv("MUSIC_LIVE_MODE");
+            if ("speech".equals(mode) || "speech_clone".equals(mode)) {
+                Path runtime = Path.of(properties.getRoot()).resolve("runtime");
+                Files.createDirectories(runtime);
+                Files.copy(originalRoot.resolve("runtime/generate_speech.py"), runtime.resolve("generate_speech.py"));
+                request = new MusicRequest("A warm low male voice, calm confident delivery, clear Russian pronunciation, natural pauses. Speak, do not sing.",
+                        "Добрый вечер! Это проверка локальной озвучки. Каждое слово должно прозвучать чётко и спокойно.",
+                        null, "ru", 0, null, 42L, 0, false, false, false,
+                        "speech", "", "", null, null, null);
+                if ("speech_clone".equals(mode)) {
+                    Path sample = Path.of(System.getenv("MUSIC_SAMPLE_PATH"));
+                    var sources = new MusicSourceService(properties, new ObjectMapper());
+                    MusicSourceService.Source source;
+                    try (var input = Files.newInputStream(sample)) {
+                        source = sources.upload(sample.getFileName().toString(), Files.size(sample), input, "voice");
+                    }
+                    request = new MusicRequest("", "Теперь этот голос произносит новый текст. Проверяем перенос тембра и чёткую речь.",
+                            null, "ru", 0, null, 42L, 0, false, false, false,
+                            "speech_clone", source.id(), "", null, null, null,
+                            System.getenv("MUSIC_REFERENCE_TEXT"), Boolean.parseBoolean(System.getenv("MUSIC_CLONE_VOICE_ONLY")));
+                }
+            }
             if ("cover".equals(mode) || "repaint".equals(mode)) {
                 Path sample = Path.of(System.getenv("MUSIC_SAMPLE_PATH"));
                 var sources = new MusicSourceService(properties, new ObjectMapper());
@@ -60,6 +81,11 @@ class MusicLiveTest {
                         assertEquals("WAVE", new String(header, 8, 4, java.nio.charset.StandardCharsets.US_ASCII));
                     }
                     System.out.println("Audio verified: " + service.audio(job.id()));
+                    if ("speech".equals(mode) || "speech_clone".equals(mode)) {
+                        assertTrue(Files.isRegularFile(service.audio(job.id()).resolveSibling("speech-parts.json")));
+                        assertEquals(request.lyrics(), Files.readString(Path.of(properties.getRoot()).resolve("speech-texts/" + job.id() + ".txt")));
+                    }
+                    if ("speech_clone".equals(mode)) assertTrue(Files.isRegularFile(service.audio(job.id()).resolveSibling("voice-reference.wav")));
                     return;
                 }
                 Thread.sleep(3000);

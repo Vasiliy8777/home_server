@@ -18,8 +18,9 @@ public class MusicController {
     public MusicController(MusicService music, MusicSourceService sources) { this.music = music; this.sources = sources; }
     @PostMapping(value = "/sources", consumes = {"application/octet-stream", "audio/*", "video/webm"})
     @ResponseStatus(HttpStatus.CREATED)
-    public MusicSourceService.Source upload(@RequestParam String name, HttpServletRequest request) throws IOException, InterruptedException {
-        return sources.upload(name, request.getContentLengthLong(), request.getInputStream());
+    public MusicSourceService.Source upload(@RequestParam String name, @RequestParam(defaultValue = "music") String purpose,
+                                            HttpServletRequest request) throws IOException, InterruptedException {
+        return sources.upload(name, request.getContentLengthLong(), request.getInputStream(), purpose);
     }
     @GetMapping("/sources/{id}") public MusicSourceService.Source source(@PathVariable String id) throws IOException { return sources.get(id); }
     @GetMapping("/sources/{id}/audio") public ResponseEntity<FileSystemResource> sourceAudio(@PathVariable String id) throws IOException {

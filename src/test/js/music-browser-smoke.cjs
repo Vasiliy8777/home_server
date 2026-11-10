@@ -40,7 +40,7 @@ const checks = async function () {
         el('musicForm').requestSubmit();
         check('music generation displays processing indicator', !el('musicProcessing').hidden);
         await until(()=>!el('musicResult').hidden);
-        await until(()=>el('musicAudio').duration>0);
+        await until(()=>el('musicAudio').duration>0 && el('musicTotal').textContent==='0:02');
         check('duration displayed', el('musicTotal').textContent==='0:02');
         check('seek enabled', !el('musicSeek').disabled);
         el('musicSeek').value=1;
@@ -48,6 +48,10 @@ const checks = async function () {
         check('seek changes audio time', el('musicAudio').currentTime>=.9);
         await until(()=>!el('musicSave').disabled);
         check('processing indicator clears after generation', el('musicProcessing').hidden);
+        check('effective turbo limit is eight', el('musicSteps').max==='8');
+        check('actual random seed is displayed', el('musicCurrentSeed').textContent.includes('123456'));
+        el('musicUseSeed').click();
+        check('current seed can be locked', el('musicSeedLocked').checked && el('musicSeed').value==='123456' && !el('musicSeed').disabled);
         check('temporary audio can be downloaded', !el('musicDownload').disabled);
         const nativeClick=HTMLAnchorElement.prototype.click;
         let download;
@@ -96,12 +100,46 @@ const checks = async function () {
         el('musicHistory').value='2'; el('musicLoad').click();
         await until(()=>!el('musicResult').hidden);
         check('saved audio reopens from history', el('musicSave').disabled && el('musicDelete').disabled);
+        await until(()=>!el('musicStart').disabled);
+        el('musicMode').value='speech'; el('musicMode').dispatchEvent(new Event('change'));
+        check('speech hides music-only controls and sample upload', el('musicSourceSection').hidden && el('musicDuration').disabled && el('musicSteps').disabled && el('musicModel').disabled && el('musicWriteLyrics').disabled);
+        el('musicDescription').value='Низкий спокойный голос';
+        el('musicLyrics').value='Прочитай именно эти слова. Второе предложение!';
+        el('musicForm').requestSubmit();
+        check('speech shows loading indicator', !el('musicProcessing').hidden);
+        await until(()=>el('musicStatus').textContent==='Готово' && !el('musicStart').disabled);
+        check('speech audio can be played, saved and downloaded', !el('musicResult').hidden && !el('musicSave').disabled && !el('musicDownload').disabled);
+        el('musicMode').value='speech_clone'; el('musicMode').dispatchEvent(new Event('change'));
+        check('voice clone shows reference controls and hides unsupported description', !el('musicSourceSection').hidden && !el('musicVoiceSettings').hidden && el('musicDescription').hidden && el('musicReferenceText').required && !el('musicChanges').required);
+        check('music sample is not reused as a voice sample', el('musicSourceFile').required && !el('musicSourceFile').files.length);
+        const voiceTransfer=new DataTransfer();
+        voiceTransfer.items.add(new File([await (await fetch('/sample.wav')).arrayBuffer()], 'voice.wav', {type:'audio/wav'}));
+        el('musicSourceFile').files=voiceTransfer.files; el('musicSourceFile').dispatchEvent(new Event('change'));
+        el('musicReferenceText').value='Точные слова в образце.';
+        el('musicLyrics').value='Совершенно новый текст для озвучки.';
+        el('musicForm').requestSubmit();
+        await until(()=>el('musicStatus').textContent==='Готово' && !el('musicStart').disabled);
+        check('voice cloning completes and supports download', !el('musicResult').hidden && !el('musicDownload').disabled && el('musicModel').value==='Qwen3-TTS-12Hz-1.7B-Base');
+        const cloneId=el('musicAudio').getAttribute('src').match(/\/jobs\/([^/]+)\/audio/)[1];
+        el('musicSave').click();
+        await until(()=>el('musicStatus').textContent.startsWith('Сохранено') && !el('musicStart').disabled);
+        el('musicMode').value='speech'; el('musicMode').dispatchEvent(new Event('change'));
+        el('musicHistory').value=cloneId; el('musicLoad').click();
+        await until(()=>el('musicMode').value==='speech_clone' && !el('musicStart').disabled);
+        check('voice clone history restores sample and transcript', el('musicReferenceText').value==='Точные слова в образце.' && !el('musicSourceAudio').hidden && !el('musicVoiceOnly').checked);
+        el('musicVoiceOnly').checked=true; el('musicVoiceOnly').dispatchEvent(new Event('change'));
+        el('musicReferenceText').value='';
+        check('voice-only mode does not require transcript', el('musicReferenceText').disabled && !el('musicReferenceText').required);
+        el('musicForm').requestSubmit();
+        await until(()=>el('musicStatus').textContent==='Готово' && !el('musicStart').disabled);
+        check('voice-only cloning finishes', !el('musicResult').hidden && !el('musicSave').disabled);
     } catch(error) { results.push({name:String(error),ok:false}); }
     const marker=document.createElement('pre'); marker.id='smoke-results'; marker.textContent=JSON.stringify(results); document.body.append(marker);
 };
 let jobs = [];
 let calls = [];
 const source={id:'11111111-1111-4111-8111-111111111111',name:'sample.wav',duration:30,audioUrl:'/api/music/sources/11111111-1111-4111-8111-111111111111/audio'};
+const voiceSource={id:'22222222-2222-4222-8222-222222222222',name:'voice.wav',duration:8,purpose:'voice',audioUrl:'/api/music/sources/22222222-2222-4222-8222-222222222222/audio'};
 const wav=Buffer.alloc(44+32000);
 wav.write('RIFF'); wav.writeUInt32LE(wav.length-8,4); wav.write('WAVEfmt ',8);
 wav.writeUInt32LE(16,16); wav.writeUInt16LE(1,20); wav.writeUInt16LE(1,22);
@@ -135,11 +173,12 @@ const server=http.createServer(async(req,res)=>{
         } else res.end(wav);
         return;
     }
-    if(req.url.startsWith('/api/music/sources')) data=source;
-    else if(req.url==='/api/music/status') data={available:true,busy:false};
+    if(req.url.startsWith('/api/music/sources')) data=req.url.includes('purpose=voice') || req.url.includes(voiceSource.id) ? voiceSource : source;
+    else if(req.url==='/api/music/status') data={available:true,busy:false,speechInstalled:true,speechCloneInstalled:true};
     else if(req.url==='/api/music/jobs' && req.method==='GET') data=jobs;
     else if(req.url==='/api/music/lyrics' || (req.url==='/api/music/jobs' && req.method==='POST')) {
         const lyrics=req.url.endsWith('/lyrics');
+        if (!lyrics && body.seed==null) body.seed=123456;
         data={id:String(jobs.length+1),kind:lyrics?'lyrics':'music',state:'queued',message:'Подготовка',createdAt:new Date().toISOString(),request:lyrics?null:body};
         const failed=body?.description==='force-failure';
         jobs.unshift({...data,state:failed?'failed':'ready',message:failed?'Тестовая ошибка':'Готово',lyrics:lyrics?'[Chorus]\nМоре зовёт':'',pendingReads:1});
@@ -168,12 +207,23 @@ const server=http.createServer(async(req,res)=>{
             assert.ok(calls.filter(c=>c.method!=='GET').every(c=>c.csrf==='smoke-token'),'Missing CSRF token');
             const music=calls.find(c=>c.url==='/api/music/jobs' && c.method==='POST').body;
             assert.equal(music.model,'acestep-v15-xl-turbo');assert.equal(music.duration,120);
-            const edits=calls.filter(c=>c.url==='/api/music/jobs' && c.method==='POST' && c.body.taskType!=='text2music').map(c=>c.body);
+            const allMusic=calls.filter(c=>c.url==='/api/music/jobs' && c.method==='POST');
+            assert.equal(allMusic[1].body.seed,123456);
+            const edits=allMusic.filter(c=>['cover','repaint'].includes(c.body.taskType)).map(c=>c.body);
             assert.equal(edits.length,2);
             assert.equal(edits[0].taskType,'cover'); assert.equal(edits[0].sourceId,source.id); assert.equal(edits[0].thinking,false);
             assert.equal(edits[1].taskType,'repaint'); assert.equal(edits[1].repaintStart,2); assert.equal(edits[1].repaintEnd,8);
+            const speech=allMusic.find(c=>c.body.taskType==='speech').body;
+            assert.equal(speech.lyrics,'Прочитай именно эти слова. Второе предложение!');
+            assert.equal(speech.sourceId,''); assert.equal(speech.thinking,false); assert.equal(speech.instrumental,false);
+            const clones=allMusic.filter(c=>c.body.taskType==='speech_clone').map(c=>c.body);
+            assert.equal(clones.length,2); assert.equal(clones[0].sourceId,voiceSource.id);
+            assert.equal(clones[0].referenceText,'Точные слова в образце.'); assert.equal(clones[0].voiceOnly,false);
+            assert.equal(clones[0].lyrics,'Совершенно новый текст для озвучки.');
+            assert.equal(clones[1].voiceOnly,true); assert.equal(clones[1].referenceText,'');
             const uploads=calls.filter(c=>c.url.startsWith('/api/music/sources?'));
-            assert.equal(uploads.length,1); assert.equal(uploads[0].body.bytes,wav.length);
+            assert.equal(uploads.length,2); assert.equal(uploads[0].body.bytes,wav.length);
+            assert.ok(uploads[1].url.includes('purpose=voice'));
             console.log(`Music UI ${width}px: ${results.length} checks passed, CSRF verified`);
         }
     } finally { server.close(); }

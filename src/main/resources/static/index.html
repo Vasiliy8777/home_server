@@ -98,13 +98,21 @@
     </div>
     <form id="musicForm">
         <label for="musicMode">Режим</label>
-        <select id="musicMode"><option value="text2music">Новая песня по описанию</option><option value="cover">По образцу — переработать всю запись</option><option value="repaint">По образцу — изменить фрагмент</option></select>
+        <select id="musicMode"><option value="text2music">Новая песня по описанию</option><option value="cover">По образцу — переработать всю запись</option><option value="repaint">По образцу — изменить фрагмент</option><option value="speech">Озвучка текста — голос по описанию</option><option value="speech_clone">Озвучка текста — голос из образца</option></select>
+        <p id="musicSpeechHint" hidden>Qwen3-TTS VoiceDesign: в описании задайте голос, эмоции и темп речи. В поле текста вставьте именно то, что нужно произнести, без [Verse] и [Chorus]. Длительность определяется текстом. Для длинного текста создаются последовательные части; тембр между ними может немного меняться.</p>
         <section id="musicSourceSection" class="music-source" hidden>
-            <label for="musicSourceFile">Звуковой образец</label>
+            <label id="musicSourceLabel" for="musicSourceFile">Звуковой образец</label>
             <input id="musicSourceFile" type="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.opus,.aac,.webm">
             <p id="musicSourceInfo">Аудио от 10 до 300 секунд, до 100 МБ. Длительность результата соответствует образцу.</p>
             <audio id="musicSourceAudio" controls preload="metadata" hidden></audio>
-            <label for="musicChanges">Что изменить в образце</label>
+            <div id="musicVoiceSettings" hidden>
+                <p>Загрузите 3–30 секунд чистой речи одного человека, желательно 5–15 секунд, без музыки и других голосов. Голос и манера речи берутся из образца. Эта модель не поддерживает отдельное описание голоса.</p>
+                <label for="musicReferenceText">Точный текст, произнесённый в образце</label>
+                <textarea id="musicReferenceText" rows="3" maxlength="4000" placeholder="Перепишите все слова из записи. Это текст образца, а не новый текст для озвучки."></textarea>
+                <label><input id="musicVoiceOnly" type="checkbox">Без расшифровки — использовать только тембр голоса</label>
+                <p>Для более точного переноса используйте запись с точной расшифровкой. Упрощённый режим не требует текста образца, но сходство и качество могут быть ниже.</p>
+            </div>
+            <label id="musicChangesLabel" for="musicChanges">Что изменить в образце</label>
             <textarea id="musicChanges" rows="3" maxlength="4000" placeholder="Например: сохранить мелодию, заменить ударные на мягкие, добавить пианино и женский вокал"></textarea>
             <div id="musicCoverSettings"><label for="musicStrength">Сходство с образцом: <output id="musicStrengthValue">70%</output></label><input id="musicStrength" type="range" min="0" max="1" step="0.05" value="0.7"><p>Выше — ближе к структуре образца, ниже — больше свободы для изменений.</p></div>
             <div id="musicRepaintSettings" class="music-settings" hidden>
@@ -112,18 +120,19 @@
                 <label>Конец фрагмента, сек.<input id="musicEditEnd" type="number" min="3" max="300" step="0.1" value="10"></label>
                 <p>Выберите интервал от 3 до 90 секунд. Для замены слов укажите желаемый текст в поле ниже.</p>
             </div>
-            <p>Модель создаёт новую интерпретацию записи. Описывайте желаемое звучание; точность отдельных изменений зависит от модели.</p>
+            <div id="musicSourceGuidance"><p>Модель создаёт новую интерпретацию записи. Описывайте желаемое звучание; точность отдельных изменений зависит от модели.</p>
             <p>Если нужны конкретные слова, вставьте их в поле текста песни. Без текста модель может изменить слова образца.</p>
+            </div>
         </section>
-        <label for="musicDescription">Описание песни</label>
+        <label id="musicDescriptionLabel" for="musicDescription">Описание песни</label>
         <textarea id="musicDescription" maxlength="4000" rows="3" required placeholder="Жанр, настроение, инструменты и голос. Например: лиричный инди-поп, тёплый мужской вокал, гитара и мягкие ударные"></textarea>
         <div class="music-lyrics-heading">
-            <label for="musicLyrics">Текст песни или запрос для его создания</label>
+            <label id="musicLyricsLabel" for="musicLyrics">Текст песни или запрос для его создания</label>
             <button id="musicWriteLyrics" type="button">Сгенерировать текст</button>
         </div>
         <textarea id="musicLyrics" maxlength="16000" rows="8" placeholder="Введите готовый текст или пожелания и нажмите «Сгенерировать текст». Например: песня о путешествии к морю, два куплета и припев"></textarea>
         <div class="music-settings">
-            <label>Модель<select id="musicModel"><option value="acestep-v15-xl-turbo">XL — качество</option><option value="acestep-v15-turbo">Turbo — скорость</option></select></label>
+            <label>Модель<select id="musicModel"><option value="acestep-v15-xl-turbo">XL — качество</option><option value="acestep-v15-turbo">Turbo — скорость</option><option value="Qwen3-TTS-12Hz-1.7B-VoiceDesign" hidden>VoiceDesign — озвучка</option><option value="Qwen3-TTS-12Hz-1.7B-Base" hidden>Qwen3-TTS Base — голос из образца</option></select></label>
             <label>Длительность, сек.<input id="musicDuration" type="number" min="10" max="300" step="1" value="120" required></label>
             <label>Язык<select id="musicLanguage"><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="zh">中文</option><option value="ja">日本語</option><option value="ko">한국어</option></select></label>
             <label>Темп, BPM<input id="musicBpm" type="number" min="30" max="300" placeholder="Авто"></label>
@@ -135,10 +144,12 @@
         </div>
         <details class="music-advanced"><summary>Дополнительные настройки</summary>
             <div class="music-settings">
-                <label>Seed<input id="musicSeed" type="number" min="0" max="2147483647" placeholder="Случайный"></label>
-                <label>Шаги генерации<input id="musicSteps" type="number" min="1" max="20" value="8" required></label>
+                <label>Seed<input id="musicSeed" type="number" min="0" max="4294967295" placeholder="Случайный" disabled></label>
+                <label>Шаги генерации<input id="musicSteps" type="number" min="1" max="8" value="8" required></label>
             </div>
-            <p>Для Turbo обычно достаточно 8 шагов. Большее число не гарантирует лучший результат. Seed помогает сравнивать варианты.</p>
+            <div class="music-checks"><label><input id="musicSeedLocked" type="checkbox">Фиксировать seed</label><button id="musicUseSeed" type="button" disabled>Зафиксировать текущий seed</button></div>
+            <p id="musicCurrentSeed">Текущий seed: —</p>
+            <p>XL Turbo и Turbo используют до 8 шагов: движок ограничивает большие значения автоматически. Для десятков шагов нужна отдельная модель Base/SFT. Seed сохраняется с результатом; одинаковые seed и настройки помогают повторять вариант, но не гарантируют побитового совпадения.</p>
         </details>
         <div class="music-submit"><span id="musicConnection">Проверяем генератор…</span><button id="musicStart" class="music-glow" type="submit">start</button></div>
     </form>

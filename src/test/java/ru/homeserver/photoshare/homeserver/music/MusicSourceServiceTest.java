@@ -48,6 +48,17 @@ class MusicSourceServiceTest {
         assertThrows(IllegalArgumentException.class, () -> sources.upload("file.wav", 101L * 1024 * 1024, InputStream.nullInputStream()));
         assertThrows(IllegalArgumentException.class, () -> sources.upload("file.wav", 0, InputStream.nullInputStream()));
     }
+    @Test void acceptsShortVoiceReferenceAndNormalizesToMono24k() throws Exception {
+        Assumptions.assumeTrue(available("ffmpeg") && available("ffprobe"));
+        byte[] audio = wave(3);
+        var source = sources.upload("voice.wav", audio.length, new ByteArrayInputStream(audio), "voice");
+        assertEquals("voice", source.purpose());
+        assertEquals(source, sources.get(source.id()));
+        var pcm = ByteBuffer.wrap(Files.readAllBytes(sources.audio(source.id()))).order(ByteOrder.LITTLE_ENDIAN);
+        assertEquals(1, pcm.getShort(22)); assertEquals(24000, pcm.getInt(24));
+        byte[] tooLong = wave(31);
+        assertThrows(IllegalArgumentException.class, () -> sources.upload("long.wav", tooLong.length, new ByteArrayInputStream(tooLong), "voice"));
+    }
     @Test void rejectsFakeAudioAndOutOfRangeDuration() throws Exception {
         Assumptions.assumeTrue(available("ffmpeg") && available("ffprobe"));
         assertThrows(IllegalArgumentException.class, () -> sources.upload("fake.wav", 4, new ByteArrayInputStream(new byte[4])));

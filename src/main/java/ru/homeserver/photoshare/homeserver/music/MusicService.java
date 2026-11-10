@@ -22,19 +22,24 @@ public class MusicService {
     private final LocalMusicClient client;
     private final MusicProperties properties;
     private final MusicSourceService sources;
+    private final LocalSpeechService speech;
     private final AtomicBoolean busy = new AtomicBoolean();
     private final ExecutorService worker = Executors.newSingleThreadExecutor(Thread.ofPlatform().daemon().name("muz-gen").factory());
 
     public MusicService(MusicProperties properties, ObjectMapper json, LocalMusicClient client) {
         this(properties, json, client, new MusicSourceService(properties, json));
     }
-    @org.springframework.beans.factory.annotation.Autowired
     public MusicService(MusicProperties properties, ObjectMapper json, LocalMusicClient client, MusicSourceService sources) {
+        this(properties, json, client, sources, new LocalSpeechService(properties, json));
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public MusicService(MusicProperties properties, ObjectMapper json, LocalMusicClient client, MusicSourceService sources, LocalSpeechService speech) {
         root = Path.of(properties.getRoot()).toAbsolutePath().normalize();
         this.properties = properties;
         this.json = json;
         this.client = client;
         this.sources = sources;
+        this.speech = speech;
     }
 
     private void directories() throws IOException {
@@ -65,6 +70,21 @@ public class MusicService {
         // Do not leave a job permanently "running" after a server restart.
         if (!busy.get() && Set.of("queued", "running").contains(job.state()))
             job = write(change(job, "failed", "Сервер был перезапущен. Создайте новое задание", job.lyrics(), job.savedFile(), job.aceTaskId()));
+        // Older random jobs kept the actual engine seed only in their result metadata.
+        if (job.request() != null && job.request().seed() == null) {
+            Path metadata = temp(id).resolveSibling("ace-result.json");
+            if (Files.isRegularFile(metadata)) {
+                try {
+                    JsonNode seed = json.readTree(metadata.toFile()).path(0).path("seed_value");
+                    if (!seed.isMissingNode() && !seed.isNull()) {
+                        long value = Long.parseLong(seed.asText());
+                        if (value >= 0 && value <= 4294967295L)
+                            job = write(new Job(job.id(), job.kind(), job.state(), job.message(), job.createdAt(),
+                                    job.request().withSeed(value), job.lyrics(), job.savedFile(), job.aceTaskId()));
+                    }
+                } catch (IOException | NumberFormatException ignored) { /* Missing legacy seed must not hide playable audio. */ }
+            }
+        }
         return job;
     }
 
@@ -82,14 +102,20 @@ public class MusicService {
 
     public Map<String, Object> status() {
         return Map.of("available", client.available(), "busy", busy.get(), "root", root.toString(),
-                "lyricsModel", properties.getLyricsModel(), "autoStart", properties.isAutoStart());
+                "lyricsModel", properties.getLyricsModel(), "autoStart", properties.isAutoStart(), "speechInstalled", speech.installed(), "speechCloneInstalled", speech.installed(true));
     }
 
-    public Job generate(MusicRequest request) throws IOException {
+    public Job generate(MusicRequest input) throws IOException {
+        // Persist the actual seed before starting, including when the user requests a random one.
+        final MusicRequest request = input.seed() == null ? input.withSeed(java.util.concurrent.ThreadLocalRandom.current().nextLong(4294967296L)) : input;
         Path sourceAudio = null;
-        if (!"text2music".equals(request.taskType())) {
+        if (Set.of("cover", "repaint", "speech_clone").contains(request.taskType())) {
             var source = sources.get(request.sourceId());
             sourceAudio = sources.audio(request.sourceId());
+            if ("speech_clone".equals(request.taskType()) && (!"voice".equals(source.purpose()) || source.duration() < 3 || source.duration() > 30))
+                throw new IllegalArgumentException("Загрузите образец голоса: от 3 до 30 секунд чистой речи");
+            if (!"speech_clone".equals(request.taskType()) && (source.duration() < 10 || source.duration() > 300))
+                throw new IllegalArgumentException("Для музыки нужен образец от 10 до 300 секунд");
             if ("repaint".equals(request.taskType()) && request.repaintEnd() > source.duration())
                 throw new IllegalArgumentException("Конец изменяемого фрагмента выходит за пределы образца");
         }
@@ -100,6 +126,18 @@ public class MusicService {
             Files.writeString(root.resolve("lyrics").resolve(id + "-input.txt"), request.lyrics());
             update(id, "Освобождаем память Ollama", "");
             client.unloadOllama();
+            if (Set.of("speech", "speech_clone").contains(request.taskType())) {
+                update(id, "Озвучиваем введённый текст", "");
+                Path work = temp(id).getParent();
+                Files.createDirectories(root.resolve("speech-prompts"));
+                Files.createDirectories(root.resolve("speech-texts"));
+                Files.writeString(root.resolve("speech-prompts").resolve(id + ".txt"), request.description());
+                Files.writeString(root.resolve("speech-texts").resolve(id + ".txt"), request.lyrics());
+                if ("speech_clone".equals(request.taskType())) speech.generate(request, work, source);
+                else speech.generate(request, work);
+                write(change(get(id), "ready", "Озвучка готова. Прослушайте и сохраните результат", "", "", ""));
+                return;
+            }
             update(id, "Подготавливаем музыкальный генератор", "");
             ensureEngine();
             String aceId;

@@ -32,6 +32,9 @@ app:
     ace-url: ${APP_MUSIC_ACE_URL:http://127.0.0.1:8001}
     ollama-url: ${APP_MUSIC_OLLAMA_URL:http://127.0.0.1:11434}
     lyrics-model: ${APP_MUSIC_LYRICS_MODEL:qwen3:14b}
+    speech-python: ${APP_MUSIC_SPEECH_PYTHON:C:/AI/muz_gen/runtime/tts/.venv/Scripts/python.exe}
+    speech-model: ${APP_MUSIC_SPEECH_MODEL:C:/AI/muz_gen/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign}
+    speech-clone-model: ${APP_MUSIC_SPEECH_CLONE_MODEL:C:/AI/muz_gen/models/Qwen3-TTS-12Hz-1.7B-Base}
     timeout-seconds: ${APP_MUSIC_TIMEOUT_SECONDS:3600}
     auto-start: ${APP_MUSIC_AUTO_START:true}
     ffmpeg-path: ${APP_FFMPEG_PATH:ffmpeg}

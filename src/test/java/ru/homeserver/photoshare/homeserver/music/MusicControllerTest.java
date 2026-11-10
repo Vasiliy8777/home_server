@@ -86,12 +86,17 @@ class MusicControllerTest {
         verifyNoInteractions(sources);
         when(service.status()).thenReturn(Map.of("available", true));
         var token = mvc.perform(get("/api/music/status").session(session)).andReturn().getResponse().getCookie("XSRF-TOKEN");
-        when(sources.upload(eq("sample.wav"), eq(4L), any())).thenAnswer(call -> {
+        when(sources.upload(eq("sample.wav"), eq(4L), any(), eq("music"))).thenAnswer(call -> {
             org.junit.jupiter.api.Assertions.assertArrayEquals(audio, call.getArgument(2, java.io.InputStream.class).readAllBytes());
             return new MusicSourceService.Source("source", "sample.wav", 30, "/audio");
         });
         mvc.perform(post("/api/music/sources").param("name", "sample.wav").session(session).cookie(token)
                         .header("X-XSRF-TOKEN", token.getValue()).contentType("application/octet-stream").content(audio))
                 .andExpect(status().isCreated()).andExpect(jsonPath("id").value("source"));
+        when(sources.upload(eq("voice.wav"), eq(4L), any(), eq("voice")))
+                .thenReturn(new MusicSourceService.Source("voice", "voice.wav", 5, "/audio", "voice"));
+        mvc.perform(post("/api/music/sources").param("name", "voice.wav").param("purpose", "voice").session(session).cookie(token)
+                        .header("X-XSRF-TOKEN", token.getValue()).contentType("application/octet-stream").content(audio))
+                .andExpect(status().isCreated()).andExpect(jsonPath("purpose").value("voice"));
     }
 }

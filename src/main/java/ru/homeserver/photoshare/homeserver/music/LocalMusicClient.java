@@ -85,6 +85,7 @@ public class LocalMusicClient {
     }
 
     public String submit(MusicRequest r, Path sourceAudio) throws IOException, InterruptedException {
+        if (Set.of("speech", "speech_clone").contains(r.taskType())) throw new IllegalArgumentException("Для озвучки используется Qwen3-TTS");
         if (!"text2music".equals(r.taskType()) && sourceAudio == null) throw new IllegalArgumentException("Нет аудиообразца");
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("prompt", r.description() + (r.changes().isBlank() || r.changes().equals(r.description()) ? "" : ". Requested changes: " + r.changes()));

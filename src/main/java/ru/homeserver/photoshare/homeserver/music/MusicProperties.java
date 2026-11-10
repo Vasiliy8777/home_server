@@ -14,6 +14,15 @@ public class MusicProperties {
     private boolean autoStart = true;
     private String ffmpegPath = "ffmpeg";
     private String ffprobePath = "ffprobe";
+    private String speechPython = "C:/AI/muz_gen/runtime/tts/.venv/Scripts/python.exe";
+    private String speechModel = "C:/AI/muz_gen/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign";
+    private String speechCloneModel = "C:/AI/muz_gen/models/Qwen3-TTS-12Hz-1.7B-Base";
+    public String getSpeechCloneModel() { return speechCloneModel; }
+    public void setSpeechCloneModel(String value) { speechCloneModel = value; }
+    public String getSpeechPython() { return speechPython; }
+    public void setSpeechPython(String value) { speechPython = value; }
+    public String getSpeechModel() { return speechModel; }
+    public void setSpeechModel(String value) { speechModel = value; }
     public String getFfmpegPath() { return ffmpegPath; }
     public void setFfmpegPath(String value) { ffmpegPath = value; }
     public String getFfprobePath() { return ffprobePath; }
